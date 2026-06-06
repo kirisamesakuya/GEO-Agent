@@ -1,0 +1,49 @@
+{
+  "platforms": [
+    {
+      "platform": "小红书",
+      "authMode": "browser",
+      "oauthEnabled": false,
+      "loginUrl": "https://creator.xiaohongshu.com/login",
+      "creatorCenterUrl": "https://creator.xiaohongshu.com/",
+      "permissionsLabel": "内容发布 / 评论查看 / 数据回传",
+      "loginHint": "小红书创作服务平台：手机号验证码或 App 扫码登录"
+    },
+    {
+      "platform": "知乎",
+      "authMode": "browser",
+      "oauthEnabled": false,
+      "loginUrl": "https://www.zhihu.com/signin?next=%2Fcreator",
+      "creatorCenterUrl": "https://www.zhihu.com/creator",
+      "permissionsLabel": "问答发布 / 链接回传",
+      "loginHint": "登录后将进入创作中心；也可在首页右上角头像 → 创作中心"
+    },
+    {
+      "platform": "微信公众号",
+      "authMode": "browser",
+      "oauthEnabled": false,
+      "loginUrl": "https://mp.weixin.qq.com/",
+      "creatorCenterUrl": "https://mp.weixin.qq.com/",
+      "permissionsLabel": "图文发布 / 数据同步",
+      "loginHint": "微信公众平台：使用管理员微信号扫码或账号密码登录"
+    },
+    {
+      "platform": "大风网",
+      "authMode": "browser",
+      "oauthEnabled": false,
+      "loginUrl": "https://mp.ifeng.com/",
+      "creatorCenterUrl": "https://mp.ifeng.com/",
+      "permissionsLabel": "图文发布 / 数据回传",
+      "loginHint": "凤凰网大风号：在新标签页登录自媒体后台后，由 Hermes 校验登录态"
+    },
+    {
+      "platform": "一点号",
+      "authMode": "browser",
+      "oauthEnabled": false,
+      "loginUrl": "https://mp.yidianzixun.com/",
+      "creatorCenterUrl": "https://mp.yidianzixun.com/",
+      "permissionsLabel": "图文发布 / 数据回传",
+      "loginHint": "一点号自媒体平台：账号密码或验证码登录，登录后返回本页校验"
+    }
+  ]
+}

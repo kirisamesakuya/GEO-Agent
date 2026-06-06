@@ -1,0 +1,6 @@
+{
+  "name": "GEO 接单助手",
+  "description": "GEO 媒体达人接单助手：任务大厅、我的订单、资源账号管理、收益中心一应俱全的一站式创作者商业管理平台。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
