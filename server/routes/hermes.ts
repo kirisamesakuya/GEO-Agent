@@ -6,12 +6,25 @@ import {
   getHermesSkillsManifest,
   mockConfirmHermesBinding,
 } from '../services/hermes-binding.service.js';
+import { getHermesDownloadInfo, getOnboardingStatus } from '../services/onboarding.service.js';
+import { getTokenCapacityState } from '../services/hermes-local.service.js';
 
 export function registerHermesRoutes(app: Express) {
+  app.get('/api/hermes/download-info', async (_req, res) => {
+    res.json(await getHermesDownloadInfo());
+  });
+
+  app.get('/api/hermes/onboarding-status', async (req, res) => {
+    const brandName = typeof req.query.brandName === 'string' ? req.query.brandName : undefined;
+    res.json(await getOnboardingStatus(brandName));
+  });
+
   app.get('/api/hermes/health', async (_req, res) => {
     const health = await getHermesExtendedHealth();
+    const tokenCapacity = await getTokenCapacityState();
     res.json({
       ...health,
+      tokenCapacity,
       executorDefault: resolveExecutorKind(),
       executorForPublish: await resolveExecutorKindForTask('hermes_publish'),
       executorForGeoAudit: await resolveExecutorKindForTask('geo_audit'),

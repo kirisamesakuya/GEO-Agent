@@ -16,6 +16,8 @@ import {
   validateGeoAnalysisSubmission,
   validateTaskLobbyPublish,
 } from '../services/gate.service.js';
+import { confirmGeoAuditAction } from '../services/geo-audit.service.js';
+import { hasGeoReportConfirmation } from '../services/asset-task.service.js';
 
 export function registerCampaignRoutes(app: Express) {
   app.get('/api/geo-reports', async (req, res) => {
@@ -76,10 +78,31 @@ export function registerCampaignRoutes(app: Express) {
   });
 
   app.post('/api/campaign-plans/generate-from-geo', async (req, res) => {
-    const { brandName, brand, geoReportId, platforms, budgetMin, budgetMax } = req.body ?? {};
+    const { brandName, brand, geoReportId, platforms, budgetMin, budgetMax, userConfirmedExecution } =
+      req.body ?? {};
     const name = String(brandName ?? brand ?? '').trim() || '品牌';
     const reportId = String(geoReportId ?? '').trim();
     if (!reportId) return res.status(400).json({ error: '请提供 geoReportId' });
+
+    const confirmed =
+      userConfirmedExecution === true ||
+      (await hasGeoReportConfirmation(reportId, 'generate_task_pack'));
+    if (!confirmed) {
+      return res.status(400).json({
+        error: '生成整改任务包为中风险动作，请先确认',
+        requiresConfirmation: true,
+        actionType: 'generate_task_pack',
+      });
+    }
+
+    if (userConfirmedExecution === true) {
+      await confirmGeoAuditAction(reportId, {
+        actionType: 'generate_task_pack',
+        riskLevel: 'medium',
+        payload: { brandName: name },
+        confirmedBy: 'merchant',
+      });
+    }
 
     const report = await getGeoReport(reportId);
     if (!report) return res.status(404).json({ error: 'GEO 报告不存在' });

@@ -4,6 +4,8 @@ import type { ViewType } from '../types';
 import BrandScopeBar from './common/BrandScopeBar';
 import WorkbenchAlertStrip from './workbench/WorkbenchAlertStrip';
 import WorkbenchDashboard, { type CockpitData } from './workbench/WorkbenchDashboard';
+import BrandClueStartFlow from './onboarding/BrandClueStartFlow';
+import { fetchOnboardingStatus, type OnboardingStatus } from '../lib/onboarding-client';
 
 interface PublisherDashboard extends CockpitData {
   brandName: string;
@@ -23,27 +25,32 @@ interface Props {
   brandName: string;
   onBrandChange: (name: string) => void;
   onNavigate: (view: ViewType, hint?: string) => void;
+  onOnboardingStart?: (result: { brandName: string; extractTaskId: string; goal: string }) => void;
 }
 
 function formatRefreshTime(d: Date) {
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 }
 
-export default function WorkbenchView({ brandName, onBrandChange, onNavigate }: Props) {
+export default function WorkbenchView({ brandName, onBrandChange, onNavigate, onOnboardingStart }: Props) {
   const [data, setData] = useState<PublisherDashboard | null>(null);
+  const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
 
   const load = () => {
     setLoading(true);
-    fetch(`/api/publisher/dashboard?brandName=${encodeURIComponent(brandName)}`)
-      .then((r) => r.json())
-      .then((d) => {
+    Promise.all([
+      fetch(`/api/publisher/dashboard?brandName=${encodeURIComponent(brandName)}`).then((r) => r.json()),
+      fetchOnboardingStatus(brandName).catch(() => null),
+    ])
+      .then(([d, ob]) => {
         if (d.error) setData(null);
         else {
           setData(d);
           setLastRefreshedAt(new Date());
         }
+        setOnboarding(ob);
       })
       .catch(() => setData(null))
       .finally(() => setLoading(false));
@@ -107,6 +114,13 @@ export default function WorkbenchView({ brandName, onBrandChange, onNavigate }: 
           刷新
         </button>
       </div>
+
+      {onboarding?.showOnboardingHero && onOnboardingStart && (
+        <BrandClueStartFlow
+          variant="page"
+          onComplete={(result) => onOnboardingStart(result)}
+        />
+      )}
 
       {data && data.todos.length > 0 && (
         <WorkbenchAlertStrip todos={data.todos} onNavigate={onNavigate} />

@@ -32,6 +32,7 @@ export type GeoAuditDetail = {
   brandName: string;
   title: string;
   reportType: string;
+  taskId?: string | null;
   totalScore?: number | null;
   mentionRate?: number | null;
   rank?: number | null;
@@ -41,6 +42,11 @@ export type GeoAuditDetail = {
   artifacts?: GeoAuditArtifact[];
   actionPlan?: Array<{ id: string; horizon: string; title: string; detail: string }>;
   isBaseline?: boolean;
+  taskMeta?: {
+    executor?: string;
+    skillName?: string;
+    status?: string;
+  } | null;
   brandMentionSummary: string;
   competitorAnalysis: string;
   contentGap: string;

@@ -71,6 +71,9 @@ import ProviderApp from './apps/provider/ProviderApp';
 import { isProspectBrandScope } from './lib/brand-scope';
 import PlatformApp from './apps/platform/PlatformApp';
 import QuickStartModal from './components/common/QuickStartModal';
+import BrandConfirmView from './components/onboarding/BrandConfirmView';
+import OnboardingConsoleView from './components/onboarding/OnboardingConsoleView';
+import type { OnboardingGoal } from './lib/brand-clue';
 
 const BRAND_STORAGE_KEY = 'geo_selected_brand';
 
@@ -124,7 +127,7 @@ function resolveInitialRoute(): { view: ViewType; hint?: string } {
     'create_order', 'self_account_publish', 'generate_article', 'geo_analysis', 'delivery_plan',
     'create_website', 'content_library', 'order_delivery', 'agent_tasks', 'brand_list',
     'brand_profile', 'account_binding', 'account_funds', 'user_center', 'team_settings',
-    'notifications',
+    'notifications', 'brand_confirm', 'onboarding_console',
   ];
   if (v && allowed.includes(v as ViewType)) return { view: v as ViewType };
   return { view: 'workbench' };
@@ -138,6 +141,8 @@ export default function App() {
   const [viewHint, setViewHint] = useState<string | undefined>(initialRoute.hint);
   const [brandName, setBrandName] = useState<string>('云杉口腔');
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
+  const [onboardingBrand, setOnboardingBrand] = useState<string | null>(null);
+  const [onboardingGoal, setOnboardingGoal] = useState<OnboardingGoal>('geo_quick_start');
   const [headerTaskStatus, setHeaderTaskStatus] = useState<AgentTaskStatus | null>(null);
   const [brandOptions, setBrandOptions] = useState<{ id: string; name: string }[]>([]);
 
@@ -228,7 +233,13 @@ export default function App() {
       if (targetHint === 'history' || targetHint?.startsWith('report:')) {
         url.searchParams.set('geoTab', 'history');
         if (targetHint?.startsWith('report:')) url.searchParams.set('reportId', targetHint.slice(7));
-      } else if (targetHint === 'audit' || targetHint === 'assets' || targetHint === 'quick_start' || targetHint === 'smart_check') {
+      } else if (targetHint === 'audit') {
+        url.searchParams.set('geoTab', 'audit');
+        url.searchParams.delete('reportId');
+      } else if (targetHint === 'assets') {
+        url.searchParams.set('geoTab', 'assets');
+        url.searchParams.delete('reportId');
+      } else if (targetHint === 'quick_start' || targetHint === 'smart_check') {
         url.searchParams.set('geoTab', 'smart_check');
         url.searchParams.delete('reportId');
       } else {
@@ -303,6 +314,19 @@ export default function App() {
     window.history.pushState({}, '', url);
   };
 
+  const handleOnboardingStart = (result: {
+    brandName: string;
+    extractTaskId: string;
+    goal: string;
+  }) => {
+    handleBrandChange(result.brandName);
+    setOnboardingBrand(result.brandName);
+    setOnboardingGoal((result.goal as OnboardingGoal) ?? 'geo_quick_start');
+    setShowNewTaskModal(false);
+    setActiveView('brand_confirm');
+    setViewHint(result.extractTaskId);
+  };
+
   const renderActiveView = () => {
     switch (activeView) {
       case 'workbench':
@@ -310,6 +334,27 @@ export default function App() {
           <WorkbenchView
             brandName={effectiveBrand}
             onBrandChange={handleBrandChange}
+            onNavigate={navigate}
+            onOnboardingStart={handleOnboardingStart}
+          />
+        );
+      case 'brand_confirm':
+        return (
+          <BrandConfirmView
+            brandName={onboardingBrand ?? effectiveBrand}
+            goal={onboardingGoal}
+            onBack={() => navigate('workbench')}
+            onConfirmed={({ brandName: confirmedBrand, taskId }) => {
+              handleBrandChange(confirmedBrand);
+              setOnboardingBrand(confirmedBrand);
+              navigate('onboarding_console', taskId);
+            }}
+          />
+        );
+      case 'onboarding_console':
+        return (
+          <OnboardingConsoleView
+            brandName={onboardingBrand ?? effectiveBrand}
             onNavigate={navigate}
           />
         );
@@ -554,7 +599,7 @@ export default function App() {
           displayBrandName={effectiveBrand}
           needsBrandScope={brandName === '__all__'}
           onClose={() => setShowNewTaskModal(false)}
-          onNavigate={navigate}
+          onFlowComplete={handleOnboardingStart}
         />
       )}
     </div>

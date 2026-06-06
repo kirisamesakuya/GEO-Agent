@@ -9,6 +9,7 @@ import { resolveTaskPillDisplay } from '../../lib/agent-task-display';
 import type { AgentTask, AgentTaskStatus } from '../../types';
 import { submitGeoAgentTask } from '../../lib/geo-audit-client';
 import { DEFAULT_GEO_AI_PLATFORMS, GEO_AI_PLATFORM_LABELS } from '../../../lib/media-platforms';
+import HermesReadinessPanel from './HermesReadinessPanel';
 
 const MODULES = [
   { id: 'audit', label: '总审计' },
@@ -58,7 +59,7 @@ export default function GeoAuditView({ brandName, onNavigate, onOpenHistory }: P
       return;
     }
     setLoading(true);
-    setTaskStatus('queued');
+    setTaskStatus('waiting_local_device');
     const { task, error } = await submitGeoAgentTask({
       type: 'geo_audit',
       title: `${displayBrand} · GEO 专业审计`,
@@ -87,11 +88,11 @@ export default function GeoAuditView({ brandName, onNavigate, onOpenHistory }: P
       <div className="flex-1 min-h-0 overflow-y-auto geo-page-content max-w-3xl px-6 pb-6">
         <AgentInputCard
           title="GEO 专业审计"
-          description="对接 geo-audit 及专项技能（本阶段 mock 结构化输出）"
+          description="由本机 Hermes 执行 geo-audit 技能，输出结构化审计报告与 artifact"
           footer={
             <div className="flex flex-col gap-2 w-full">
               <button type="button" className="geo-btn-primary text-sm" disabled={loading || brandName === '__all__'} onClick={() => void submit()}>
-                {loading ? '审计中…' : '提交专业审计'}
+                {loading ? '等待本机 Hermes 执行…' : '提交专业审计'}
               </button>
               {taskStatus && (
                 <div className="flex flex-col gap-1 items-start">
@@ -104,7 +105,8 @@ export default function GeoAuditView({ brandName, onNavigate, onOpenHistory }: P
             </div>
           }
         >
-          <div className="space-y-3">
+          <HermesReadinessPanel brandName={displayBrand} compact onNavigate={onNavigate} />
+          <div className="space-y-3 mt-3">
             <p className="text-xs text-[var(--neutral-text-03)]">品牌：{displayBrand}</p>
             <div>
               <label className="geo-label">官网 URL *</label>

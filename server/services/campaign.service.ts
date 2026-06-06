@@ -138,13 +138,32 @@ export function buildCampaignInputFromGeoReport(
     brandMentionSummary: string;
     contentGap: string;
     optimizationSuggestions: string;
+    findings?: Array<{ level?: string; title?: string; suggestion?: string }>;
+    actionPlan?: Array<{ horizon?: string; title?: string; detail?: string }>;
   },
   overrides?: { platforms?: string[]; budgetMin?: number; budgetMax?: number }
 ) {
   const gaps = report.gapsFound ?? 5;
   const mention = report.mentionRate ?? 0;
-  const gapBrief = report.contentGap.replace(/\s+/g, ' ').slice(0, 160);
-  const goal = `根据 GEO 诊断补内容缺口（提及率 ${mention}%，缺口 ${gaps} 项）：${gapBrief}`;
+  const topFindings = (report.findings ?? [])
+    .slice(0, 3)
+    .map((f) => `${f.level ?? 'P1'} ${f.title ?? ''}`)
+    .filter(Boolean)
+    .join('；');
+  const topActions = (report.actionPlan ?? [])
+    .filter((a) => a.horizon === '7d')
+    .slice(0, 3)
+    .map((a) => a.title)
+    .filter(Boolean)
+    .join('、');
+  const gapBrief = report.contentGap.replace(/\s+/g, ' ').slice(0, 120);
+  const goalParts = [
+    `根据 GEO 诊断补内容缺口（提及率 ${mention}%，缺口 ${gaps} 项）`,
+    topFindings ? `优先问题：${topFindings}` : null,
+    topActions ? `7天行动：${topActions}` : null,
+    gapBrief ? `内容缺口：${gapBrief}` : null,
+  ].filter(Boolean);
+  const goal = goalParts.join('；');
   return {
     geoReportId: report.id,
     goal,
@@ -157,6 +176,8 @@ export function buildCampaignInputFromGeoReport(
     brandMentionSummary: report.brandMentionSummary,
     contentGap: report.contentGap,
     optimizationSuggestions: report.optimizationSuggestions,
+    findings: report.findings ?? [],
+    actionPlan: report.actionPlan ?? [],
     source: 'geo_report' as const,
   };
 }

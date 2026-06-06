@@ -1,5 +1,7 @@
 export type AgentTaskStatus =
   | 'pending'
+  | 'pending_setup'
+  | 'waiting_local_device'
   | 'pending_confirm'
   | 'queued'
   | 'running'
@@ -7,6 +9,14 @@ export type AgentTaskStatus =
   | 'partial'
   | 'failed'
   | 'canceled';
+
+export type HermesSetupReason =
+  | 'hermes_not_installed'
+  | 'hermes_not_running'
+  | 'hermes_not_bound'
+  | 'token_capacity_unavailable'
+  | 'skill_missing'
+  | 'output_parse_failed';
 
 export type AgentTaskType =
   | 'article_generation'

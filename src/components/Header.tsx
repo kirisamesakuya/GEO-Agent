@@ -3,6 +3,7 @@ import type { ViewType } from '../types';
 import { viewToBrandCenterTab, brandCenterTabLabel } from '../lib/brand-center';
 import { User } from 'lucide-react';
 import TaskStatusPill from './common/TaskStatusPill';
+import HermesConnectionIndicator from './common/HermesConnectionIndicator';
 import HermesStatusBadge from './common/HermesStatusBadge';
 import PublisherNotificationBell from './common/PublisherNotificationBell';
 import type { AgentTaskStatus } from '../types';
@@ -44,6 +45,8 @@ const VIEW_TITLES: Record<ViewType, string> = {
   user_center: '个人与团队中心',
   team_settings: '团队权限',
   notifications: '消息通知',
+  brand_confirm: '确认品牌资料',
+  onboarding_console: '首启控制台',
 };
 
 function resolvePageTitle(activeView: ViewType): string {
@@ -121,6 +124,8 @@ export default function Header({
             AI 撰写 · 可入库或自有账号发布
           </span>
         ) : null}
+
+        <HermesConnectionIndicator onNavigate={onNavigate} />
 
         {onNavigate ? (
           <PublisherNotificationBell brandName={brandName} onNavigate={onNavigate} />

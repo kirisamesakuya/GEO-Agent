@@ -3,9 +3,11 @@ import { resolveTaskPillDisplay } from '../../lib/agent-task-display';
 
 const STATUS_LABELS: Record<AgentTaskStatus, string> = {
   pending: '待处理',
+  pending_setup: '等待 Hermes 设置',
+  waiting_local_device: '等待本机 Hermes',
   pending_confirm: '待确认',
-  queued: '已入队',
-  running: '执行中',
+  queued: '已进入队列',
+  running: '本机 Hermes 执行中',
   succeeded: '已完成',
   partial: '部分完成',
   failed: '失败',

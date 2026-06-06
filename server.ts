@@ -1,5 +1,5 @@
+import './server/load-env.js';
 import express from 'express';
-import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import { prisma } from './server/db/client.js';
 import { seedDatabase } from './server/db/seed.js';
@@ -26,13 +26,13 @@ import { registerGeoContentProjectRoutes } from './server/routes/geo-content-pro
 import { processDuePublishJobs } from './server/services/publish-plan.service.js';
 import { registerShareRoutes } from './server/routes/share.js';
 import { registerHermesRoutes } from './server/routes/hermes.js';
+import { registerHermesLocalRoutes } from './server/routes/hermes-local.js';
+import { registerOnboardingRoutes } from './server/routes/onboarding.js';
 import { registerGeoAuditRoutes } from './server/routes/geo-audits.js';
 import { registerArticleGenerationRoutes } from './server/routes/article-generation.js';
 import path from 'path';
 import { startAgentWorker } from './server/agent/worker.js';
 import { runGlobalHealthCheck } from './server/lib/health-check.js';
-
-dotenv.config();
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 3000);
@@ -52,6 +52,8 @@ async function bootstrap() {
   registerAgentTaskRoutes(app);
   registerArticleGenerationRoutes(app);
   registerHermesRoutes(app);
+  registerHermesLocalRoutes(app);
+  registerOnboardingRoutes(app);
   registerGeoAuditRoutes(app);
   registerContentRoutes(app);
   registerCampaignRoutes(app);

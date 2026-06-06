@@ -158,7 +158,20 @@ export function mapGeoReportRow(row: {
 export async function getGeoAudit(id: string) {
   const row = await prisma.geoReport.findUnique({ where: { id } });
   if (!row) return null;
-  return mapGeoReportRow(row);
+  const audit = mapGeoReportRow(row);
+  let taskMeta: { executor?: string; skillName?: string; status?: string } | null = null;
+  if (row.taskId) {
+    const task = await prisma.agentTask.findUnique({ where: { id: row.taskId } });
+    if (task) {
+      const { skillNameForTaskType } = await import('../lib/agent-skill.js');
+      taskMeta = {
+        executor: task.executor,
+        skillName: skillNameForTaskType(task.type),
+        status: task.status,
+      };
+    }
+  }
+  return { ...audit, taskMeta };
 }
 
 export async function listGeoAuditArtifacts(id: string) {

@@ -70,13 +70,19 @@ export async function requestCampaignPlanFromGeo(input: {
   platforms?: string[];
   budgetMin?: number;
   budgetMax?: number;
-}): Promise<{ task?: { id: string }; error?: string }> {
+  userConfirmedExecution?: boolean;
+}): Promise<{ task?: { id: string }; error?: string; requiresConfirmation?: boolean }> {
   const res = await fetch('/api/campaign-plans/generate-from-geo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
   const data = await res.json();
-  if (!res.ok) return { error: data.error ?? '生成失败' };
+  if (!res.ok) {
+    return {
+      error: data.error ?? '生成失败',
+      requiresConfirmation: Boolean(data.requiresConfirmation),
+    };
+  }
   return { task: data.task };
 }

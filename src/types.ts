@@ -26,10 +26,14 @@ export type ViewType =
   | 'budget'
   | 'user_center'
   | 'team_settings'
-  | 'notifications';
+  | 'notifications'
+  | 'brand_confirm'
+  | 'onboarding_console';
 
 export type AgentTaskStatus =
   | 'pending'
+  | 'pending_setup'
+  | 'waiting_local_device'
   | 'pending_confirm'
   | 'queued'
   | 'running'
@@ -37,6 +41,21 @@ export type AgentTaskStatus =
   | 'partial'
   | 'failed'
   | 'canceled';
+
+export type HermesSetupReason =
+  | 'hermes_not_installed'
+  | 'hermes_not_running'
+  | 'hermes_not_bound'
+  | 'token_capacity_unavailable'
+  | 'skill_missing'
+  | 'output_parse_failed';
+
+export type BrandClueInputType =
+  | 'brand_name'
+  | 'website_url'
+  | 'file'
+  | 'social_link'
+  | 'description';
 
 export type AgentTaskType =
   | 'article_generation'

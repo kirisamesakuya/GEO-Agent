@@ -514,12 +514,16 @@ body {
 }
 
 .geo-status-pill--pending,
+.geo-status-pill--pending_setup,
+.geo-status-pill--waiting_local_device,
 .geo-status-pill--canceled {
   background: var(--neutral-bg-02);
   color: var(--neutral-text-02);
 }
 
 .geo-status-pill--pending .geo-status-pill-dot,
+.geo-status-pill--pending_setup .geo-status-pill-dot,
+.geo-status-pill--waiting_local_device .geo-status-pill-dot,
 .geo-status-pill--canceled .geo-status-pill-dot {
   background: var(--neutral-text-03);
 }

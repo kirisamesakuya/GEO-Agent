@@ -1,6 +1,8 @@
 import { prisma } from '../db/client.js';
 import { checkHermesHealth } from '../agent/executors/hermes.js';
 
+import { getHermesDevice } from './hermes-local.service.js';
+
 const BINDING_KEY = 'hermes:device_binding';
 const BIND_TOKEN_KEY = 'hermes:bind_token';
 const GEO_SKILLS_VERSION = '2026.06.04';
@@ -26,13 +28,16 @@ type BindingState = {
 };
 
 async function readBinding(): Promise<BindingState> {
-  const row = await prisma.systemConfig.findUnique({ where: { key: BINDING_KEY } });
-  if (!row) return { bound: false };
-  try {
-    return JSON.parse(row.value) as BindingState;
-  } catch {
-    return { bound: false };
+  const device = await getHermesDevice();
+  if (device) {
+    return {
+      bound: true,
+      boundDevice: device.deviceName,
+      boundAt: device.boundAt,
+      clientVersion: device.hermesVersion ?? null,
+    };
   }
+  return { bound: false };
 }
 
 async function writeBinding(state: BindingState) {
@@ -46,14 +51,24 @@ async function writeBinding(state: BindingState) {
 export async function getHermesExtendedHealth() {
   const health = await checkHermesHealth();
   const binding = await readBinding();
+  const device = await getHermesDevice();
+  const heartbeatOnline =
+    device?.lastHeartbeatAt &&
+    Date.now() - new Date(device.lastHeartbeatAt).getTime() < 90_000;
+
   return {
     ok: health.ok,
     url: health.url,
-    detail: health.ok ? 'Hermes 在线' : health.detail ?? 'Hermes 未连接',
-    clientVersion: binding.clientVersion ?? (health.ok ? 'mock-1.0.0' : null),
+    detail: health.detail ?? (health.ok ? 'Hermes 在线' : 'Hermes 未连接'),
+    mode: health.mode,
+    apiGatewayOk: health.apiGatewayOk ?? false,
+    desktopRunning: health.desktopRunning ?? false,
+    gatewayRunning: health.gatewayRunning ?? false,
+    apiServerEnabled: health.apiServerEnabled ?? false,
+    clientVersion: binding.clientVersion ?? health.clientVersion ?? null,
     bound: binding.bound,
     boundDevice: binding.boundDevice ?? null,
-    heartbeat: health.ok ? 'online' : 'offline',
+    heartbeat: heartbeatOnline ? 'online' : health.desktopRunning ? 'desktop_running' : 'offline',
     downloadUrl: 'https://hermes.agentsyun.com/',
     windowsAvailable: true,
     macLinuxComingSoon: true,

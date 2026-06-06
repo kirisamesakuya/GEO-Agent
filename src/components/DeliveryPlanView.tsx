@@ -13,6 +13,8 @@ import {
   requestCampaignPlanFromGeo,
   type GeoReportSummary,
 } from '../lib/geo-report';
+import GeoRiskConfirmModal from './geo/GeoRiskConfirmModal';
+import { GEO_ASSET_RISK_LABELS } from '../lib/geo-asset';
 import {
   CAMPAIGN_PLAN_PLATFORM_LABELS,
   DEFAULT_CAMPAIGN_PLATFORMS,
@@ -126,6 +128,8 @@ export default function DeliveryPlanView({
   const [geoReports, setGeoReports] = useState<GeoReportSummary[]>([]);
   const [selectedGeoReportId, setSelectedGeoReportId] = useState(initialGeoReportId ?? '');
   const geoAutoTriggered = useRef(false);
+  const [taskPackConfirmOpen, setTaskPackConfirmOpen] = useState(false);
+  const [pendingGeoGenerateId, setPendingGeoGenerateId] = useState<string | null>(null);
 
   const loadPlans = () => {
     fetch(`/api/campaign-plans?brandName=${encodeURIComponent(brandName)}`)
@@ -195,7 +199,7 @@ export default function DeliveryPlanView({
   };
 
   const generateFromGeo = useCallback(
-    async (reportId?: string) => {
+    async (reportId?: string, userConfirmedExecution = false) => {
       const id = reportId ?? selectedGeoReportId;
       if (!id) {
         toast('请选择 GEO 分析报告', 'error');
@@ -207,13 +211,20 @@ export default function DeliveryPlanView({
       }
       setLoading(true);
       setTaskStatus('queued');
-      const { task, error } = await requestCampaignPlanFromGeo({
+      const { task, error, requiresConfirmation } = await requestCampaignPlanFromGeo({
         brandName,
         geoReportId: id,
         platforms,
         budgetMin,
         budgetMax,
+        userConfirmedExecution,
       });
+      if (requiresConfirmation) {
+        setPendingGeoGenerateId(id);
+        setTaskPackConfirmOpen(true);
+        setLoading(false);
+        return;
+      }
       if (error) {
         toast(error, 'error');
         setLoading(false);
@@ -223,6 +234,8 @@ export default function DeliveryPlanView({
         setTaskId(task.id);
         toast('正在根据 GEO 报告生成任务包…', 'info');
       }
+      setTaskPackConfirmOpen(false);
+      setPendingGeoGenerateId(null);
     },
     [brandName, selectedGeoReportId, platforms, budgetMin, budgetMax, toast]
   );
@@ -292,6 +305,18 @@ export default function DeliveryPlanView({
 
   const body = (
     <>
+      <GeoRiskConfirmModal
+        open={taskPackConfirmOpen}
+        title={GEO_ASSET_RISK_LABELS.generate_task_pack.title}
+        detail={GEO_ASSET_RISK_LABELS.generate_task_pack.detail}
+        loading={loading}
+        onConfirm={() => void generateFromGeo(pendingGeoGenerateId ?? undefined, true)}
+        onCancel={() => {
+          setTaskPackConfirmOpen(false);
+          setPendingGeoGenerateId(null);
+          setLoading(false);
+        }}
+      />
       {!lockedMode && (
         <div className="flex gap-2">
           <button

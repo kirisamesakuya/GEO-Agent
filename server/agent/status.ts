@@ -1,15 +1,13 @@
 import type { AgentTaskStatus } from './types.js';
 
-export const AGENT_TASK_STATUS_LABELS: Record<AgentTaskStatus, string> = {
-  pending: '待处理',
-  pending_confirm: '待确认',
-  queued: '已入队',
-  running: '执行中',
-  succeeded: '已完成',
-  partial: '部分完成',
-  failed: '失败',
-  canceled: '已取消',
-};
+export {
+  AGENT_TASK_STATUS_LABELS,
+  SETUP_REASON_LABELS,
+  normalizeAgentTaskStatus,
+  isTerminalStatus,
+  isHermesExecutorTask,
+  isHermesLocalTaskType,
+} from '../lib/agent-status.js';
 
 export const AGENT_TASK_TYPE_LABELS: Record<string, string> = {
   article_generation: '文章生成',
@@ -27,7 +25,3 @@ export const AGENT_TASK_TYPE_LABELS: Record<string, string> = {
   hermes_publish: 'Hermes 发布',
   account_verify: '账号校验',
 };
-
-export function isTerminalStatus(status: AgentTaskStatus): boolean {
-  return ['succeeded', 'partial', 'failed', 'canceled'].includes(status);
-}

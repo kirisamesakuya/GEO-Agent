@@ -1,17 +1,23 @@
 import type { Express, Request, Response } from 'express';
 import {
+  getAgentTaskPlatformDetail,
   createAgentTask,
-  getAgentTask,
-  getAgentTaskLogs,
   listAgentTasks,
   listAgentTasksPaginated,
   getAgentTaskStats,
 } from '../services/agent-task.service.js';
+import { skillNameForTaskType } from '../lib/agent-skill.js';
+import { getHermesDevice } from '../services/hermes-local.service.js';
+import { SETUP_REASON_LABELS } from '../lib/agent-status.js';
 import { cancelAgentTask, enqueueAgentTask, retryAgentTask } from '../agent/worker.js';
 import { prisma } from '../db/client.js';
 import { checkMinimaxConnection } from '../lib/minimax.js';
 import { resolveExecutorKindForTask } from '../agent/executors/index.js';
 import { validateAgentTaskSubmission } from '../services/gate.service.js';
+import {
+  validateAssetTaskSubmission,
+  confirmAgentTaskExecution,
+} from '../services/asset-task.service.js';
 import type { AgentTaskType } from '../agent/types.js';
 
 const VALID_TYPES: AgentTaskType[] = [
@@ -53,12 +59,15 @@ export function registerAgentTaskRoutes(app: Express) {
   });
 
   app.get('/api/agent-tasks/:id', async (req, res) => {
-    const task = await getAgentTask(req.params.id);
-    if (!task) return res.status(404).json({ error: '任务不存在' });
-    const logs = await getAgentTaskLogs(task.id);
-    const [skillRuns, localRuns, confirmations] = await Promise.all([
-      prisma.agentSkillRun.findMany({ where: { taskId: task.id }, orderBy: { createdAt: 'desc' }, take: 20 }),
-      prisma.localAutomationRun.findMany({ where: { taskId: task.id }, orderBy: { createdAt: 'desc' }, take: 10 }),
+    const detail = await getAgentTaskPlatformDetail(req.params.id);
+    if (!detail) return res.status(404).json({ error: '任务不存在' });
+    const { task, logs, skillRuns, automationRuns } = detail;
+    const skillName = skillNameForTaskType(task.type);
+    const device = await getHermesDevice();
+    const artifacts = Array.isArray(task.output?.artifacts)
+      ? (task.output!.artifacts as Array<Record<string, unknown>>)
+      : [];
+    const [confirmations] = await Promise.all([
       task.output?.geoReportId
         ? prisma.geoActionConfirmation.findMany({
             where: { reportId: String(task.output.geoReportId) },
@@ -67,7 +76,28 @@ export function registerAgentTaskRoutes(app: Express) {
           })
         : Promise.resolve([]),
     ]);
-    res.json({ task, logs, skillRuns, localRuns, confirmations });
+    res.json({
+      task,
+      logs,
+      skillRuns,
+      localRuns: automationRuns,
+      confirmations,
+      meta: {
+        skillName,
+        setupReasonLabel: task.reviewCategory
+          ? SETUP_REASON_LABELS[task.reviewCategory] ?? task.reviewCategory
+          : null,
+        device: device
+          ? {
+              deviceName: device.deviceName,
+              hermesVersion: device.hermesVersion,
+              lastHeartbeatAt: device.lastHeartbeatAt,
+            }
+          : null,
+        artifacts,
+        executorLabel: task.executor === 'nous_hermes' ? '本机 Hermes' : '演示执行器',
+      },
+    });
   });
 
   app.post('/api/agent-tasks', async (req, res) => {
@@ -80,18 +110,40 @@ export function registerAgentTaskRoutes(app: Express) {
       if (!gate.ok) return res.status(400).json({ error: gate.error });
     }
 
+    const assetGate = validateAssetTaskSubmission({ type, input });
+    if (!assetGate.ok) return res.status(400).json({ error: assetGate.error });
+
     const task = await createAgentTask({
       type, title, input, brandName, businessRef,
       executor: executor ?? (await resolveExecutorKindForTask(type)),
     });
-    void enqueueAgentTask(task);
+    const { isHermesExecutorTask, isHermesLocalTaskType } = await import('../lib/agent-status.js');
+    if (!(isHermesExecutorTask(task.executor) && isHermesLocalTaskType(task.type))) {
+      void enqueueAgentTask(task);
+    }
     res.status(201).json({ task });
+  });
+
+  app.post('/api/agent-tasks/:id/confirm-execution', async (req, res) => {
+    try {
+      const { reportId, confirmedBy } = req.body ?? {};
+      const task = await confirmAgentTaskExecution(req.params.id, {
+        reportId: reportId ? String(reportId) : undefined,
+        confirmedBy: confirmedBy ? String(confirmedBy) : undefined,
+      });
+      res.json({ task });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '确认失败' });
+    }
   });
 
   app.post('/api/agent-tasks/:id/retry', async (req, res) => {
     const task = await retryAgentTask(req.params.id);
     if (!task) return res.status(404).json({ error: '任务不存在' });
-    void enqueueAgentTask(task);
+    const { isHermesExecutorTask, isHermesLocalTaskType } = await import('../lib/agent-status.js');
+    if (!(isHermesExecutorTask(task.executor) && isHermesLocalTaskType(task.type))) {
+      void enqueueAgentTask(task);
+    }
     res.json({ task });
   });
 

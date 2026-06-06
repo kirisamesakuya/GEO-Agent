@@ -3,9 +3,19 @@ import type { AgentTask, AgentTaskLog, ViewType } from '../types';
 import { AGENT_TASK_TYPE_LABELS } from '../types';
 import TaskStatusPill from './common/TaskStatusPill';
 import { resolveTaskPillDisplay } from '../lib/agent-task-display';
-import { ArrowLeft, Bot, RefreshCw, XCircle, ExternalLink } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
+import { ArrowLeft, Bot, RefreshCw, XCircle, ExternalLink, Cpu, Layers } from 'lucide-react';
+import GeoArtifactPreview, { GeoArtifactList } from './geo/GeoArtifactPreview';
+import type { GeoAuditArtifact } from '../lib/geo-audit-client';
 
-const IN_PROGRESS = new Set(['pending', 'pending_confirm', 'queued', 'running']);
+const IN_PROGRESS = new Set([
+  'pending',
+  'pending_setup',
+  'waiting_local_device',
+  'pending_confirm',
+  'queued',
+  'running',
+]);
 
 interface Props {
   taskId: string;
@@ -14,6 +24,7 @@ interface Props {
 }
 
 export default function AgentTaskDetailView({ taskId, onBack, onNavigate }: Props) {
+  const { toast } = useToast();
   const [task, setTask] = useState<AgentTask | null>(null);
   const [logs, setLogs] = useState<AgentTaskLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,6 +42,14 @@ export default function AgentTaskDetailView({ taskId, onBack, onNavigate }: Prop
   const [confirmations, setConfirmations] = useState<
     Array<{ id: string; actionType: string; riskLevel: string; confirmedAt?: string }>
   >([]);
+  const [meta, setMeta] = useState<{
+    skillName?: string;
+    setupReasonLabel?: string | null;
+    executorLabel?: string;
+    device?: { deviceName: string; hermesVersion?: string | null; lastHeartbeatAt?: string | null } | null;
+    artifacts?: GeoAuditArtifact[];
+  } | null>(null);
+  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/agent-tasks/${taskId}`);
@@ -44,6 +63,11 @@ export default function AgentTaskDetailView({ taskId, onBack, onNavigate }: Prop
     setSkillRuns(data.skillRuns ?? []);
     setLocalRuns(data.localRuns ?? []);
     setConfirmations(data.confirmations ?? []);
+    setMeta(data.meta ?? null);
+    const arts = (data.meta?.artifacts ?? []) as GeoAuditArtifact[];
+    if (arts.length && !arts.some((a) => a.id === selectedArtifactId)) {
+      setSelectedArtifactId(arts[0]?.id ?? null);
+    }
     setLoading(false);
 
     const reportId = data.task?.output?.geoReportId as string | undefined;
@@ -108,6 +132,22 @@ export default function AgentTaskDetailView({ taskId, onBack, onNavigate }: Prop
   const display = resolveTaskPillDisplay(task);
   const canCancel = !['succeeded', 'failed', 'canceled', 'partial'].includes(task.status);
   const canRetry = task.status === 'failed' || task.status === 'canceled';
+  const canConfirmExecution = task.status === 'pending_confirm';
+
+  const handleConfirmExecution = async () => {
+    const reportId = task.input.sourceReportId as string | undefined;
+    const res = await fetch(`/api/agent-tasks/${taskId}/confirm-execution`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reportId }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      toast(data.error ?? '确认失败', 'error');
+      return;
+    }
+    await load();
+  };
   return (
     <div className="geo-page-content h-full overflow-y-auto space-y-4 pb-8">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -120,6 +160,11 @@ export default function AgentTaskDetailView({ taskId, onBack, onNavigate }: Prop
             <RefreshCw className="w-4 h-4" />
             刷新
           </button>
+          {canConfirmExecution && (
+            <button type="button" className="geo-btn-primary geo-btn-sm" onClick={() => void handleConfirmExecution()}>
+              确认执行
+            </button>
+          )}
           {canRetry && (
             <button type="button" className="geo-btn-secondary text-sm" onClick={() => void handleRetry()}>
               重试
@@ -182,9 +227,41 @@ export default function AgentTaskDetailView({ taskId, onBack, onNavigate }: Prop
           )}
           <div>
             <span style={{ color: 'var(--neutral-text-03)' }}>执行器</span>
-            <p className="mt-0.5 font-medium">{task.executor}</p>
+            <p className="mt-0.5 font-medium">{meta?.executorLabel ?? task.executor}</p>
           </div>
         </div>
+
+        {(meta?.skillName || meta?.device || task.reviewCategory) && (
+          <div className="grid sm:grid-cols-3 gap-3 text-xs border-t pt-3" style={{ borderColor: 'var(--neutral-divider-02)' }}>
+            {meta?.skillName && (
+              <div className="flex items-start gap-2">
+                <Layers className="w-3.5 h-3.5 text-[var(--color-accent)] shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-[var(--neutral-text-03)]">Skill</span>
+                  <p className="font-mono font-medium">{meta.skillName}</p>
+                </div>
+              </div>
+            )}
+            {meta?.device && (
+              <div className="flex items-start gap-2">
+                <Cpu className="w-3.5 h-3.5 text-[var(--color-accent)] shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-[var(--neutral-text-03)]">执行设备</span>
+                  <p className="font-medium">{meta.device.deviceName}</p>
+                  {meta.device.hermesVersion && (
+                    <p className="text-[10px] text-[var(--neutral-text-03)]">v{meta.device.hermesVersion}</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {task.reviewCategory && meta?.setupReasonLabel && (
+              <div>
+                <span className="text-[var(--neutral-text-03)]">等待原因</span>
+                <p className="font-medium">{meta.setupReasonLabel}</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {task.userErrorMessage && <div className="geo-callout-danger">{task.userErrorMessage}</div>}
       </div>
@@ -241,6 +318,27 @@ export default function AgentTaskDetailView({ taskId, onBack, onNavigate }: Prop
           </div>
         )}
       </div>
+
+      {(meta?.artifacts?.length ?? 0) > 0 && (
+        <div className="geo-card p-4 grid lg:grid-cols-2 gap-4">
+          <div>
+            <h2 className="text-xs font-semibold text-[var(--color-title)] mb-2">Artifacts</h2>
+            <GeoArtifactList
+              artifacts={meta!.artifacts!}
+              selectedId={selectedArtifactId}
+              onSelect={setSelectedArtifactId}
+            />
+          </div>
+          <div>
+            <h2 className="text-xs font-semibold text-[var(--color-title)] mb-2">预览</h2>
+            {selectedArtifactId && meta?.artifacts && (
+              <GeoArtifactPreview
+                artifact={meta.artifacts.find((a) => a.id === selectedArtifactId) ?? meta.artifacts[0]}
+              />
+            )}
+          </div>
+        </div>
+      )}
 
       {(skillRuns.length > 0 || localRuns.length > 0 || confirmations.length > 0) && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

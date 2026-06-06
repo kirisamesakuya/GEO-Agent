@@ -3,6 +3,8 @@ import type { AgentTaskStatus, ViewType } from '../../types';
 
 const IN_PROGRESS_STATUSES: AgentTaskStatus[] = [
   'pending',
+  'pending_setup',
+  'waiting_local_device',
   'pending_confirm',
   'queued',
   'running',

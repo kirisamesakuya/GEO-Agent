@@ -1,6 +1,8 @@
 import { prisma } from '../db/client.js';
 import type { AgentTask, AgentTaskLog, CreateAgentTaskInput } from '../agent/types.js';
 import { paginatedResult, parsePagination } from '../lib/pagination.js';
+import { normalizeAgentTaskStatus, isHermesExecutorTask, isHermesLocalTaskType } from '../lib/agent-status.js';
+import { resolveHermesSetupReason } from './hermes-local.service.js';
 
 function mapTask(row: {
   id: string;
@@ -27,7 +29,7 @@ function mapTask(row: {
     id: row.id,
     type: row.type as AgentTask['type'],
     title: row.title,
-    status: row.status as AgentTask['status'],
+    status: normalizeAgentTaskStatus(row.status, row.reviewCategory),
     progress: row.progress,
     executor: row.executor as AgentTask['executor'],
     brandName: row.brandName ?? undefined,
@@ -47,19 +49,40 @@ function mapTask(row: {
 }
 
 export async function createAgentTask(input: CreateAgentTaskInput): Promise<AgentTask> {
+  const executor = input.executor ?? 'direct_model';
+  let status: AgentTask['status'] = 'queued';
+  let reviewCategory: string | undefined;
+
+  if (isHermesExecutorTask(executor) && isHermesLocalTaskType(input.type)) {
+    const setupReason = await resolveHermesSetupReason();
+    if (setupReason) {
+      status = 'pending_setup';
+      reviewCategory = setupReason;
+    } else {
+      status = 'waiting_local_device';
+    }
+  }
+
   const row = await prisma.agentTask.create({
     data: {
       type: input.type,
       title: input.title,
-      status: 'queued',
+      status,
       progress: 0,
-      executor: input.executor ?? 'direct_model',
+      executor,
       brandName: input.brandName,
       input: JSON.stringify(input.input),
       businessRef: input.businessRef,
+      reviewCategory: reviewCategory ?? null,
     },
   });
-  await appendLog(row.id, 'info', '任务已创建并进入队列');
+  const logMsg =
+    status === 'waiting_local_device'
+      ? '任务已创建，等待本机 Hermes 领取'
+      : status === 'pending_setup'
+        ? '任务已创建，等待完成 Hermes 设置'
+        : '任务已创建并进入队列';
+  await appendLog(row.id, 'info', logMsg);
   return mapTask(row);
 }
 
@@ -142,6 +165,7 @@ export async function getAgentTaskPlatformDetail(taskId: string) {
 type AgentTaskPatch = Partial<AgentTask> & {
   errorMessage?: string | null;
   userErrorMessage?: string | null;
+  reviewCategory?: string | null;
 };
 
 export async function updateAgentTask(
@@ -167,7 +191,9 @@ export async function updateAgentTask(
         ? { finishedAt: patch.finishedAt ? new Date(patch.finishedAt) : null }
         : {}),
       ...(patch.needsReview !== undefined ? { needsReview: patch.needsReview } : {}),
-      ...(patch.reviewCategory !== undefined ? { reviewCategory: patch.reviewCategory } : {}),
+      ...(patch.reviewCategory !== undefined
+        ? { reviewCategory: patch.reviewCategory ?? null }
+        : {}),
     },
   });
   return mapTask(row);

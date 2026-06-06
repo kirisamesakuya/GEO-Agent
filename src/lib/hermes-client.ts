@@ -2,6 +2,11 @@ export type HermesHealth = {
   ok: boolean;
   url: string;
   detail?: string;
+  mode?: 'api_gateway' | 'desktop_only' | 'offline';
+  apiGatewayOk?: boolean;
+  desktopRunning?: boolean;
+  gatewayRunning?: boolean;
+  apiServerEnabled?: boolean;
   clientVersion?: string | null;
   bound?: boolean;
   boundDevice?: string | null;

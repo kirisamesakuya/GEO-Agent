@@ -21,7 +21,9 @@ import {
   confirmGeoAuditAction,
   setGeoReportBaseline,
   type GeoAuditDetail,
+  type GeoAuditArtifact,
 } from '../lib/geo-audit-client';
+import GeoArtifactPreview, { GeoArtifactList } from './geo/GeoArtifactPreview';
 
 interface Props {
   brandName: string;
@@ -65,6 +67,7 @@ export default function GeoReportHistoryView({
   const [watermark, setWatermark] = useState<GeoReportWatermarkSettings>(() => loadGeoReportWatermark());
   const [exporting, setExporting] = useState(false);
   const [auditDetail, setAuditDetail] = useState<GeoAuditDetail | null>(null);
+  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
   const [articleEffects, setArticleEffects] = useState<
     Array<{
       contentItemId: string;
@@ -115,7 +118,12 @@ export default function GeoReportHistoryView({
     }
     void fetch(`/api/geo-audits/${selectedId}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setAuditDetail(d?.audit ?? null));
+      .then((d) => {
+        const audit = d?.audit ?? null;
+        setAuditDetail(audit);
+        const arts = (audit?.artifacts ?? []) as GeoAuditArtifact[];
+        setSelectedArtifactId(arts[0]?.id ?? null);
+      });
     void fetch(`/api/geo-reports/${selectedId}/article-effects`)
       .then((r) => (r.ok ? r.json() : { effects: [] }))
       .then((d) => setArticleEffects(d.effects ?? []));
@@ -221,9 +229,22 @@ export default function GeoReportHistoryView({
                 style={{ borderColor: 'var(--neutral-divider-02)' }}
               >
                 <div className="min-w-0">
-                  <h2 className="text-sm font-bold text-[var(--color-title)] truncate">{selectedTitle}</h2>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-sm font-bold text-[var(--color-title)] truncate">{selectedTitle}</h2>
+                    {auditDetail?.isBaseline && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-accent-light)] text-[var(--color-accent)]">
+                        基线报告
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[10px] text-[var(--neutral-text-03)] mt-0.5">
                     编号 {selected.id.slice(0, 8)}…
+                    {auditDetail?.taskMeta?.skillName && (
+                      <> · Skill {auditDetail.taskMeta.skillName}</>
+                    )}
+                    {auditDetail?.taskMeta?.executor && (
+                      <> · {auditDetail.taskMeta.executor === 'nous_hermes' ? '本机 Hermes' : auditDetail.taskMeta.executor}</>
+                    )}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -323,7 +344,7 @@ export default function GeoReportHistoryView({
 
                   {(auditDetail?.findings?.length ?? 0) > 0 && (
                     <section className="geo-card p-4 space-y-2">
-                      <h3 className="text-sm font-semibold text-[var(--color-title)]">Findings</h3>
+                      <h3 className="text-sm font-semibold text-[var(--color-title)]">关键问题</h3>
                       {auditDetail!.findings!.map((f) => (
                         <div key={f.id} className="text-xs border rounded-lg p-3" style={{ borderColor: 'var(--neutral-divider-02)' }}>
                           <p className="font-medium">
@@ -340,7 +361,7 @@ export default function GeoReportHistoryView({
 
                   {(auditDetail?.actionPlan?.length ?? 0) > 0 && (
                     <section className="geo-card p-4 space-y-2">
-                      <h3 className="text-sm font-semibold text-[var(--color-title)]">行动计划</h3>
+                      <h3 className="text-sm font-semibold text-[var(--color-title)]">7 天行动计划</h3>
                       {auditDetail!.actionPlan!.map((a) => (
                         <div key={a.id} className="text-xs">
                           <span className="geo-tag-muted mr-1">{a.horizon}</span>
@@ -369,25 +390,45 @@ export default function GeoReportHistoryView({
                   {(auditDetail?.artifacts?.length ?? 0) > 0 && (
                     <div>
                       <h3 className="text-xs font-semibold text-[var(--color-title)] mb-2">Artifacts</h3>
-                      <ul className="space-y-2 text-[11px]">
-                        {auditDetail!.artifacts!.map((a) => (
-                          <li key={a.id} className="border rounded p-2" style={{ borderColor: 'var(--neutral-divider-02)' }}>
-                            <p className="font-medium">{a.name}</p>
-                            <p className="text-[var(--neutral-text-03)]">{a.type}</p>
-                            {a.url && (
-                              <a href={a.url} target="_blank" rel="noreferrer" className="geo-link text-[10px]">
-                                打开
-                              </a>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
+                      <GeoArtifactList
+                        artifacts={auditDetail!.artifacts!}
+                        selectedId={selectedArtifactId}
+                        onSelect={setSelectedArtifactId}
+                      />
+                      {selectedArtifactId && auditDetail?.artifacts && (
+                        <div className="mt-3">
+                          <GeoArtifactPreview
+                            artifact={
+                              auditDetail.artifacts.find((a) => a.id === selectedArtifactId) ??
+                              auditDetail.artifacts[0]
+                            }
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
 
                   <div>
                     <h3 className="text-xs font-semibold text-[var(--color-title)] mb-2">下一步</h3>
                     <div className="flex flex-col gap-2">
+                      {onNavigate && (
+                        <>
+                          <button
+                            type="button"
+                            className="geo-btn-secondary geo-btn-xs w-full"
+                            onClick={() => onNavigate('geo_analysis', 'audit')}
+                          >
+                            进入专业审计
+                          </button>
+                          <button
+                            type="button"
+                            className="geo-btn-secondary geo-btn-xs w-full"
+                            onClick={() => onNavigate('geo_analysis', 'assets')}
+                          >
+                            生成 Schema / llms.txt
+                          </button>
+                        </>
+                      )}
                       {onNavigate && (
                         <button
                           type="button"
@@ -401,7 +442,7 @@ export default function GeoReportHistoryView({
                             }
                           }}
                         >
-                          生成任务包（需确认）
+                          生成整改任务包（需确认）
                         </button>
                       )}
                       <button
@@ -410,14 +451,24 @@ export default function GeoReportHistoryView({
                         onClick={async () => {
                           try {
                             await setGeoReportBaseline(selected.id);
+                            setAuditDetail((d) => (d ? { ...d, isBaseline: true } : d));
                             toast('已设为月度对比基线', 'success');
                           } catch (e) {
                             toast(e instanceof Error ? e.message : '设置失败', 'error');
                           }
                         }}
                       >
-                        设为基线
+                        {auditDetail?.isBaseline ? '已是基线报告' : '设为基线'}
                       </button>
+                      {auditDetail?.taskId && onNavigate && (
+                        <button
+                          type="button"
+                          className="geo-btn-secondary geo-btn-xs w-full"
+                          onClick={() => onNavigate('agent_tasks', auditDetail.taskId!)}
+                        >
+                          查看关联任务
+                        </button>
+                      )}
                     </div>
                   </div>
 

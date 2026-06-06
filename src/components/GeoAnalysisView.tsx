@@ -3,6 +3,9 @@ import type { ViewType } from '../types';
 import BrandScopeBar from './common/BrandScopeBar';
 import GeoReportHistoryView from './GeoReportHistoryView';
 import GeoQuickStartView from './geo/GeoQuickStartView';
+import GeoAuditView from './geo/GeoAuditView';
+import GeoAssetsView from './geo/GeoAssetsView';
+import HermesReadinessPanel from './geo/HermesReadinessPanel';
 import {
   type GeoAnalysisTab,
   GEO_ANALYSIS_TABS,
@@ -60,20 +63,25 @@ export default function GeoAnalysisView({ brandName, onBrandChange, onNavigate }
     window.history.replaceState({}, '', url);
   };
 
+  const effectiveBrand = brandName === '__all__' ? '' : brandName;
+
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
       <div className="shrink-0 px-6 pt-4 pb-0 border-b" style={{ borderColor: 'var(--neutral-divider-02)' }}>
         <div className="mb-3">
           <h2 className="text-sm font-bold text-[var(--color-title)]">GEO 分析</h2>
           <p className="text-xs mt-0.5 text-[var(--color-text-secondary)]">
-            上传图片、文档或链接后，AI 先拆解检测方案；你确认范围后再提交 Hermes 执行。
+            首次体检、专业审计与资产生成均由本机 Hermes 执行；Web 端只负责任务编排与报告展示。
           </p>
         </div>
         <GeoAnalysisTabs tab={pageTab} onTabChange={(t) => switchGeoTab(t)} />
       </div>
 
-      <div className="shrink-0 px-6 pt-3 pb-0">
+      <div className="shrink-0 px-6 pt-3 pb-0 space-y-3">
         <BrandScopeBar label="分析哪个品牌" brandName={brandName} onBrandChange={onBrandChange} allowAll />
+        {effectiveBrand && pageTab !== 'history' && (
+          <HermesReadinessPanel brandName={effectiveBrand} compact onNavigate={onNavigate} />
+        )}
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden">
@@ -84,6 +92,14 @@ export default function GeoAnalysisView({ brandName, onBrandChange, onNavigate }
             onOpenHistory={(id) => switchGeoTab('history', id)}
           />
         )}
+        {pageTab === 'audit' && (
+          <GeoAuditView
+            brandName={brandName}
+            onNavigate={onNavigate}
+            onOpenHistory={(id) => switchGeoTab('history', id)}
+          />
+        )}
+        {pageTab === 'assets' && <GeoAssetsView brandName={brandName} onNavigate={onNavigate} />}
         {pageTab === 'history' && (
           <GeoReportHistoryView
             brandName={brandName}

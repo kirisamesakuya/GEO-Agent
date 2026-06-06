@@ -112,11 +112,11 @@ export default function AgentTasksView({
       />
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-bold text-[var(--color-title)]">任务详情</h2>
+          <h2 className="text-lg font-bold text-[var(--color-title)]">运行日志</h2>
           <p className="text-sm text-[var(--color-text-secondary)]">
             {brandName === '__all__'
-              ? '全部品牌的 AI / Hermes 后台任务状态'
-              : `查看 ${brandName} 的 AI / Hermes 后台任务状态与重试`}
+              ? '全部品牌的本机 Hermes / Agent 任务执行记录'
+              : `查看 ${brandName} 的任务是否真实由本机 Hermes 执行、产物与错误信息`}
           </p>
         </div>
         <button
