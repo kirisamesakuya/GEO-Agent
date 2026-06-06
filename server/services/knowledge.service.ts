@@ -112,6 +112,35 @@ export async function deleteKnowledge(id: string, brandName: string): Promise<vo
   await prisma.knowledgeEntry.delete({ where: { id } });
 }
 
+export async function bulkCreateKnowledge(
+  brandName: string,
+  items: Array<{ category: KnowledgeCategory; title: string; body: string }>
+): Promise<KnowledgeDto[]> {
+  const brand = await findBrandRow(brandName);
+  if (!brand) throw new Error('品牌不存在');
+  const created: KnowledgeDto[] = [];
+  for (const item of items) {
+    const title = item.title.trim();
+    const body = item.body.trim();
+    if (!title || !body) continue;
+    const existing = await prisma.knowledgeEntry.findFirst({
+      where: { brandId: brand.id, category: item.category, title },
+    });
+    if (existing) continue;
+    const row = await prisma.knowledgeEntry.create({
+      data: {
+        brandId: brand.id,
+        category: item.category,
+        title,
+        body,
+        sortOrder: 0,
+      },
+    });
+    created.push(mapRow(row));
+  }
+  return created;
+}
+
 export async function retrieveKnowledgeContext(
   brandName: string,
   categories?: KnowledgeCategory[],

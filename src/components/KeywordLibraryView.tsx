@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Sparkles, Plus, Trash2 } from 'lucide-react';
+import type { AgentTask, ViewType } from '../types';
+import { getResultConfirmUiStatus } from '../lib/agent-result-confirmation';
+import TaskStatusPill from './common/TaskStatusPill';
 
 const GROUPS = [
   { id: 'brand', label: '品牌词' },
@@ -20,15 +23,21 @@ interface Props {
   brandName: string;
   initialTab?: string;
   embedded?: boolean;
+  onNavigate?: (view: ViewType, hint?: string) => void;
 }
 
-export default function KeywordLibraryView({ brandName, initialTab, embedded }: Props) {
+export default function KeywordLibraryView({
+  brandName,
+  initialTab,
+  embedded,
+  onNavigate,
+}: Props) {
   const [activeGroup, setActiveGroup] = useState(initialTab === 'mine' ? 'mine' : 'brand');
   const [keywords, setKeywords] = useState<Keyword[]>([]);
   const [newTerm, setNewTerm] = useState('');
   const [mining, setMining] = useState(false);
-  const [suggestions, setSuggestions] = useState<Array<{ term: string; group: string }>>([]);
   const [profile, setProfile] = useState<{ industry?: string; keywords?: string[] }>({});
+  const [lastMiningTask, setLastMiningTask] = useState<AgentTask | null>(null);
 
   const load = () => {
     const params = new URLSearchParams({ brandName });
@@ -37,6 +46,16 @@ export default function KeywordLibraryView({ brandName, initialTab, embedded }: 
       .then((r) => r.json())
       .then((d) => setKeywords(d.keywords ?? []))
       .catch(() => {});
+  };
+
+  const loadLastMiningTask = () => {
+    fetch(`/api/agent-tasks?brandName=${encodeURIComponent(brandName)}&type=keyword_mining&limit=5`)
+      .then((r) => r.json())
+      .then((d) => {
+        const tasks = (d.tasks ?? []) as AgentTask[];
+        setLastMiningTask(tasks[0] ?? null);
+      })
+      .catch(() => setLastMiningTask(null));
   };
 
   useEffect(() => {
@@ -49,6 +68,10 @@ export default function KeywordLibraryView({ brandName, initialTab, embedded }: 
   useEffect(() => {
     if (activeGroup !== 'mine') load();
   }, [brandName, activeGroup]);
+
+  useEffect(() => {
+    if (activeGroup === 'mine') loadLastMiningTask();
+  }, [brandName, activeGroup, mining]);
 
   const addKeyword = async () => {
     if (!newTerm.trim()) return;
@@ -68,7 +91,6 @@ export default function KeywordLibraryView({ brandName, initialTab, embedded }: 
 
   const runMining = async () => {
     setMining(true);
-    setSuggestions([]);
     const res = await fetch('/api/agent-tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -84,41 +106,14 @@ export default function KeywordLibraryView({ brandName, initialTab, embedded }: 
       }),
     });
     const { task } = await res.json();
-    if (!task?.id) {
-      setMining(false);
-      return;
-    }
-    const poll = setInterval(async () => {
-      const tr = await fetch(`/api/agent-tasks/${task.id}`).then((r) => r.json());
-      if (tr.task?.status === 'succeeded') {
-        clearInterval(poll);
-        setMining(false);
-        const sug = (tr.task.output?.suggestions as Array<{ term: string; group: string }>) ?? [];
-        setSuggestions(sug);
-        load();
-      } else if (tr.task?.status === 'failed') {
-        clearInterval(poll);
-        setMining(false);
-      }
-    }, 2000);
-  };
-
-  const importSuggestions = async () => {
-    if (!suggestions.length) return;
-    await fetch('/api/keywords/bulk', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        brandName,
-        items: suggestions.map((s) => ({ term: s.term, group: s.group, source: 'ai_mining' })),
-      }),
-    });
-    setSuggestions([]);
-    setActiveGroup('longtail');
-    load();
+    setMining(false);
+    if (!task?.id) return;
+    setLastMiningTask(task);
+    loadLastMiningTask();
   };
 
   const displayKeywords = activeGroup === 'mine' ? keywords : keywords;
+  const miningStatusLabel = lastMiningTask ? getResultConfirmUiStatus(lastMiningTask) : null;
 
   return (
     <div className={`overflow-y-auto h-full space-y-4 ${embedded ? 'p-6' : 'geo-page-content'}`}>
@@ -146,24 +141,59 @@ export default function KeywordLibraryView({ brandName, initialTab, embedded }: 
       </div>
 
       {activeGroup === 'mine' ? (
-        <div className="geo-card p-4 space-y-3">
-          <p className="text-sm">基于品牌与行业，AI 生成候选关键词并一键入库。</p>
-          <button type="button" className="geo-btn-primary text-sm" disabled={mining} onClick={runMining}>
-            {mining ? '挖掘中…' : '开始 AI 挖词'}
-          </button>
-          {suggestions.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold mb-2">建议词（{suggestions.length}）</p>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {suggestions.map((s) => (
-                  <span key={s.term} className="text-xs px-2 py-1 rounded bg-[var(--neutral-bg-03)]">
-                    {s.term}
-                  </span>
-                ))}
+        <div className="space-y-4">
+          <div className="geo-card p-4 space-y-3">
+            <p className="text-sm">基于品牌资料、行业、现有关键词生成候选词。</p>
+            <div className="text-xs text-[var(--neutral-text-03)] space-y-1">
+              <p>当前品牌：{brandName}</p>
+              {profile.industry && <p>行业：{profile.industry}</p>}
+              {(profile.keywords?.length ?? 0) > 0 && (
+                <p>种子词：{profile.keywords!.slice(0, 5).join('、')}{(profile.keywords!.length > 5 ? '…' : '')}</p>
+              )}
+            </div>
+            <button type="button" className="geo-btn-primary text-sm" disabled={mining} onClick={() => void runMining()}>
+              {mining ? '提交中…' : '开始 AI 挖词'}
+            </button>
+            <p className="text-xs text-[var(--neutral-text-03)]">
+              提交后可离开本页，完成后在消息通知中确认入库。
+            </p>
+          </div>
+
+          {lastMiningTask && (
+            <div className="geo-card p-4 space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <p className="text-sm font-medium">最近一次任务</p>
+                <TaskStatusPill status={lastMiningTask.status} />
               </div>
-              <button type="button" className="geo-btn-primary text-sm" onClick={importSuggestions}>
-                一键加入词库
-              </button>
+              <p className="text-xs text-[var(--neutral-text-03)]">{lastMiningTask.title}</p>
+              {miningStatusLabel && (
+                <p className="text-xs font-medium text-amber-800">{miningStatusLabel}</p>
+              )}
+              <p className="text-xs text-[var(--neutral-text-03)]">
+                {lastMiningTask.status === 'succeeded' && miningStatusLabel === '待确认入库'
+                  ? '候选词已生成，请确认后写入关键词库。'
+                  : lastMiningTask.status === 'running' || lastMiningTask.status === 'queued'
+                    ? '任务执行中，完成后将通知你确认。'
+                    : '可在运行日志查看详情。'}
+              </p>
+              {onNavigate && (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    className="geo-btn-secondary geo-btn-xs"
+                    onClick={() => onNavigate('agent_tasks', lastMiningTask.id)}
+                  >
+                    查看运行日志
+                  </button>
+                  <button
+                    type="button"
+                    className="geo-btn-secondary geo-btn-xs"
+                    onClick={() => onNavigate('notifications')}
+                  >
+                    查看通知
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

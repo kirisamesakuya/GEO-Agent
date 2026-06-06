@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Circle, Loader2 } from 'lucide-react';
 import type { BrandProfile } from '../../types';
 import { confirmOnboardingBrand } from '../../lib/onboarding-client';
 import type { OnboardingGoal } from '../../lib/brand-clue';
+import IndustrySelect from '../common/IndustrySelect';
+
+type ConfirmProfile = Partial<BrandProfile> & { socialLink?: string };
 
 interface Props {
   brandName: string;
-  initialProfile?: Partial<BrandProfile>;
+  initialProfile?: ConfirmProfile;
   goal?: OnboardingGoal;
   onConfirmed: (result: { brandName: string; taskId: string }) => void;
   onBack?: () => void;
@@ -19,12 +22,19 @@ export default function BrandConfirmView({
   onConfirmed,
   onBack,
 }: Props) {
-  const [profile, setProfile] = useState<Partial<BrandProfile>>({
+  const clueRef = useRef({
+    website: initialProfile?.website?.trim() ?? '',
+    description: initialProfile?.description?.trim() ?? '',
+    socialLink: initialProfile?.socialLink?.trim() ?? '',
+  });
+
+  const [profile, setProfile] = useState<ConfirmProfile>({
     name: brandName,
     industry: '',
     city: '',
-    website: '',
-    description: '',
+    website: clueRef.current.website,
+    description: clueRef.current.description,
+    socialLink: clueRef.current.socialLink,
     keywords: [],
     competitors: [],
     ...initialProfile,
@@ -34,16 +44,42 @@ export default function BrandConfirmView({
   const [missingHints, setMissingHints] = useState<string[]>([]);
 
   useEffect(() => {
+    const website = initialProfile?.website?.trim() ?? '';
+    const description = initialProfile?.description?.trim() ?? '';
+    const socialLink = initialProfile?.socialLink?.trim() ?? '';
+    clueRef.current = { website, description, socialLink };
+    if (!website && !description && !socialLink) return;
+    setProfile((p) => ({
+      ...p,
+      website: website || p.website,
+      description: description || p.description,
+      socialLink: socialLink || p.socialLink,
+    }));
+  }, [initialProfile?.website, initialProfile?.description, initialProfile?.socialLink]);
+
+  useEffect(() => {
     fetch(`/api/brand-profile?brandName=${encodeURIComponent(brandName)}`)
       .then((r) => r.json())
       .then((d) => {
         if (d?.name) {
-          setProfile((p) => ({ ...p, ...d }));
-          const hints: string[] = [];
-          if (!d.city) hints.push('是否有城市/门店地址？');
-          if (!d.website && !d.description) hints.push('是否有官网或社媒主页？');
-          if (!d.keywords?.length) hints.push('主营服务是否完整？');
-          setMissingHints(hints);
+          setProfile((p) => {
+            const clue = clueRef.current;
+            const merged: ConfirmProfile = {
+              ...d,
+              ...p,
+              website: clue.website || p.website || d.website,
+              description: clue.description || p.description || d.description,
+              socialLink: clue.socialLink || p.socialLink,
+            };
+            const hints: string[] = [];
+            if (!merged.city) hints.push('是否有城市/门店地址？');
+            if (!merged.website && !merged.description && !merged.socialLink) {
+              hints.push('是否有官网或社媒主页？');
+            }
+            if (!merged.keywords?.length) hints.push('主营服务是否完整？');
+            setMissingHints(hints);
+            return merged;
+          });
         }
       })
       .catch(() => {});
@@ -91,10 +127,10 @@ export default function BrandConfirmView({
             </label>
             <label className="block text-xs text-[var(--neutral-text-03)]">
               行业
-              <input
+              <IndustrySelect
                 className="geo-input w-full mt-1"
                 value={profile.industry ?? ''}
-                onChange={(e) => setProfile((p) => ({ ...p, industry: e.target.value }))}
+                onChange={(industry) => setProfile((p) => ({ ...p, industry }))}
               />
             </label>
             <label className="block text-xs text-[var(--neutral-text-03)]">
@@ -103,6 +139,24 @@ export default function BrandConfirmView({
                 className="geo-input w-full mt-1"
                 value={profile.city ?? ''}
                 onChange={(e) => setProfile((p) => ({ ...p, city: e.target.value }))}
+              />
+            </label>
+            <label className="block text-xs text-[var(--neutral-text-03)]">
+              官网 URL（brandUrl）
+              <input
+                className="geo-input w-full mt-1"
+                placeholder="https://www.example.com"
+                value={profile.website ?? ''}
+                onChange={(e) => setProfile((p) => ({ ...p, website: e.target.value }))}
+              />
+            </label>
+            <label className="block text-xs text-[var(--neutral-text-03)]">
+              社媒 / 店铺链接（socialLink）
+              <input
+                className="geo-input w-full mt-1"
+                placeholder="小红书、抖音或点评链接"
+                value={profile.socialLink ?? ''}
+                onChange={(e) => setProfile((p) => ({ ...p, socialLink: e.target.value }))}
               />
             </label>
             <label className="block text-xs text-[var(--neutral-text-03)]">

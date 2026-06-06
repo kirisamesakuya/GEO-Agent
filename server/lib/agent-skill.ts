@@ -21,10 +21,11 @@ export const TASK_SKILL_MAP: Record<AgentTaskType, string> = {
   geo_compare: 'geo-compare',
   campaign_plan: 'geo.campaign.plan',
   website_preview: 'geo.website.preview',
-  brand_extract: 'geo.brand.extract',
+  brand_extract: 'geo-brand-mentions',
   hermes_publish: 'hermes.publish.auto',
   account_verify: 'geo.account.verify',
   keyword_mining: 'geo.keyword.mine',
+  knowledge_extract: 'geo.knowledge.extract',
   index_sampling: 'geo.index.sample',
   article_rewrite: 'geo.article.rewrite',
 };

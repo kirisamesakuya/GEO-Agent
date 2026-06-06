@@ -1,8 +1,13 @@
 import { prisma } from '../db/client.js';
 import type { AgentTask, AgentTaskLog, CreateAgentTaskInput } from '../agent/types.js';
 import { paginatedResult, parsePagination } from '../lib/pagination.js';
-import { normalizeAgentTaskStatus, isHermesExecutorTask, isHermesLocalTaskType } from '../lib/agent-status.js';
-import { resolveHermesSetupReason } from './hermes-local.service.js';
+import { normalizeAgentTaskStatus, isHermesExecutorTask, isHermesLocalTaskType, isGeoAssetTaskType } from '../lib/agent-status.js';
+import { normalizeGeoSkillInput } from '../lib/hermes-geo-input.js';
+import {
+  resolveHermesSetupReason,
+  resolveHermesTaskEnqueueStatus,
+  shouldPushHermesTasksViaGateway,
+} from './hermes-local.service.js';
 
 function mapTask(row: {
   id: string;
@@ -49,17 +54,30 @@ function mapTask(row: {
 }
 
 export async function createAgentTask(input: CreateAgentTaskInput): Promise<AgentTask> {
-  const executor = input.executor ?? 'direct_model';
+  let executor = input.executor ?? 'direct_model';
   let status: AgentTask['status'] = 'queued';
   let reviewCategory: string | undefined;
 
+  const normalizedInput = normalizeGeoSkillInput(
+    input.type,
+    input.input,
+    input.brandName
+  );
+
+  const canMockGeoAsset =
+    isGeoAssetTaskType(input.type) && Boolean(normalizedInput.userConfirmedExecution);
+
   if (isHermesExecutorTask(executor) && isHermesLocalTaskType(input.type)) {
     const setupReason = await resolveHermesSetupReason();
-    if (setupReason) {
+    const gatewayPush = await shouldPushHermesTasksViaGateway();
+    if (canMockGeoAsset && (setupReason || !gatewayPush)) {
+      executor = 'direct_model';
+      status = 'queued';
+    } else if (setupReason) {
       status = 'pending_setup';
       reviewCategory = setupReason;
     } else {
-      status = 'waiting_local_device';
+      status = await resolveHermesTaskEnqueueStatus();
     }
   }
 
@@ -71,7 +89,7 @@ export async function createAgentTask(input: CreateAgentTaskInput): Promise<Agen
       progress: 0,
       executor,
       brandName: input.brandName,
-      input: JSON.stringify(input.input),
+      input: JSON.stringify(normalizedInput),
       businessRef: input.businessRef,
       reviewCategory: reviewCategory ?? null,
     },
@@ -81,7 +99,9 @@ export async function createAgentTask(input: CreateAgentTaskInput): Promise<Agen
       ? '任务已创建，等待本机 Hermes 领取'
       : status === 'pending_setup'
         ? '任务已创建，等待完成 Hermes 设置'
-        : '任务已创建并进入队列';
+        : status === 'queued' && isHermesExecutorTask(executor)
+          ? '任务已创建，将通过 API Gateway 提交本机 Hermes 执行'
+          : '任务已创建并进入队列';
   await appendLog(row.id, 'info', logMsg);
   return mapTask(row);
 }
@@ -231,6 +251,22 @@ export async function getAgentTaskLogs(taskId: string): Promise<AgentTaskLog[]> 
     detail: r.detail ?? undefined,
     createdAt: r.createdAt.toISOString(),
   }));
+}
+
+export async function getLastAgentTaskLog(taskId: string): Promise<AgentTaskLog | null> {
+  const row = await prisma.agentTaskLog.findFirst({
+    where: { taskId },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (!row) return null;
+  return {
+    id: row.id,
+    taskId: row.taskId,
+    level: row.level as AgentTaskLog['level'],
+    message: row.message,
+    detail: row.detail ?? undefined,
+    createdAt: row.createdAt.toISOString(),
+  };
 }
 
 export async function getAgentTaskStats() {

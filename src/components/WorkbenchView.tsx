@@ -25,7 +25,17 @@ interface Props {
   brandName: string;
   onBrandChange: (name: string) => void;
   onNavigate: (view: ViewType, hint?: string) => void;
-  onOnboardingStart?: (result: { brandName: string; extractTaskId: string; goal: string }) => void;
+  onOnboardingStart?: (result: {
+    brandName: string;
+    extractTaskId: string;
+    goal: string;
+    clue?: {
+      brandUrl?: string;
+      website?: string;
+      socialLink?: string;
+      description?: string;
+    };
+  }) => void;
 }
 
 function formatRefreshTime(d: Date) {

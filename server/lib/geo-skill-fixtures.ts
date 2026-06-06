@@ -144,7 +144,7 @@ export function fixtureGeoSchema(input: Record<string, unknown>) {
       {
         '@type': 'Organization',
         name: brand,
-        url: input.websiteUrl ?? 'https://example.com',
+        url: input.brandUrl ?? input.websiteUrl ?? 'https://example.com',
       },
       {
         '@type': 'LocalBusiness',
@@ -177,7 +177,7 @@ export function fixtureGeoSchema(input: Record<string, unknown>) {
 
 export function fixtureGeoLlmstxt(input: Record<string, unknown>) {
   const brand = brandFromInput(input);
-  const preview = `# ${brand}\n\n> ${brand} 官方 llms.txt（Mock 草稿）\n\n## Services\n- 种植牙\n- 隐形矫正\n- 儿童齿科\n\n## Contact\n- Website: ${input.websiteUrl ?? 'https://example.com'}\n`;
+  const preview = `# ${brand}\n\n> ${brand} 官方 llms.txt（Mock 草稿）\n\n## Services\n- 种植牙\n- 隐形矫正\n- 儿童齿科\n\n## Contact\n- Website: ${input.brandUrl ?? input.websiteUrl ?? 'https://example.com'}\n`;
   return {
     audit: { reportType: 'assets', brandName: brand, assetKind: 'llmstxt' },
     asset: { type: 'llmstxt', preview, riskLevel: 'medium' },

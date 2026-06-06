@@ -34,6 +34,7 @@ export type AgentTaskType =
   | 'hermes_publish'
   | 'account_verify'
   | 'keyword_mining'
+  | 'knowledge_extract'
   | 'index_sampling'
   | 'article_rewrite';
 

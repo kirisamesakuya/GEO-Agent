@@ -9,7 +9,7 @@ import {
 
 /**
  * 根据 executor kind 获取对应的执行器实例。
- * 支持 direct_model（Mock）和 nous_hermes（真实 Hermes Agent 调用）。
+ * 支持 direct_model（Web 内置 AI / 非 Hermes 任务）和 nous_hermes（本机 Hermes）。
  */
 export function getExecutor(kind: 'direct_model' | 'nous_hermes'): AgentExecutor {
   if (kind === 'nous_hermes') return new NousHermesExecutor();

@@ -135,14 +135,21 @@ export async function confirmHermesLocalBinding(input: {
   });
 
   // 绑定成功后，将 pending_setup 中 hermes_not_bound 的任务推进到 waiting_local_device
+  const nextStatus = await resolveHermesTaskEnqueueStatus();
   const waitingTasks = await listAgentTasks({ status: 'pending_setup', limit: 20 });
   for (const task of waitingTasks) {
     if (task.reviewCategory === 'hermes_not_bound') {
       await updateAgentTask(task.id, {
-        status: 'waiting_local_device',
+        status: nextStatus,
         reviewCategory: null,
       });
-      await appendLog(task.id, 'info', '本机 Hermes 已绑定，等待领取任务');
+      await appendLog(
+        task.id,
+        'info',
+        nextStatus === 'queued'
+          ? '本机 Hermes 已绑定，任务已进入执行队列'
+          : '本机 Hermes 已绑定，等待领取任务'
+      );
     }
   }
 
@@ -212,14 +219,21 @@ export async function recordTokenCapacityStatus(input: {
 
   // 词元能力恢复后，推进 token_capacity_unavailable 任务
   if (input.tokenCapacityStatus === 'available' && input.modelRuntimeStatus === 'available') {
+    const nextStatus = await resolveHermesTaskEnqueueStatus();
     const stuck = await listAgentTasks({ status: 'pending_setup', limit: 20 });
     for (const task of stuck) {
       if (task.reviewCategory === 'token_capacity_unavailable') {
         await updateAgentTask(task.id, {
-          status: 'waiting_local_device',
+          status: nextStatus,
           reviewCategory: undefined,
         });
-        await appendLog(task.id, 'info', '词元/模型能力已恢复，等待本机 Hermes 领取任务');
+        await appendLog(
+          task.id,
+          'info',
+          nextStatus === 'queued'
+            ? '词元/模型能力已恢复，任务已进入执行队列'
+            : '词元/模型能力已恢复，等待本机 Hermes 领取任务'
+        );
       }
     }
   }
@@ -234,12 +248,41 @@ export async function getHermesLocalDevice() {
   return { device, tokenCapacity, healthOk: health.ok };
 }
 
+/** API Gateway（8642）可用时由 GEO worker 主动推送任务，否则等待 Hermes 客户端拉取 */
+export async function shouldPushHermesTasksViaGateway(): Promise<boolean> {
+  const health = await checkHermesHealth();
+  return Boolean(health.apiGatewayOk);
+}
+
+export async function resolveHermesTaskEnqueueStatus(): Promise<
+  'queued' | 'waiting_local_device'
+> {
+  return (await shouldPushHermesTasksViaGateway())
+    ? 'queued'
+    : 'waiting_local_device';
+}
+
 export async function resolveHermesSetupReason(): Promise<string | null> {
-  const { device, tokenCapacity, healthOk } = await getHermesLocalDevice();
-  if (!healthOk) {
+  const health = await checkHermesHealth();
+  const { device, tokenCapacity } = await getHermesLocalDevice();
+
+  if (health.apiGatewayOk) {
+    if (
+      tokenCapacity &&
+      (tokenCapacity.tokenCapacityStatus !== 'available' ||
+        tokenCapacity.modelRuntimeStatus !== 'available')
+    ) {
+      return 'token_capacity_unavailable';
+    }
+    return null;
+  }
+
+  if (!health.desktopRunning) {
     return device ? 'hermes_not_running' : 'hermes_not_installed';
   }
-  if (!device) return 'hermes_not_bound';
+
+  if (!device) return 'api_server_not_enabled';
+
   if (
     tokenCapacity &&
     (tokenCapacity.tokenCapacityStatus !== 'available' ||
@@ -343,7 +386,8 @@ export async function reportHermesTaskResult(
 
   if (input.status === 'succeeded' || input.status === 'partial') {
     await handleTaskSuccess(task, input.output ?? {}, input.status);
-    await notifyPublisherAgentTask(task, true);
+    const updated = await getAgentTask(taskId);
+    await notifyPublisherAgentTask(updated ?? task, true);
   } else if (input.status === 'failed') {
     await notifyPublisherAgentTask(
       task,

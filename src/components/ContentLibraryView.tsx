@@ -20,6 +20,9 @@ import TaskStatusPill from './common/TaskStatusPill';
 import { resolveBatchPillDisplay } from '../lib/agent-task-display';
 import BrandScopeBar from './common/BrandScopeBar';
 import HermesWorkingOverlay from './common/HermesWorkingOverlay';
+import HermesPublishConfirmDialog, {
+  type HermesPublishConfirmPayload,
+} from './agent/HermesPublishConfirmDialog';
 import RightPreviewPanel from './common/RightPreviewPanel';
 import {
   ChevronDown,
@@ -97,6 +100,11 @@ export default function ContentLibraryView({
     message: string;
     detail?: string;
   }>({ open: false, progress: 0, message: '' });
+  const [publishConfirm, setPublishConfirm] = useState<{
+    open: boolean;
+    payload: HermesPublishConfirmPayload | null;
+    onlyItemId?: string;
+  }>({ open: false, payload: null });
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [bulkWorking, setBulkWorking] = useState(false);
   /** 可同时展开多个批次文件夹 */
@@ -454,19 +462,21 @@ export default function ContentLibraryView({
     return items;
   };
 
-  const publishChecked = async (onlyItemId?: string) => {
-    const groups = onlyItemId
-      ? (() => {
-          for (const batchId of Object.keys(loadedBatches)) {
-            const batch = loadedBatches[batchId];
-            if (batch?.items.some((i) => i.id === onlyItemId)) {
-              return [{ batchId, platform: batch.platform, itemIds: [onlyItemId] }];
-            }
-          }
-          return [];
-        })()
-      : groupCheckedByBatch();
+  const resolvePublishGroups = (onlyItemId?: string) => {
+    if (onlyItemId) {
+      for (const batchId of Object.keys(loadedBatches)) {
+        const batch = loadedBatches[batchId];
+        if (batch?.items.some((i) => i.id === onlyItemId)) {
+          return [{ batchId, platform: batch.platform, itemIds: [onlyItemId] }];
+        }
+      }
+      return [];
+    }
+    return groupCheckedByBatch();
+  };
 
+  const requestPublish = (onlyItemId?: string) => {
+    const groups = resolvePublishGroups(onlyItemId);
     if (groups.length === 0) {
       toast('请至少勾选一篇要发布的文章', 'error');
       return;
@@ -481,6 +491,38 @@ export default function ContentLibraryView({
     );
     if (blocked.length > 0) {
       toast(`有 ${blocked.length} 篇禁用词未通过，请修改后再发布`, 'error');
+      return;
+    }
+
+    const platformLabels = [...new Set(groups.map((g) => g.platform))];
+    const accountLabels = groups.map((group) => {
+      const matching = accounts.filter(
+        (a) => platformMatches(group.platform, a.platform) && isPublishReady(a.status)
+      );
+      const accountId =
+        group.platform === selectedBatch?.platform && selectedAccountId
+          ? selectedAccountId
+          : matching[0]?.id;
+      const account = matching.find((a) => a.id === accountId) ?? matching[0];
+      return account ? `${account.platform} · ${account.accountName}` : `${group.platform}（无账号）`;
+    });
+
+    setPublishConfirm({
+      open: true,
+      onlyItemId,
+      payload: {
+        articleCount: allItemIds.length,
+        platformLabels,
+        accountLabel: accountLabels.join('；'),
+      },
+    });
+  };
+
+  const publishChecked = async (onlyItemId?: string) => {
+    const groups = resolvePublishGroups(onlyItemId);
+
+    if (groups.length === 0) {
+      toast('请至少勾选一篇要发布的文章', 'error');
       return;
     }
     setPublishing(true);
@@ -507,7 +549,6 @@ export default function ContentLibraryView({
           errors.push(`${group.platform} 无可用发布账号`);
           continue;
         }
-        const account = matching.find((a) => a.id === accountId) ?? matching[0];
         const batch = loadedBatches[group.batchId];
         const titles =
           batch?.items
@@ -542,13 +583,18 @@ export default function ContentLibraryView({
               errors.push(`${group.platform}: Hermes 任务超时`);
               continue;
             }
-            if (task.status === 'succeeded') {
+            if (task.status === 'succeeded' || task.status === 'partial') {
               published += Number(
                 (task.output as { publishedCount?: number } | undefined)?.publishedCount ??
-                  group.itemIds.length
+                  (task.status === 'partial' ? 0 : group.itemIds.length)
               );
               const link = (task.output as { publishLink?: string } | undefined)?.publishLink;
               if (link) mockLinks.push(link);
+              if (task.status === 'partial') {
+                errors.push(
+                  `${group.platform}: ${task.userErrorMessage ?? '部分文章需人工发布'}`
+                );
+              }
             } else {
               errors.push(
                 `${group.platform}: ${task.userErrorMessage ?? 'Hermes 发布失败'}`
@@ -568,8 +614,8 @@ export default function ContentLibraryView({
       if (published > 0) {
         const linkHint = mockLinks[0] ? ` · ${mockLinks[0]}` : '';
         toast(
-          `Hermes 模拟发布完成（${published} 篇）${linkHint}${errors.length ? `；${errors.length} 项异常` : ''}`,
-          'success'
+          `Hermes 发布完成（${published} 篇）${linkHint}${errors.length ? `；${errors.length} 项需关注` : ''}`,
+          errors.length ? 'info' : 'success'
         );
         void loadBatches();
         onArticlesChanged?.();
@@ -592,7 +638,7 @@ export default function ContentLibraryView({
   useEffect(() => {
     if (!embedded || bulkPublishTick === 0) return;
     if (checkedIds.size === 0) return;
-    void publishChecked();
+    void requestPublish();
   }, [bulkPublishTick, embedded, checkedIds.size]);
 
   const downloadItem = () => {
@@ -742,7 +788,7 @@ export default function ContentLibraryView({
             type="button"
             className="geo-btn-primary geo-btn-sm w-full flex items-center justify-center gap-1"
             disabled={publishing || checkedCount === 0}
-            onClick={() => void publishChecked()}
+            onClick={() => requestPublish()}
           >
             <Send className="w-3.5 h-3.5" />
             {publishing ? '发布中…' : `确认发布所选（${checkedCount}）`}
@@ -754,7 +800,7 @@ export default function ContentLibraryView({
           type="button"
           className="geo-btn-secondary geo-btn-xs w-full"
           disabled={publishing}
-          onClick={() => void publishChecked(selectedItem.id)}
+          onClick={() => requestPublish(selectedItem.id)}
         >
           Hermes 仅发布当前篇
         </button>
@@ -796,6 +842,17 @@ export default function ContentLibraryView({
           progress={hermesWork.progress}
           message={hermesWork.message}
           detail={hermesWork.detail}
+        />
+        <HermesPublishConfirmDialog
+          open={publishConfirm.open}
+          payload={publishConfirm.payload}
+          loading={publishing}
+          onCancel={() => setPublishConfirm({ open: false, payload: null })}
+          onConfirm={() => {
+            const onlyItemId = publishConfirm.onlyItemId;
+            setPublishConfirm({ open: false, payload: null });
+            void publishChecked(onlyItemId);
+          }}
         />
         <div
           className={`grid h-full min-h-0 overflow-hidden ${
@@ -1103,7 +1160,7 @@ export default function ContentLibraryView({
                       type="button"
                       className="geo-btn-primary geo-btn-sm w-full"
                       disabled={publishing}
-                      onClick={() => void publishChecked(selectedItem.id)}
+                      onClick={() => requestPublish(selectedItem.id)}
                     >
                       立即发布
                     </button>
@@ -1143,6 +1200,17 @@ export default function ContentLibraryView({
       progress={hermesWork.progress}
       message={hermesWork.message}
       detail={hermesWork.detail}
+    />
+    <HermesPublishConfirmDialog
+      open={publishConfirm.open}
+      payload={publishConfirm.payload}
+      loading={publishing}
+      onCancel={() => setPublishConfirm({ open: false, payload: null })}
+      onConfirm={() => {
+        const onlyItemId = publishConfirm.onlyItemId;
+        setPublishConfirm({ open: false, payload: null });
+        void publishChecked(onlyItemId);
+      }}
     />
     <div className="flex h-full min-h-0 min-w-0 overflow-hidden">
       {/* 文章结果：生成批次 + 单篇文章 */}

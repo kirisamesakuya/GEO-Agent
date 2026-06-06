@@ -73,6 +73,7 @@ export type AgentTaskType =
   | 'hermes_publish'
   | 'account_verify'
   | 'keyword_mining'
+  | 'knowledge_extract'
   | 'index_sampling'
   | 'article_rewrite';
 
@@ -249,6 +250,7 @@ export const AGENT_TASK_TYPE_LABELS: Record<AgentTaskType, string> = {
   hermes_publish: 'Hermes 发布',
   account_verify: '账号校验',
   keyword_mining: 'AI 挖词',
+  knowledge_extract: '知识库抽取',
   index_sampling: '收录采样',
   article_rewrite: '参考重写',
 };

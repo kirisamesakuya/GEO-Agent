@@ -23,6 +23,56 @@ export const CLUE_TYPE_CHIPS: Array<{ type: BrandClueInputType; label: string }>
   { type: 'description', label: '描述' },
 ];
 
+export type BrandClueFormInput = {
+  brandName?: string;
+  brandUrl?: string;
+  website?: string;
+  socialLink?: string;
+  description?: string;
+  files?: Array<{ id: string; name: string; url: string; mimeType?: string }>;
+};
+
+/** 根据已填字段推断主线索类型（用于 brand_extract） */
+export function resolvePrimaryClueType(input: BrandClueFormInput): BrandClueInputType {
+  if (input.files?.length) return 'file';
+  const website = (input.brandUrl ?? input.website ?? '').trim();
+  if (website) return 'website_url';
+  if (input.socialLink?.trim()) return 'social_link';
+  if (input.description?.trim()) return 'description';
+  if (input.brandName?.trim()) return 'brand_name';
+  return 'description';
+}
+
+export function buildBrandCluePayload(input: BrandClueFormInput) {
+  const brandUrl = (input.brandUrl ?? input.website ?? '').trim();
+  const socialLink = input.socialLink?.trim() ?? '';
+  const description = input.description?.trim() ?? '';
+  const brandName = input.brandName?.trim() ?? '';
+  const primaryType = resolvePrimaryClueType(input);
+  const legacyText =
+    primaryType === 'website_url'
+      ? brandUrl
+      : primaryType === 'social_link'
+        ? socialLink
+        : primaryType === 'description'
+          ? description
+          : primaryType === 'brand_name'
+            ? brandName
+            : '';
+
+  return {
+    brandName: brandName || undefined,
+    brandUrl: brandUrl || undefined,
+    website: brandUrl || undefined,
+    description: description || undefined,
+    brandDesc: description || undefined,
+    socialLink: socialLink || undefined,
+    text: legacyText || undefined,
+    inputType: primaryType,
+    files: input.files ?? [],
+  };
+}
+
 export type OnboardingGoal = 'geo_quick_start' | 'geo_audit' | 'article' | 'task_pack';
 
 export const ONBOARDING_GOALS: Array<{ id: OnboardingGoal; title: string; desc: string }> = [

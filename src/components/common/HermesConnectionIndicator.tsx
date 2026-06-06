@@ -10,11 +10,12 @@ interface Props {
 type ConnectionState = 'ready' | 'running_unbound' | 'bound_offline' | 'desktop_only' | 'offline';
 
 function resolveConnectionState(health: HermesHealth): ConnectionState {
-  if (health.bound && (health.heartbeat === 'online' || health.apiGatewayOk)) return 'ready';
+  if (health.apiGatewayOk) return 'ready';
+  if (health.bound && health.heartbeat === 'online') return 'ready';
   if (health.ok && health.bound) return 'bound_offline';
+  if (health.desktopRunning || health.mode === 'desktop_only') return 'desktop_only';
   if (health.ok && !health.bound) return 'running_unbound';
   if (!health.ok && health.bound) return 'bound_offline';
-  if (health.desktopRunning || health.mode === 'desktop_only') return 'desktop_only';
   return 'offline';
 }
 
@@ -97,9 +98,18 @@ export default function HermesConnectionIndicator({ onNavigate }: Props) {
 
   const state = resolveConnectionState(health);
   const meta = STATE_META[state];
+  const versionLabel = health.desktopAppVersion
+    ? `桌面 v${health.desktopAppVersion}`
+    : health.clientVersion
+      ? `v${health.clientVersion}`
+      : null;
+
   const tooltip = [
     meta.label,
-    health.clientVersion ? `版本：${health.clientVersion}` : null,
+    versionLabel,
+    health.agentVersion && health.desktopAppVersion && health.agentVersion !== health.desktopAppVersion
+      ? `Agent 内核 v${health.agentVersion}`
+      : null,
     health.boundDevice ? `设备：${health.boundDevice}` : null,
     health.apiServerEnabled === false ? 'API 服务（8642）未开启' : null,
     health.detail,

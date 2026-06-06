@@ -9,7 +9,7 @@ import {
 import { skillNameForTaskType } from '../lib/agent-skill.js';
 import { getHermesDevice } from '../services/hermes-local.service.js';
 import { SETUP_REASON_LABELS } from '../lib/agent-status.js';
-import { cancelAgentTask, enqueueAgentTask, retryAgentTask } from '../agent/worker.js';
+import { cancelAgentTask, maybeEnqueueAgentTask, retryAgentTask } from '../agent/worker.js';
 import { prisma } from '../db/client.js';
 import { checkMinimaxConnection } from '../lib/minimax.js';
 import { resolveExecutorKindForTask } from '../agent/executors/index.js';
@@ -18,13 +18,19 @@ import {
   validateAssetTaskSubmission,
   confirmAgentTaskExecution,
 } from '../services/asset-task.service.js';
+import {
+  confirmAgentTaskResult,
+  previewAgentTaskResult,
+  rejectAgentTaskResult,
+  regenerateAgentTaskFromResult,
+} from '../services/agent-result-confirmation.service.js';
 import type { AgentTaskType } from '../agent/types.js';
 
 const VALID_TYPES: AgentTaskType[] = [
   'article_generation', 'geo_analysis', 'geo_quick_start', 'geo_audit', 'geo_schema',
   'geo_llmstxt', 'geo_citability', 'geo_report_pdf', 'geo_compare',
   'campaign_plan', 'website_preview', 'brand_extract', 'hermes_publish', 'account_verify',
-  'keyword_mining', 'index_sampling', 'article_rewrite',
+  'keyword_mining', 'knowledge_extract', 'index_sampling', 'article_rewrite',
 ];
 
 export function registerAgentTaskRoutes(app: Express) {
@@ -95,7 +101,7 @@ export function registerAgentTaskRoutes(app: Express) {
             }
           : null,
         artifacts,
-        executorLabel: task.executor === 'nous_hermes' ? '本机 Hermes' : '演示执行器',
+        executorLabel: task.executor === 'nous_hermes' ? '本机 Hermes' : '内置 Web AI',
       },
     });
   });
@@ -117,10 +123,7 @@ export function registerAgentTaskRoutes(app: Express) {
       type, title, input, brandName, businessRef,
       executor: executor ?? (await resolveExecutorKindForTask(type)),
     });
-    const { isHermesExecutorTask, isHermesLocalTaskType } = await import('../lib/agent-status.js');
-    if (!(isHermesExecutorTask(task.executor) && isHermesLocalTaskType(task.type))) {
-      void enqueueAgentTask(task);
-    }
+    maybeEnqueueAgentTask(task);
     res.status(201).json({ task });
   });
 
@@ -137,12 +140,62 @@ export function registerAgentTaskRoutes(app: Express) {
     }
   });
 
+  app.get('/api/agent-tasks/:id/result-preview', async (req, res) => {
+    try {
+      res.json(await previewAgentTaskResult(req.params.id));
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '预览失败' });
+    }
+  });
+
+  app.post('/api/agent-tasks/:id/confirm-result', async (req, res) => {
+    try {
+      const { confirmedBy, selectedTerms, groupOverrides, selectedEntryKeys } = req.body ?? {};
+      const result = await confirmAgentTaskResult(req.params.id, {
+        confirmedBy: confirmedBy ? String(confirmedBy) : undefined,
+        selectedTerms: Array.isArray(selectedTerms) ? selectedTerms.map(String) : undefined,
+        groupOverrides:
+          groupOverrides && typeof groupOverrides === 'object'
+            ? (groupOverrides as Record<string, string>)
+            : undefined,
+        selectedEntryKeys: Array.isArray(selectedEntryKeys)
+          ? selectedEntryKeys.map(String)
+          : undefined,
+      });
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '确认失败' });
+    }
+  });
+
+  app.post('/api/agent-tasks/:id/reject-result', async (req, res) => {
+    try {
+      const { reason } = req.body ?? {};
+      const result = await rejectAgentTaskResult(
+        req.params.id,
+        typeof reason === 'string' ? reason : undefined
+      );
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '忽略失败' });
+    }
+  });
+
+  app.post('/api/agent-tasks/:id/regenerate-result', async (req, res) => {
+    try {
+      const task = await regenerateAgentTaskFromResult(req.params.id);
+      maybeEnqueueAgentTask(task);
+      res.status(201).json({ task });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '重新生成失败' });
+    }
+  });
+
   app.post('/api/agent-tasks/:id/retry', async (req, res) => {
     const task = await retryAgentTask(req.params.id);
     if (!task) return res.status(404).json({ error: '任务不存在' });
-    const { isHermesExecutorTask, isHermesLocalTaskType } = await import('../lib/agent-status.js');
-    if (!(isHermesExecutorTask(task.executor) && isHermesLocalTaskType(task.type))) {
-      void enqueueAgentTask(task);
+    if (task.status === 'queued') {
+      maybeEnqueueAgentTask(task);
     }
     res.json({ task });
   });

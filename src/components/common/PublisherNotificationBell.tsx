@@ -8,6 +8,7 @@ import {
   resolveNotificationNavigation,
   type PublisherNotificationItem,
 } from '../../lib/publisher-notifications';
+import { fetchPendingConfirmTasks } from '../../lib/agent-result-confirmation';
 
 interface Props {
   brandName: string;
@@ -18,21 +19,28 @@ export default function PublisherNotificationBell({ brandName, onNavigate }: Pro
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<PublisherNotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [pendingConfirmCount, setPendingConfirmCount] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     if (!brandName || brandName === '__all__') {
       setItems([]);
       setUnreadCount(0);
+      setPendingConfirmCount(0);
       return;
     }
     try {
-      const data = await fetchPublisherNotifications(brandName);
+      const [data, pendingTasks] = await Promise.all([
+        fetchPublisherNotifications(brandName),
+        fetchPendingConfirmTasks(brandName),
+      ]);
       setItems(data.notifications);
       setUnreadCount(data.unreadCount);
+      setPendingConfirmCount(pendingTasks.length);
     } catch {
       setItems([]);
       setUnreadCount(0);
+      setPendingConfirmCount(0);
     }
   }, [brandName]);
 
@@ -72,13 +80,21 @@ export default function PublisherNotificationBell({ brandName, onNavigate }: Pro
   };
 
   const disabled = !brandName || brandName === '__all__';
+  const bellTitle = disabled
+    ? '请选择具体品牌后查看通知'
+    : [
+        unreadCount > 0 ? `${unreadCount} 条未读` : null,
+        pendingConfirmCount > 0 ? `${pendingConfirmCount} 条待确认` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ') || '消息通知';
 
   return (
     <div className="relative" ref={rootRef}>
       <button
         type="button"
         disabled={disabled}
-        title={disabled ? '请选择具体品牌后查看通知' : '消息通知'}
+        title={bellTitle}
         onClick={() => setOpen((v) => !v)}
         className="relative p-2 rounded-full geo-nav-item disabled:opacity-50"
         style={{ color: 'var(--neutral-text-03)' }}
@@ -87,6 +103,14 @@ export default function PublisherNotificationBell({ brandName, onNavigate }: Pro
         {unreadCount > 0 && (
           <span className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
             {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
+        {pendingConfirmCount > 0 && (
+          <span
+            className="absolute bottom-0.5 left-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white ring-2 ring-white"
+            title={`${pendingConfirmCount} 条待确认入库`}
+          >
+            {pendingConfirmCount > 9 ? '9+' : pendingConfirmCount}
           </span>
         )}
       </button>
@@ -103,9 +127,16 @@ export default function PublisherNotificationBell({ brandName, onNavigate }: Pro
             className="flex items-center justify-between px-4 py-3 border-b"
             style={{ borderColor: 'var(--neutral-divider-02)' }}
           >
-            <span className="text-sm font-semibold" style={{ color: 'var(--neutral-text-01)' }}>
-              通知中心
-            </span>
+            <div>
+              <span className="text-sm font-semibold block" style={{ color: 'var(--neutral-text-01)' }}>
+                通知中心
+              </span>
+              {pendingConfirmCount > 0 && (
+                <span className="text-[10px] text-amber-800 font-medium">
+                  {pendingConfirmCount} 条 AI 结果待确认
+                </span>
+              )}
+            </div>
             {unreadCount > 0 && (
               <button
                 type="button"

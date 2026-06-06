@@ -7,7 +7,17 @@ interface Props {
   displayBrandName: string;
   needsBrandScope: boolean;
   onClose: () => void;
-  onFlowComplete: (result: { brandName: string; extractTaskId: string; goal: string }) => void;
+  onFlowComplete: (result: {
+    brandName: string;
+    extractTaskId: string;
+    goal: string;
+    clue?: {
+      brandUrl?: string;
+      website?: string;
+      socialLink?: string;
+      description?: string;
+    };
+  }) => void;
 }
 
 export default function QuickStartModal({

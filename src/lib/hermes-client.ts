@@ -7,7 +7,10 @@ export type HermesHealth = {
   desktopRunning?: boolean;
   gatewayRunning?: boolean;
   apiServerEnabled?: boolean;
+  agentVersion?: string | null;
+  desktopAppVersion?: string | null;
   clientVersion?: string | null;
+  bindClientSupported?: boolean;
   bound?: boolean;
   boundDevice?: string | null;
   heartbeat?: string;

@@ -143,6 +143,12 @@ export default function App() {
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
   const [onboardingBrand, setOnboardingBrand] = useState<string | null>(null);
   const [onboardingGoal, setOnboardingGoal] = useState<OnboardingGoal>('geo_quick_start');
+  const [onboardingClue, setOnboardingClue] = useState<{
+    brandUrl?: string;
+    website?: string;
+    socialLink?: string;
+    description?: string;
+  } | null>(null);
   const [headerTaskStatus, setHeaderTaskStatus] = useState<AgentTaskStatus | null>(null);
   const [brandOptions, setBrandOptions] = useState<{ id: string; name: string }[]>([]);
 
@@ -318,10 +324,31 @@ export default function App() {
     brandName: string;
     extractTaskId: string;
     goal: string;
+    clue?: {
+      brandUrl?: string;
+      website?: string;
+      socialLink?: string;
+      description?: string;
+    };
+    brand?: { website?: string; description?: string };
   }) => {
     handleBrandChange(result.brandName);
     setOnboardingBrand(result.brandName);
     setOnboardingGoal((result.goal as OnboardingGoal) ?? 'geo_quick_start');
+    const website =
+      result.clue?.brandUrl?.trim() ||
+      result.clue?.website?.trim() ||
+      result.brand?.website?.trim() ||
+      '';
+    setOnboardingClue({
+      brandUrl: website || undefined,
+      website: website || undefined,
+      socialLink: result.clue?.socialLink?.trim() || undefined,
+      description:
+        result.clue?.description?.trim() ||
+        result.brand?.description?.trim() ||
+        undefined,
+    });
     setShowNewTaskModal(false);
     setActiveView('brand_confirm');
     setViewHint(result.extractTaskId);
@@ -343,6 +370,11 @@ export default function App() {
           <BrandConfirmView
             brandName={onboardingBrand ?? effectiveBrand}
             goal={onboardingGoal}
+            initialProfile={{
+              website: onboardingClue?.brandUrl ?? onboardingClue?.website ?? '',
+              description: onboardingClue?.description ?? '',
+              socialLink: onboardingClue?.socialLink ?? '',
+            }}
             onBack={() => navigate('workbench')}
             onConfirmed={({ brandName: confirmedBrand, taskId }) => {
               handleBrandChange(confirmedBrand);
@@ -355,6 +387,7 @@ export default function App() {
         return (
           <OnboardingConsoleView
             brandName={onboardingBrand ?? effectiveBrand}
+            taskId={viewHint}
             onNavigate={navigate}
           />
         );
@@ -528,6 +561,7 @@ export default function App() {
               keywordHint={activeView === 'keyword_library' ? viewHint : undefined}
               onBrandNameChange={handleBrandChange}
               onBackToBrandManagement={() => navigate('brand_list')}
+              onNavigate={navigate}
             />
           </div>
         );

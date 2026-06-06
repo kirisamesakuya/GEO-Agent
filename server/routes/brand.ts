@@ -127,7 +127,7 @@ export function registerBrandRoutes(app: Express) {
   });
 
   app.post('/api/extract-brand', async (req, res) => {
-    const { website, materials } = req.body ?? {};
+    const { website, materials, brandName } = req.body ?? {};
     const hasWebsite = typeof website === 'string' && website.trim().length > 0;
     const materialList = Array.isArray(materials) ? materials : [];
     if (!hasWebsite && materialList.length === 0) {
@@ -136,12 +136,16 @@ export function registerBrandRoutes(app: Express) {
     const label = hasWebsite
       ? String(website).trim()
       : `材料×${materialList.length}`;
+    const resolvedBrandName =
+      typeof brandName === 'string' && brandName.trim() ? brandName.trim() : undefined;
     const task = await createAgentTask({
       type: 'brand_extract',
       title: `品牌资料提取 · ${label}`,
+      brandName: resolvedBrandName,
       input: {
         website: hasWebsite ? String(website).trim() : '',
         materials: materialList,
+        sourceMaterials: materialList,
       },
       executor: await resolveExecutorKindForTask('brand_extract'),
     });

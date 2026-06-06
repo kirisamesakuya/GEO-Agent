@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type RefObject } from 'react';
-import { BrandProfile, type BrandSourceMaterial, type BrandSourceMaterialKind } from '../types';
+import { BrandProfile, type BrandSourceMaterial, type BrandSourceMaterialKind, type ViewType } from '../types';
 import { useToast } from '../context/ToastContext';
 import {
   Globe,
@@ -20,10 +20,17 @@ import {
   classifyBrandSourceMaterial,
 } from '../../lib/brand-source-material';
 import RegionCascader from './common/RegionCascader';
+import IndustrySelect from './common/IndustrySelect';
+import {
+  applyBrandProfileDraft,
+  clearBrandProfileDraft,
+  loadBrandProfileDraft,
+} from '../lib/brand-profile-draft';
 
 interface BrandProfileViewProps {
   brandName: string;
   onBrandNameChange: (name: string) => void;
+  onNavigate?: (view: ViewType, hint?: string) => void;
 }
 
 function emptyProfile(name: string): BrandProfile {
@@ -55,7 +62,7 @@ function materialIcon(kind: BrandSourceMaterialKind) {
   }
 }
 
-export default function BrandProfileView({ brandName, onBrandNameChange }: BrandProfileViewProps) {
+export default function BrandProfileView({ brandName, onBrandNameChange, onNavigate }: BrandProfileViewProps) {
   const { toast } = useToast();
   const [profile, setProfile] = useState<BrandProfile>(() => emptyProfile(brandName));
   const [profileReady, setProfileReady] = useState(false);
@@ -63,6 +70,7 @@ export default function BrandProfileView({ brandName, onBrandNameChange }: Brand
   // Steps tracking during fetch
   const [extractionStep, setExtractionStep] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [extractTaskId, setExtractTaskId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
@@ -78,15 +86,27 @@ export default function BrandProfileView({ brandName, onBrandNameChange }: Brand
   // Edit forbidden words
   const [newForbidden, setNewForbidden] = useState('');
   const [showForbiddenInput, setShowForbiddenInput] = useState(false);
+  const [draftNotice, setDraftNotice] = useState<string | null>(null);
 
   useEffect(() => {
     setProfileReady(false);
+    setDraftNotice(null);
     const ac = new AbortController();
     fetch(`/api/brand-profile?brandName=${encodeURIComponent(brandName)}`, { signal: ac.signal })
       .then((res) => res.json())
       .then((data) => {
-        if (data?.name) setProfile(data);
-        else setProfile(emptyProfile(brandName));
+        const base = data?.name ? (data as BrandProfile) : emptyProfile(brandName);
+        const draft = loadBrandProfileDraft(brandName);
+        if (draft?.profile) {
+          setProfile(applyBrandProfileDraft(base, draft.profile));
+          setDraftNotice(
+            draft.taskId
+              ? '已加载 AI 提取建议草稿，请核对后手动保存（尚未写入品牌库）'
+              : '已加载品牌资料草稿，请核对后手动保存'
+          );
+        } else {
+          setProfile(base);
+        }
       })
       .catch(() => setProfile(emptyProfile(brandName)))
       .finally(() => setProfileReady(true));
@@ -99,15 +119,17 @@ export default function BrandProfileView({ brandName, onBrandNameChange }: Brand
       const res = await fetch(`/api/agent-tasks/${taskId}`);
       const data = await res.json();
       const task = data.task;
-      if (task?.status === 'succeeded' && task.output?.profile) {
-        const p = task.output.profile as BrandProfile;
-        setProfile(p);
-        onBrandNameChange(p.name);
-        toast(`品牌资料已提取：${p.name}`, 'success');
+      if (task?.status === 'succeeded') {
+        if (task.needsReview && task.reviewCategory === 'result_confirm_required') {
+          toast('AI 提取完成，请在消息通知或运行日志中确认入库', 'success');
+        } else {
+          toast('品牌提取任务已完成', 'success');
+        }
         return;
       }
       if (task?.status === 'failed') {
         toast('品牌提取失败，请稍后重试', 'error');
+        setExtractTaskId(null);
         return;
       }
     }
@@ -185,33 +207,33 @@ export default function BrandProfileView({ brandName, onBrandNameChange }: Brand
     }
     setLoading(true);
     setExtractionStep(
-      profile.website.trim() ? '正在抓取域名内容...' : '正在解析参考材料...'
+      profile.website.trim() ? '正在提交提取任务…' : '正在提交材料解析任务…'
     );
 
     try {
-      setTimeout(() => setExtractionStep('正在提取并拆解品牌业务框架...'), 400);
-      setTimeout(() => setExtractionStep('正在构建首选检索本地策略...'), 800);
-
       const response = await fetch('/api/extract-brand', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           website: profile.website,
           materials,
+          brandName,
         }),
       });
       const data = await response.json();
       if (data.success && data.taskId) {
-        setExtractionStep('Agent 任务执行中…');
-        await pollExtractTask(data.taskId);
+        setExtractTaskId(data.taskId);
+        setExtractionStep('');
+        toast('AI 提取任务已提交，完成后请在通知中确认入库', 'success');
+        void pollExtractTask(data.taskId);
+      } else if (data.error) {
+        toast(data.error, 'error');
       }
     } catch (err) {
       console.error(err);
+      toast('提交失败，请重试', 'error');
     } finally {
-      setTimeout(() => {
-        setLoading(false);
-        setExtractionStep('');
-      }, 600);
+      setLoading(false);
     }
   };
 
@@ -223,10 +245,18 @@ export default function BrandProfileView({ brandName, onBrandNameChange }: Brand
     }).then(res => res.json())
       .then(data => {
         if (data.success) {
+          clearBrandProfileDraft(brandName);
+          setDraftNotice(null);
           toast('品牌资料保存成功', 'success');
           if (profile.name !== brandName) onBrandNameChange(profile.name);
         }
       });
+  };
+
+  const dismissDraft = () => {
+    clearBrandProfileDraft(brandName);
+    setDraftNotice(null);
+    toast('已清除草稿提示', 'info');
   };
 
   const addCompetitor = () => {
@@ -331,9 +361,47 @@ export default function BrandProfileView({ brandName, onBrandNameChange }: Brand
               ) : (
                 <Sparkles className="w-4 h-4" />
               )}
-              <span>{loading ? 'AI 智能提取中…' : 'AI 提取品牌资料'}</span>
+              <span>{loading ? '提交中…' : 'AI 提取品牌资料'}</span>
             </button>
           </div>
+
+          {draftNotice && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/80 p-3 text-xs flex items-start justify-between gap-3">
+              <p className="text-amber-900 font-medium">{draftNotice}</p>
+              <button type="button" className="geo-link text-xs shrink-0" onClick={dismissDraft}>
+                清除提示
+              </button>
+            </div>
+          )}
+
+          {extractTaskId && (
+            <div className="mt-3 rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-light)]/20 p-3 text-xs space-y-2">
+              <p className="font-medium text-[var(--color-title)]">AI 提取任务已提交</p>
+              <p className="text-[var(--neutral-text-03)]">
+                你可以继续编辑或离开本页，完成后会在消息通知中提醒你确认入库。
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {onNavigate && (
+                  <>
+                    <button
+                      type="button"
+                      className="geo-btn-secondary geo-btn-xs"
+                      onClick={() => onNavigate('agent_tasks', extractTaskId)}
+                    >
+                      查看运行日志
+                    </button>
+                    <button
+                      type="button"
+                      className="geo-btn-secondary geo-btn-xs"
+                      onClick={() => onNavigate('notifications')}
+                    >
+                      查看消息通知
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="mt-4 pt-4 border-t space-y-3" style={{ borderColor: 'var(--neutral-divider-02)' }}>
             <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -462,17 +530,11 @@ export default function BrandProfileView({ brandName, onBrandNameChange }: Brand
 
             <div>
               <label className="geo-label">所属行业门类</label>
-              <select
+              <IndustrySelect
                 value={profile.industry}
-                onChange={(e) => setProfile({ ...profile, industry: e.target.value })}
+                onChange={(industry) => setProfile({ ...profile, industry })}
                 className="geo-input font-semibold"
-              >
-                <option value="医疗健康">医疗健康</option>
-                <option value="餐饮美食">餐饮美食</option>
-                <option value="美容个护">美容个护</option>
-                <option value="数码3C">数码3C</option>
-                <option value="户外休闲">户外休闲</option>
-              </select>
+              />
             </div>
 
             <div>

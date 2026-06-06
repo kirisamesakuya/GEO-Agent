@@ -3,17 +3,17 @@ import { refreshSkillRoutesFromDb } from '../lib/agent-skill.js';
 
 const DEFAULT_SKILL_ROUTES = JSON.stringify([
   { taskType: 'article_generation', skillName: 'geo.article.generate', executor: 'direct_model', enabled: true, priority: 1 },
-  { taskType: 'geo_analysis', skillName: 'geo.analysis.run', executor: 'direct_model', enabled: true, priority: 1 },
-  { taskType: 'geo_quick_start', skillName: 'geo-quick-start', executor: 'direct_model', enabled: true, priority: 1 },
-  { taskType: 'geo_audit', skillName: 'geo-audit', executor: 'direct_model', enabled: true, priority: 1 },
-  { taskType: 'geo_schema', skillName: 'geo-schema', executor: 'direct_model', enabled: true, priority: 1 },
-  { taskType: 'geo_llmstxt', skillName: 'geo-llmstxt', executor: 'direct_model', enabled: true, priority: 1 },
-  { taskType: 'geo_citability', skillName: 'geo-citability', executor: 'direct_model', enabled: true, priority: 1 },
-  { taskType: 'geo_report_pdf', skillName: 'geo-report-pdf', executor: 'direct_model', enabled: true, priority: 1 },
-  { taskType: 'geo_compare', skillName: 'geo-compare', executor: 'direct_model', enabled: true, priority: 1 },
+  { taskType: 'geo_analysis', skillName: 'geo.analysis.run', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_quick_start', skillName: 'geo-quick-start', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_audit', skillName: 'geo-audit', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_schema', skillName: 'geo-schema', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_llmstxt', skillName: 'geo-llmstxt', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_citability', skillName: 'geo-citability', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_report_pdf', skillName: 'geo-report-pdf', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_compare', skillName: 'geo-compare', executor: 'nous_hermes', enabled: true, priority: 1 },
   { taskType: 'campaign_plan', skillName: 'geo.campaign.plan', executor: 'direct_model', enabled: true, priority: 1 },
   { taskType: 'website_preview', skillName: 'geo.website.preview', executor: 'direct_model', enabled: true, priority: 1 },
-  { taskType: 'brand_extract', skillName: 'geo.brand.extract', executor: 'direct_model', enabled: true, priority: 1 },
+  { taskType: 'brand_extract', skillName: 'geo-brand-mentions', executor: 'nous_hermes', enabled: true, priority: 1 },
   { taskType: 'hermes_publish', skillName: 'hermes.publish.auto', executor: 'hermes_gateway', enabled: true, priority: 2 },
   { taskType: 'account_verify', skillName: 'geo.account.verify', executor: 'direct_model', enabled: true, priority: 1 },
 ]);
@@ -25,7 +25,7 @@ const DEFAULT_CONFIGS: Array<{ key: string; value: string }> = [
   { key: 'budget_rules', value: JSON.stringify({ minBudget: 500, freezeRatio: 1, releaseOnComplete: true }) },
   { key: 'model_config', value: JSON.stringify({ defaultModel: 'MiniMax-M3', provider: 'minimax', timeoutMs: 120000, maxRetries: 2 }) },
   { key: 'automation_env', value: JSON.stringify({ hostName: 'dev-mac', browserPath: '', status: 'unknown' }) },
-  { key: 'hermes_executor_default', value: 'direct_model' },
+  { key: 'hermes_executor_default', value: 'nous_hermes' },
   { key: 'skill_routes', value: DEFAULT_SKILL_ROUTES },
 ];
 

@@ -24,4 +24,8 @@ export const AGENT_TASK_TYPE_LABELS: Record<string, string> = {
   brand_extract: '品牌提取',
   hermes_publish: 'Hermes 发布',
   account_verify: '账号校验',
+  keyword_mining: 'AI 挖词',
+  knowledge_extract: '知识库抽取',
+  index_sampling: '收录采样',
+  article_rewrite: '参考重写',
 };

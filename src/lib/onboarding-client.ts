@@ -18,7 +18,10 @@ export type OnboardingStatus = {
   extractTaskId: string | null;
   quickStartTaskId: string | null;
   quickStartTaskStatus: string | null;
+  activeGeoTaskId: string | null;
+  activeGeoTaskStatus: string | null;
   firstReportId: string | null;
+  latestReportId: string | null;
   showOnboardingHero: boolean;
   isNewUser: boolean;
 };
@@ -46,6 +49,11 @@ export async function startOnboarding(input: {
   brandName?: string;
   text?: string;
   inputType?: string;
+  brandUrl?: string;
+  website?: string;
+  websiteUrl?: string;
+  socialLink?: string;
+  description?: string;
   files?: Array<{ id: string; name: string; url: string; mimeType?: string }>;
   goal?: OnboardingGoal;
 }) {
@@ -61,6 +69,12 @@ export async function startOnboarding(input: {
     extractTask: { id: string };
     goal: OnboardingGoal;
     nextStep: string;
+    clue?: {
+      brandUrl?: string;
+      website?: string;
+      socialLink?: string;
+      description?: string;
+    };
   };
 }
 
@@ -77,6 +91,15 @@ export async function confirmOnboardingBrand(input: {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error ?? '确认失败');
   return data as { brand: BrandProfile; task: { id: string; status: string }; nextStep: string };
+}
+
+export async function retryOnboardingAgentTask(taskId: string) {
+  const res = await fetch(`/api/agent-tasks/${encodeURIComponent(taskId)}/retry`, {
+    method: 'POST',
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? '重试失败');
+  return data.task as { id: string; status: string };
 }
 
 export async function uploadBrandFile(file: File): Promise<{ url: string; name: string; mimeType: string }> {

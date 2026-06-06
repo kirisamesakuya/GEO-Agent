@@ -190,9 +190,10 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
       payload: {
         skill: taskType === 'geo_audit' ? 'geo-audit' : 'geo-quick-start',
         brandName: name.trim(),
-        city: city.trim() || undefined,
-        services: serviceList,
-        websiteUrl: websiteUrl.trim() || undefined,
+        brandCity: city.trim() || undefined,
+        productNames: serviceList.length ? serviceList : undefined,
+        brandUrl: websiteUrl.trim() || undefined,
+        brandDesc: freeText.trim() || undefined,
         platforms,
         analysisDepth,
         requestedOutputs: outputs,

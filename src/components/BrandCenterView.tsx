@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { BrandCenterTab } from '../lib/brand-center';
 import { brandCenterTabLabel } from '../lib/brand-center';
+import type { ViewType } from '../types';
 import { ArrowLeft } from 'lucide-react';
 import BrandProfileView from './BrandProfileView';
 import KeywordLibraryView from './KeywordLibraryView';
@@ -13,6 +14,7 @@ interface Props {
   keywordHint?: string;
   onBrandNameChange: (name: string) => void;
   onBackToBrandManagement?: () => void;
+  onNavigate?: (view: ViewType, hint?: string) => void;
 }
 
 const TABS: BrandCenterTab[] = ['profile', 'keywords', 'knowledge', 'assets'];
@@ -23,6 +25,7 @@ export default function BrandCenterView({
   keywordHint,
   onBrandNameChange,
   onBackToBrandManagement,
+  onNavigate,
 }: Props) {
   const [tab, setTab] = useState<BrandCenterTab>(initialTab);
 
@@ -67,16 +70,23 @@ export default function BrandCenterView({
 
       <div className="flex-1 min-h-0 overflow-hidden">
         {tab === 'profile' && (
-          <BrandProfileView brandName={brandName} onBrandNameChange={onBrandNameChange} />
+          <BrandProfileView
+            brandName={brandName}
+            onBrandNameChange={onBrandNameChange}
+            onNavigate={onNavigate}
+          />
         )}
         {tab === 'keywords' && (
           <KeywordLibraryView
             brandName={brandName}
             initialTab={keywordHint === 'mine' ? 'mine' : undefined}
             embedded
+            onNavigate={onNavigate}
           />
         )}
-        {tab === 'knowledge' && <KnowledgeBaseView brandName={brandName} embedded />}
+        {tab === 'knowledge' && (
+          <KnowledgeBaseView brandName={brandName} embedded onNavigate={onNavigate} />
+        )}
         {tab === 'assets' && <AssetLibraryView brandName={brandName} embedded />}
       </div>
     </div>

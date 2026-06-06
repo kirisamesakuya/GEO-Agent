@@ -17,9 +17,12 @@ export const SETUP_REASON_LABELS: Record<string, string> = {
   hermes_not_installed: '等待安装 Hermes',
   hermes_not_running: '等待打开 Hermes',
   hermes_not_bound: '等待绑定本机 Hermes',
+  api_server_not_enabled: '等待开启 Hermes API Server',
   token_capacity_unavailable: '词元/模型能力不可用',
   skill_missing: 'GEO 技能包缺失',
   output_parse_failed: '结果解析失败，待人工复核',
+  result_confirm_required: '待确认入库',
+  result_rejected: '已忽略',
 };
 
 /** 读取时将旧 pending 映射为 pending_setup（若有 Hermes 相关 reviewCategory） */
@@ -67,4 +70,55 @@ const HERMES_LOCAL_TASK_TYPES = new Set([
 
 export function isHermesLocalTaskType(type: string): boolean {
   return HERMES_LOCAL_TASK_TYPES.has(type);
+}
+
+const GEO_ASSET_TASK_TYPES = new Set(['geo_schema', 'geo_llmstxt', 'geo_citability']);
+
+export function isGeoAssetTaskType(type: string): boolean {
+  return GEO_ASSET_TASK_TYPES.has(type);
+}
+
+const GEO_FIXTURE_MOCK_TYPES = new Set([
+  'geo_quick_start',
+  'geo_audit',
+  'geo_schema',
+  'geo_llmstxt',
+  'geo_citability',
+  'geo_report_pdf',
+  'geo_compare',
+]);
+
+/** 用户已确认执行时，允许 direct_model 用 fixture 模拟 GEO 技能（开发/POC） */
+export function allowsDirectModelGeoFixtureMock(task: {
+  type: string;
+  input?: Record<string, unknown>;
+}): boolean {
+  const input = task.input ?? {};
+  if (!input.userConfirmedExecution) return false;
+  return GEO_FIXTURE_MOCK_TYPES.has(task.type);
+}
+
+/** POC / 开发：允许 direct_model 模拟本机 Hermes 发布与账号校验 */
+export function allowsDirectModelHermesMock(task: {
+  type: string;
+  input?: Record<string, unknown>;
+}): boolean {
+  const input = task.input ?? {};
+  if (task.type === 'hermes_publish') {
+    return Boolean(input.mockHermes || input.userConfirmed);
+  }
+  if (task.type === 'account_verify') {
+    return Boolean(input.mockVerify ?? input.bindSessionId ?? input.userConfirmed);
+  }
+  return false;
+}
+
+/** 正式环境禁止 Mock，必须走本机 Hermes（8642 Gateway） */
+export function taskRequiresHermesExecutor(
+  type: string,
+  input?: Record<string, unknown>
+): boolean {
+  if (allowsDirectModelHermesMock({ type, input })) return false;
+  if (allowsDirectModelGeoFixtureMock({ type, input })) return false;
+  return isHermesLocalTaskType(type) || type === 'geo_analysis';
 }

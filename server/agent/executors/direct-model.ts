@@ -1,5 +1,10 @@
-import { checkHermesHealth } from './hermes.js';
 import type { AgentExecutor, AgentTask } from '../types.js';
+import { taskRequiresHermesExecutor, allowsDirectModelGeoFixtureMock } from '../../lib/agent-status.js';
+import {
+  buildMockAccountVerifyOutput,
+  buildMockHermesPublishOutput,
+} from '../../lib/hermes-publish-mock.js';
+import { fixtureForGeoTaskType } from '../../lib/geo-skill-fixtures.js';
 
 const MOCK_MODEL_LABEL = 'Mock AI（未调用 MiniMax）';
 
@@ -28,6 +33,36 @@ function mineKeywords(input: Record<string, unknown>) {
   };
 }
 
+function extractKnowledge(input: Record<string, unknown>) {
+  const brand = String(input.brand ?? '品牌');
+  const industry = String(input.industry ?? '本地服务');
+  return {
+    entries: [
+      {
+        category: 'intro',
+        title: `${brand}企业介绍`,
+        body: `${brand}专注${industry}，为本地客户提供可验证的专业服务与透明报价。`,
+      },
+      {
+        category: 'product',
+        title: '核心服务',
+        body: `主打${industry}相关核心项目，支持预约咨询、到店体验与售后跟进。`,
+      },
+      {
+        category: 'faq',
+        title: '常见问题',
+        body: `Q：${brand}适合哪些客户？A：有${industry}需求、重视服务品质的用户。`,
+      },
+      {
+        category: 'credential',
+        title: '资质与背书',
+        body: '请补充真实证照与授权信息后再用于对外发布（当前为 AI 草稿）。',
+      },
+    ],
+    source: 'mock_ai',
+  };
+}
+
 function sampleIndex(input: Record<string, unknown>) {
   const keywords = asStringArray(input.keywords, ['品牌推荐', '服务价格']);
   const platforms = asStringArray(input.platforms, ['豆包', '元宝']);
@@ -42,38 +77,6 @@ function sampleIndex(input: Record<string, unknown>) {
       }))
     ),
     samplingMethod: 'mock_ai',
-  };
-}
-
-function generateGeoAnalysis(input: Record<string, unknown>) {
-  const prospect = Boolean(input.prospectMode);
-  const target = (input.targetBrand ?? {}) as Record<string, unknown>;
-  const brand = String(
-    prospect ? target.name ?? input.brand : input.brand ?? '品牌'
-  );
-  const industry = String(
-    prospect ? target.industry ?? input.industry : input.industry ?? ''
-  );
-  const description = String(
-    prospect ? target.description ?? input.description : input.description ?? ''
-  );
-  const platforms = asStringArray(input.platforms, ['豆包', '元宝']);
-  const keywords = asStringArray(input.keywords, ['品牌词', '行业词']);
-  const competitors = asStringArray(input.competitors, []);
-  const contextLine = [industry, description].filter(Boolean).join(' · ') || '未提供详细业务背景';
-  const kwLine = keywords.slice(0, 8).join('、');
-  const compLine =
-    competitors.length > 0 ? competitors.join('、') : '（未指定，按行业头部品牌模拟对比）';
-  const modeLabel = prospect ? '售前探店' : '品牌库';
-  return {
-    data: {
-      brandMentionSummary: `【${modeLabel}】${brand}（${contextLine}）在 ${platforms.join('、')} 上对「${kwLine}」等问题的 mock 可见度为中等偏低，AI 回答中品牌名直接出现频率有限，多被泛化表述替代。`,
-      competitorAnalysis: `Mock 竞品对比：相对 ${compLine}，${brand} 在价格透明度、本地案例与可引用 FAQ 结构上仍弱，竞品更易被模型作为「推荐选项」引用。`,
-      contentGap: `Mock 内容缺口：围绕 ${kwLine} 缺少可被 AI 直接摘引的短答案、对比表、服务流程与用户场景；${industry ? `${industry}赛道` : '该品类'}下权威第三方背书内容不足。`,
-      optimizationSuggestions: `Mock 建议（${modeLabel}）：1）补齐 ${kwLine} 结构化问答页；2）发布 3–5 条含城市/品类要素的可引用案例；3）统一品牌实体表述；4）在 ${platforms.slice(0, 2).join('、')} 等渠道做持续内容投喂后再复测 GEO。`,
-    },
-    metrics: { mentionRate: prospect ? 48 : 62, rank: prospect ? 5 : 3, gapsFound: prospect ? 7 : 5 },
-    source: 'mock_ai',
   };
 }
 
@@ -224,30 +227,17 @@ function generateWebsitePreview(input: Record<string, unknown>) {
   };
 }
 
-function extractBrand(input: Record<string, unknown>) {
-  const website = String(input.website ?? '');
-  const materials = Array.isArray(input.materials) ? input.materials : [];
-  const materialHint =
-    materials.length > 0
-      ? `已参考 ${materials.length} 份材料（${materials
-          .map((m) => String((m as { kind?: string }).kind ?? '文件'))
-          .slice(0, 3)
-          .join('、')}）`
-      : '';
-  const host = website ? website.replace(/^https?:\/\//, '').split('/')[0] : '';
+function hermesRequiredFailure(task: AgentTask) {
   return {
-    website: website || (materials[0] as { url?: string })?.url || '',
-    name: host ? `Mock 品牌（${host}）` : materials.length ? 'Mock 品牌（材料提取）' : 'Mock 品牌',
-    industry: '本地生活服务',
-    city: '上海',
-    storeCount: 3,
-    description: materialHint
-      ? `用于验证品牌资料提取链路的 Mock 描述。${materialHint}。`
-      : '用于验证品牌资料提取链路的 Mock 品牌描述。',
-    keywords: ['GEO 优化', '品牌可见度', '本地搜索'],
-    competitors: ['竞品 A', '竞品 B'],
-    forbiddenWords: ['第一', '唯一', '绝对'],
-    source: 'mock_ai',
+    status: 'failed' as const,
+    progress: 0,
+    errorMessage: `任务类型 ${task.type} 需本机 Hermes 执行`,
+    userErrorMessage:
+      '该任务已禁用 Mock。请启动 Hermes Gateway（8642）并设置 HERMES_EXECUTOR=nous_hermes',
+    log: {
+      level: 'error' as const,
+      message: '已禁用 Mock：GEO/Hermes 任务仅支持本机 Hermes 执行',
+    },
   };
 }
 
@@ -257,6 +247,27 @@ export class DirectModelExecutor implements AgentExecutor {
   }
 
   async poll(task: AgentTask) {
+    if (taskRequiresHermesExecutor(task.type, task.input)) {
+      return hermesRequiredFailure(task);
+    }
+
+    if (allowsDirectModelGeoFixtureMock(task)) {
+      const output = fixtureForGeoTaskType(task.type, {
+        ...task.input,
+        brandName: task.brandName ?? task.input.brandName,
+        brand: task.brandName ?? task.input.brand,
+      });
+      return {
+        status: 'succeeded' as const,
+        progress: 100,
+        output,
+        log: {
+          level: 'info' as const,
+          message: `Mock GEO 技能完成：${task.type}`,
+        },
+      };
+    }
+
     switch (task.type) {
       case 'article_generation':
       case 'article_rewrite': {
@@ -277,26 +288,6 @@ export class DirectModelExecutor implements AgentExecutor {
           },
         };
       }
-      case 'geo_analysis': {
-        const output = generateGeoAnalysis(task.input);
-        return { status: 'succeeded' as const, progress: 100, output, log: { level: 'info' as const, message: 'Mock 数据生成：GEO 分析报告已生成' } };
-      }
-      case 'geo_quick_start':
-      case 'geo_audit':
-      case 'geo_schema':
-      case 'geo_llmstxt':
-      case 'geo_citability':
-      case 'geo_report_pdf':
-      case 'geo_compare': {
-        const { fixtureForGeoTaskType } = await import('../../lib/geo-skill-fixtures.js');
-        const output = fixtureForGeoTaskType(task.type, { ...task.input, brandName: task.brandName });
-        return {
-          status: 'succeeded' as const,
-          progress: 100,
-          output,
-          log: { level: 'info' as const, message: `Mock 数据生成：${task.type} 已完成` },
-        };
-      }
       case 'campaign_plan': {
         const output = generateCampaignPlan(task.input);
         return { status: 'succeeded' as const, progress: 100, output, log: { level: 'info' as const, message: 'Mock 数据生成：投放计划任务包已生成' } };
@@ -305,36 +296,32 @@ export class DirectModelExecutor implements AgentExecutor {
         const output = generateWebsitePreview(task.input);
         return { status: 'succeeded' as const, progress: 100, output, log: { level: 'info' as const, message: 'Mock 数据生成：网页预览已生成' } };
       }
-      case 'brand_extract': {
-        const output = extractBrand(task.input);
-        return { status: 'succeeded' as const, progress: 100, output: { profile: output }, log: { level: 'info' as const, message: 'Mock 数据生成：品牌资料已提取' } };
-      }
       case 'account_verify': {
-        const platform = String(task.input.platform ?? '未知平台');
-        const rawAccountName = String(task.input.accountName ?? '');
-        const accountName =
-          rawAccountName && rawAccountName !== '未绑定' && rawAccountName !== '待授权'
-            ? rawAccountName
-            : `${platform}·Mock 账号`;
-        const health = await checkHermesHealth();
+        const result = buildMockAccountVerifyOutput(task);
+        if (result.status === 'failed') {
+          return {
+            status: 'failed' as const,
+            progress: 100,
+            output: result.output,
+            errorMessage: result.errorMessage,
+            userErrorMessage: result.userErrorMessage,
+            log: { level: 'error' as const, message: result.userErrorMessage ?? '账号校验失败' },
+          };
+        }
         return {
           status: 'succeeded' as const,
           progress: 100,
-          output: {
-            verified: true,
-            platform,
-            accountName,
-            permissionsOk: true,
-            checkedAt: new Date().toISOString(),
-            authMethod: 'mock_browser',
-            message: health.ok ? 'Mock 登录态校验通过（Hermes 在线）' : 'Mock 登录态校验通过（未依赖真实 Hermes）',
-          },
-          log: { level: 'info' as const, message: 'Mock 数据生成：账号校验通过' },
+          output: result.output,
+          log: { level: 'info' as const, message: result.logMessage ?? '账号校验通过' },
         };
       }
       case 'keyword_mining': {
         const output = mineKeywords({ ...task.input, brand: task.brandName ?? task.input.brand });
         return { status: 'succeeded' as const, progress: 100, output, log: { level: 'info' as const, message: `Mock 数据生成：已挖掘 ${(output.suggestions as unknown[]).length} 个关键词建议` } };
+      }
+      case 'knowledge_extract': {
+        const output = extractKnowledge({ ...task.input, brand: task.brandName ?? task.input.brand });
+        return { status: 'succeeded' as const, progress: 100, output, log: { level: 'info' as const, message: `Mock 数据生成：已抽取 ${(output.entries as unknown[]).length} 条知识库条目` } };
       }
       case 'index_sampling': {
         const output = sampleIndex({ ...task.input, brand: task.brandName ?? task.input.brand });
@@ -349,35 +336,14 @@ export class DirectModelExecutor implements AgentExecutor {
             userErrorMessage: '请先确认后再执行自动发布',
           };
         }
-        const platform = String(task.input.targetPlatform ?? '小红书');
-        const batchId = String(task.input.contentBatchId ?? task.businessRef ?? '');
-        const accountName = String(task.input.accountName ?? '自有绑定账号');
-        const itemIds = Array.isArray(task.input.contentItemIds)
-          ? task.input.contentItemIds.map((id) => String(id))
-          : [];
-        const titles = Array.isArray(task.input.contentTitles)
-          ? task.input.contentTitles.map((t) => String(t))
-          : [];
-        const count = itemIds.length || 1;
-        const publishLink = `https://publish-demo.geo.local/${encodeURIComponent(platform)}/${batchId || task.id}?n=${count}`;
+        const mock = buildMockHermesPublishOutput(task);
         return {
-          status: 'succeeded' as const,
+          status: mock.status,
           progress: 100,
-          output: {
-            publishLink,
-            publishedAt: new Date().toISOString(),
-            platform,
-            accountName,
-            publishedCount: count,
-            contentItemIds: itemIds,
-            contentTitles: titles,
-            evidence: `Mock Hermes 本机模拟发布 ${count} 篇（${MOCK_MODEL_LABEL}），未调用平台官方发帖接口`,
-            source: 'mock_hermes_publish',
-          },
-          log: {
-            level: 'info' as const,
-            message: `Mock Hermes：${accountName} → ${platform}，${count} 篇`,
-          },
+          output: mock.output,
+          errorMessage: mock.errorMessage,
+          userErrorMessage: mock.userErrorMessage,
+          log: { level: mock.status === 'succeeded' ? 'info' as const : 'warn' as const, message: mock.logMessage },
         };
       }
       default:

@@ -1,6 +1,7 @@
 import {
   appendLog,
   getAgentTask,
+  getLastAgentTaskLog,
   updateAgentTask,
   listAgentTasks,
   createAgentTask,
@@ -17,41 +18,64 @@ import type { AgentTask, CreateAgentTaskInput } from './types.js';
 import { notifyPublisherAgentTask } from '../lib/publisher-notification-events.js';
 import { handleTaskSuccess } from './task-success.js';
 import { isHermesExecutorTask, isHermesLocalTaskType } from '../lib/agent-status.js';
+import {
+  resolveHermesTaskEnqueueStatus,
+  shouldPushHermesTasksViaGateway,
+} from '../services/hermes-local.service.js';
 
 const runningTasks = new Set<string>();
 
-export async function enqueueAgentTask(task: AgentTask): Promise<void> {
+export async function enqueueAgentTask(
+  task: AgentTask,
+  options?: { resume?: boolean }
+): Promise<void> {
   if (runningTasks.has(task.id)) return;
 
-  // 本机 Hermes 任务由设备主动拉取，不走 server push
-  if (isHermesExecutorTask(task.executor) && isHermesLocalTaskType(task.type)) {
-    return;
+  const resume = Boolean(options?.resume);
+
+  // 无 API Gateway 时由 Hermes 客户端主动拉取；8642 可用则走 push
+  if (
+    !resume &&
+    isHermesExecutorTask(task.executor) &&
+    isHermesLocalTaskType(task.type)
+  ) {
+    const pushViaGateway = await shouldPushHermesTasksViaGateway();
+    if (!pushViaGateway) return;
   }
 
   runningTasks.add(task.id);
 
   const executor = getExecutor(task.executor);
-  await updateAgentTask(task.id, {
-    status: 'running',
-    progress: 5,
-    startedAt: new Date().toISOString(),
-  });
-  await appendLog(task.id, 'info', '任务开始执行');
+  if (!resume) {
+    await updateAgentTask(task.id, {
+      status: 'running',
+      progress: 5,
+      startedAt: new Date().toISOString(),
+    });
+    await appendLog(task.id, 'info', '任务开始执行');
+  }
   const runStarted = Date.now();
 
   try {
-    const submitResult = await executor.submit((await getAgentTask(task.id))!);
-    if (submitResult.externalRunId) {
-      await updateAgentTask(task.id, { externalRunId: submitResult.externalRunId });
-      await appendLog(task.id, 'info', `Hermes run 已创建：${submitResult.externalRunId}`);
+    if (!resume) {
+      const submitResult = await executor.submit((await getAgentTask(task.id))!);
+      if (submitResult.externalRunId) {
+        await updateAgentTask(task.id, { externalRunId: submitResult.externalRunId });
+        await appendLog(task.id, 'info', `Hermes run 已创建：${submitResult.externalRunId}`);
+      }
+      await updateAgentTask(task.id, { progress: 20 });
     }
 
-    await updateAgentTask(task.id, { progress: 20 });
     const current = (await getAgentTask(task.id))!;
     const result = await executor.poll(current);
 
     if (result.log) {
-      await appendLog(task.id, result.log.level, result.log.message, result.log.detail);
+      const shouldLog =
+        !resume ||
+        (await getLastAgentTaskLog(task.id))?.message !== result.log.message;
+      if (shouldLog) {
+        await appendLog(task.id, result.log.level, result.log.message, result.log.detail);
+      }
     }
 
     const terminal = isTerminalStatus(result.status);
@@ -70,7 +94,8 @@ export async function enqueueAgentTask(task: AgentTask): Promise<void> {
     if (result.status === 'succeeded' || result.status === 'partial') {
       await handleTaskSuccess(current, result.output ?? {}, result.status);
       await appendLog(task.id, 'info', '任务执行完成');
-      await notifyPublisherAgentTask(current, true);
+      const updated = await getAgentTask(task.id);
+      await notifyPublisherAgentTask(updated ?? current, true);
     } else if (result.status === 'failed') {
       await notifyPublisherAgentTask(
         current,
@@ -84,29 +109,31 @@ export async function enqueueAgentTask(task: AgentTask): Promise<void> {
       if (planId) await markIndexPlanFailed(planId);
     }
 
-    const durationMs = Date.now() - runStarted;
-    await recordAgentSkillRun({
-      taskId: task.id,
-      skillName: skillNameForTaskType(task.type),
-      executor: task.executor,
-      status: result.status,
-      inputSummary: task.title,
-      outputSummary:
-        result.status === 'succeeded' || result.status === 'partial'
-          ? '执行成功'
-          : result.userErrorMessage ?? result.errorMessage ?? result.status,
-      durationMs,
-      needsReview:
-        result.status === 'failed' ||
-        result.status === 'partial' ||
-        Boolean(result.userErrorMessage?.includes('降级')),
-    });
+    if (terminal) {
+      const durationMs = Date.now() - runStarted;
+      await recordAgentSkillRun({
+        taskId: task.id,
+        skillName: skillNameForTaskType(task.type),
+        executor: task.executor,
+        status: result.status,
+        inputSummary: task.title,
+        outputSummary:
+          result.status === 'succeeded' || result.status === 'partial'
+            ? '执行成功'
+            : result.userErrorMessage ?? result.errorMessage ?? result.status,
+        durationMs,
+        needsReview:
+          result.status === 'failed' ||
+          result.status === 'partial' ||
+          Boolean(result.userErrorMessage?.includes('降级')),
+      });
+    }
 
     if (task.type === 'hermes_publish') {
       await recordLocalAutomationRun({
         taskId: task.id,
         automationType: 'hermes_publish',
-        status: result.status === 'succeeded' ? 'succeeded' : 'failed',
+        status: result.status === 'succeeded' ? 'succeeded' : result.status === 'partial' ? 'partial' : 'failed',
         inputSummary: JSON.stringify({
           brand: task.brandName,
           platform: task.input.targetPlatform,
@@ -116,9 +143,9 @@ export async function enqueueAgentTask(task: AgentTask): Promise<void> {
         evidenceUrl: (result.output?.publishLink as string) ?? undefined,
         errorMessage: result.status === 'failed' ? result.errorMessage : undefined,
       });
-      if (result.status === 'failed') {
+      if (result.status === 'failed' || result.status === 'partial') {
         const publishJobId = task.input.publishJobId as string | undefined;
-        if (publishJobId) {
+        if (publishJobId && result.status === 'failed') {
           const { updatePublishJobFromTask } = await import('../services/publish-plan.service.js');
           const reviewCategory =
             typeof result.output?.reviewCategory === 'string'
@@ -164,9 +191,34 @@ export async function enqueueAgentTask(task: AgentTask): Promise<void> {
 
 export function processQueuedTasks() {
   void (async () => {
+    if (await shouldPushHermesTasksViaGateway()) {
+      const waiting = await listAgentTasks({ status: 'waiting_local_device', limit: 5 });
+      for (const task of waiting) {
+        if (runningTasks.has(task.id)) continue;
+        const promoted = await updateAgentTask(task.id, { status: 'queued' });
+        await appendLog(
+          task.id,
+          'info',
+          '检测到 API Gateway 可用，任务改为推送执行'
+        );
+        void enqueueAgentTask(promoted);
+      }
+    }
+
     const queued = await listAgentTasks({ status: 'queued', limit: 5 });
     for (const task of queued) {
       if (!runningTasks.has(task.id)) void enqueueAgentTask(task);
+    }
+
+    const running = await listAgentTasks({ status: 'running', limit: 5 });
+    for (const task of running) {
+      if (
+        !runningTasks.has(task.id) &&
+        task.externalRunId &&
+        isHermesExecutorTask(task.executor)
+      ) {
+        void enqueueAgentTask(task, { resume: true });
+      }
     }
   })();
 }
@@ -181,7 +233,7 @@ export async function retryAgentTask(taskId: string): Promise<AgentTask | undefi
   await appendLog(taskId, 'info', '用户发起重试');
   const nextStatus =
     isHermesExecutorTask(task.executor) && isHermesLocalTaskType(task.type)
-      ? 'waiting_local_device'
+      ? await resolveHermesTaskEnqueueStatus()
       : 'queued';
   return updateAgentTask(taskId, {
     status: nextStatus,
@@ -210,8 +262,15 @@ export async function cancelAgentTask(taskId: string): Promise<AgentTask | undef
   return updateAgentTask(taskId, { status: 'canceled', finishedAt: new Date().toISOString() });
 }
 
+/** 与 POST /api/agent-tasks 一致：queued 任务创建后立即提交执行 */
+export function maybeEnqueueAgentTask(task: AgentTask): void {
+  if (task.status === 'queued') {
+    void enqueueAgentTask(task);
+  }
+}
+
 export async function createAndEnqueueTask(input: CreateAgentTaskInput): Promise<AgentTask> {
   const task = await createAgentTask(input);
-  void enqueueAgentTask(task);
+  maybeEnqueueAgentTask(task);
   return task;
 }

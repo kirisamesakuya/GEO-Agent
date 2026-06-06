@@ -66,10 +66,11 @@ export default function GeoAuditView({ brandName, onNavigate, onOpenHistory }: P
       brandName: displayBrand,
       payload: {
         skill: 'geo-audit',
-        websiteUrl: websiteUrl.trim(),
+        brandName: displayBrand,
+        brandUrl: websiteUrl.trim(),
+        brandCity: market.trim() || undefined,
         pageUrls: pageUrls.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 5),
         competitors: competitors.split(/[,，\n]/).map((s) => s.trim()).filter(Boolean).slice(0, 5),
-        targetMarket: market,
         platforms,
         modules,
         outputContract: { format: 'json', artifacts: ['markdown', 'pdf', 'screenshots', 'json'] },

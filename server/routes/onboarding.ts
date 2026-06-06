@@ -3,10 +3,12 @@ import {
   addBrandSourceMaterial,
   createBrandSourceMaterialSignedUrl,
 } from '../services/brand-source-material.service.js';
-import { createBrand, getBrandProfile } from '../services/brand.service.js';
+import { createBrand, getBrandProfile, updateBrandProfile } from '../services/brand.service.js';
 import { createAgentTask } from '../services/agent-task.service.js';
+import { maybeEnqueueAgentTask } from '../agent/worker.js';
 import { resolveExecutorKindForTask } from '../agent/executors/index.js';
 import { detectBrandClueInputType } from '../services/brand-source-material.service.js';
+import { normalizeGeoSkillInput } from '../lib/hermes-geo-input.js';
 
 export function registerOnboardingRoutes(app: Express) {
   app.post('/api/brand-source-materials', async (req, res) => {
@@ -51,52 +53,105 @@ export function registerOnboardingRoutes(app: Express) {
         brandName: existingBrandName,
         text,
         inputType,
+        brandUrl: bodyBrandUrl,
+        website: bodyWebsite,
+        websiteUrl: bodyWebsiteUrl,
+        socialLink: bodySocialLink,
+        description: bodyDescription,
         files,
         goal,
       } = req.body ?? {};
+
+      const brandUrl = String(bodyBrandUrl ?? bodyWebsite ?? bodyWebsiteUrl ?? '').trim();
+      const socialLink = String(bodySocialLink ?? '').trim();
+      const description = String(bodyDescription ?? '').trim();
+      const clueText = typeof text === 'string' ? text.trim() : '';
+      const detectedType =
+        inputType ??
+        (brandUrl
+          ? 'website_url'
+          : socialLink
+            ? 'social_link'
+            : description
+              ? 'description'
+              : clueText
+                ? detectBrandClueInputType(clueText)
+                : 'brand_name');
 
       let brandProfile = existingBrandName
         ? await getBrandProfile(String(existingBrandName))
         : null;
 
-      const clueText = typeof text === 'string' ? text.trim() : '';
-      const detectedType = inputType ?? (clueText ? detectBrandClueInputType(clueText) : 'brand_name');
-
       if (!brandProfile) {
         const nameFromClue =
           detectedType === 'brand_name'
             ? clueText
-            : detectedType === 'website_url'
-              ? new URL(clueText).hostname.replace(/^www\./, '')
+            : brandUrl
+              ? new URL(brandUrl).hostname.replace(/^www\./, '')
               : clueText.slice(0, 20) || '新品牌';
         brandProfile = await createBrand({
           name: nameFromClue,
-          website: detectedType === 'website_url' ? clueText : '',
+          website: brandUrl,
         });
+        if (description) {
+          brandProfile = await updateBrandProfile(
+            { name: brandProfile.name, description },
+            brandProfile.name
+          );
+        }
+      } else if (brandUrl || socialLink || description) {
+        brandProfile = await updateBrandProfile(
+          {
+            name: brandProfile.name,
+            industry: brandProfile.industry,
+            city: brandProfile.city,
+            website: brandUrl || brandProfile.website,
+            description: description || brandProfile.description,
+            keywords: brandProfile.keywords,
+            competitors: brandProfile.competitors,
+            forbiddenWords: brandProfile.forbiddenWords,
+            sourceMaterials: brandProfile.sourceMaterials,
+          },
+          brandProfile.name
+        );
       }
 
       const sourceMaterials = Array.isArray(files) ? files : [];
+      const clue = {
+        brandUrl: brandUrl || undefined,
+        website: brandUrl || undefined,
+        websiteUrl: brandUrl || undefined,
+        socialLink: socialLink || undefined,
+        description: description || undefined,
+      };
+
       const extractTask = await createAgentTask({
         type: 'brand_extract',
         title: `${brandProfile.name} · 品牌资料整理`,
         brandName: brandProfile.name,
         executor: await resolveExecutorKindForTask('brand_extract'),
-        input: {
-          brandName: brandProfile.name,
-          inputType: detectedType,
-          text: clueText,
-          website: detectedType === 'website_url' ? clueText : brandProfile.website,
-          description: detectedType === 'description' ? clueText : brandProfile.description,
-          socialLink: detectedType === 'social_link' ? clueText : undefined,
-          sourceMaterials,
-          outputContract: { format: 'json', requiredFields: ['profile'] },
-        },
+        input: normalizeGeoSkillInput(
+          'brand_extract',
+          {
+            brandName: brandProfile.name,
+            inputType: detectedType,
+            text: clueText || brandUrl || socialLink || description,
+            brandUrl: brandUrl || undefined,
+            brandDesc: description || brandProfile.description,
+            socialLink: socialLink || undefined,
+            sourceMaterials,
+            outputContract: { format: 'json', requiredFields: ['profile'] },
+          },
+          brandProfile.name
+        ),
       });
+      maybeEnqueueAgentTask(extractTask);
 
       res.status(201).json({
         brand: brandProfile,
         extractTask,
         goal: goal ?? 'geo_quick_start',
+        clue,
         nextStep: 'brand_confirm',
       });
     } catch (err) {
@@ -133,23 +188,37 @@ export function registerOnboardingRoutes(app: Express) {
           ? `${updated.name} · GEO 专业审计`
           : `${updated.name} · AI 可见度快速体检`;
 
+      const socialLink =
+        typeof profile.socialLink === 'string' ? String(profile.socialLink).trim() : '';
+
       const task = await createAgentTask({
         type: taskType,
         title: taskTitle,
         brandName: updated.name,
         executor: await resolveExecutorKindForTask(taskType),
-        input: {
-          brandName: updated.name,
-          city: updated.city,
-          industry: updated.industry,
-          services: updated.keywords,
-          competitors: updated.competitors,
-          website: updated.website,
-          description: updated.description,
-          sourceMaterials: updated.sourceMaterials ?? [],
-          platforms: ['DeepSeek', '豆包', 'Kimi'],
-        },
+        input: normalizeGeoSkillInput(
+          taskType,
+          {
+            brandName: updated.name,
+            brandCity: updated.city,
+            industry: updated.industry,
+            productNames: updated.keywords,
+            competitors: updated.competitors,
+            brandUrl: updated.website,
+            socialLink: socialLink || undefined,
+            brandDesc: updated.description,
+            sourceMaterials: [
+              ...(updated.website
+                ? [{ kind: 'link', name: '官网 URL', value: updated.website }]
+                : []),
+              ...(updated.sourceMaterials ?? []),
+            ],
+            platforms: ['DeepSeek', '豆包', 'Kimi'],
+          },
+          updated.name
+        ),
       });
+      maybeEnqueueAgentTask(task);
 
       res.json({ brand: updated, task, nextStep: 'onboarding_console' });
     } catch (err) {

@@ -7,6 +7,10 @@ import { useToast } from '../context/ToastContext';
 import { ArrowLeft, Bot, RefreshCw, XCircle, ExternalLink, Cpu, Layers } from 'lucide-react';
 import GeoArtifactPreview, { GeoArtifactList } from './geo/GeoArtifactPreview';
 import type { GeoAuditArtifact } from '../lib/geo-audit-client';
+import AgentTaskResultConfirmPanel from './agent/AgentTaskResultConfirmPanel';
+import HermesPublishResultPanel from './agent/HermesPublishResultPanel';
+import GeoAssetResultPanel from './agent/GeoAssetResultPanel';
+import { getResultConfirmUiStatus, isResultConfirmPending } from '../lib/agent-result-confirmation';
 
 const IN_PROGRESS = new Set([
   'pending',
@@ -133,6 +137,24 @@ export default function AgentTaskDetailView({ taskId, onBack, onNavigate }: Prop
   const canCancel = !['succeeded', 'failed', 'canceled', 'partial'].includes(task.status);
   const canRetry = task.status === 'failed' || task.status === 'canceled';
   const canConfirmExecution = task.status === 'pending_confirm';
+  const resultConfirmStatus = getResultConfirmUiStatus(task);
+  const showResultConfirm =
+    (task.type === 'brand_extract' ||
+      task.type === 'keyword_mining' ||
+      task.type === 'knowledge_extract') &&
+    (isResultConfirmPending(task) ||
+      Boolean(task.output?.confirmedAt) ||
+      Boolean(task.output?.rejectedAt) ||
+      task.reviewCategory === 'result_rejected');
+
+  const showHermesPublishResult =
+    (task.type === 'hermes_publish' || task.type === 'account_verify') &&
+    Boolean(task.output && (task.status === 'succeeded' || task.status === 'partial' || task.status === 'failed'));
+
+  const showGeoAssetResult =
+    (task.type === 'geo_schema' || task.type === 'geo_llmstxt' || task.type === 'geo_citability') &&
+    task.status === 'succeeded' &&
+    Boolean(task.output);
 
   const handleConfirmExecution = async () => {
     const reportId = task.input.sourceReportId as string | undefined;
@@ -190,6 +212,11 @@ export default function AgentTaskDetailView({ taskId, onBack, onNavigate }: Prop
             </p>
           </div>
           <TaskStatusPill status={display.status} title={display.title} userErrorMessage={task.userErrorMessage} />
+          {resultConfirmStatus && (
+            <span className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-900 font-medium shrink-0">
+              {resultConfirmStatus}
+            </span>
+          )}
         </div>
 
         <div>
@@ -265,6 +292,23 @@ export default function AgentTaskDetailView({ taskId, onBack, onNavigate }: Prop
 
         {task.userErrorMessage && <div className="geo-callout-danger">{task.userErrorMessage}</div>}
       </div>
+
+      {showResultConfirm && (
+        <AgentTaskResultConfirmPanel
+          task={task}
+          onUpdated={() => void load()}
+          onRegenerated={(newTaskId) => onNavigate?.('agent_tasks', newTaskId)}
+          onNavigate={onNavigate}
+        />
+      )}
+
+      {showHermesPublishResult && (
+        <HermesPublishResultPanel task={task} onNavigate={onNavigate} />
+      )}
+
+      {showGeoAssetResult && (
+        <GeoAssetResultPanel task={task} onNavigate={onNavigate} />
+      )}
 
       {geoReportPreview && (
         <div className="geo-card p-6 space-y-3">

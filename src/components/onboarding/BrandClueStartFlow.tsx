@@ -1,10 +1,10 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Upload, Sparkles } from 'lucide-react';
 import type { BrandClueInputType } from '../../types';
 import {
   CLUE_TYPE_CHIPS,
-  detectBrandClueInputType,
   ONBOARDING_GOALS,
+  buildBrandCluePayload,
   type OnboardingGoal,
 } from '../../lib/brand-clue';
 import { startOnboarding, uploadBrandFile } from '../../lib/onboarding-client';
@@ -19,6 +19,13 @@ interface Props {
     brandName: string;
     extractTaskId: string;
     goal: OnboardingGoal;
+    brand?: { website?: string; description?: string };
+    clue?: {
+      brandUrl?: string;
+      website?: string;
+      socialLink?: string;
+      description?: string;
+    };
   }) => void;
   onCancel?: () => void;
 }
@@ -31,18 +38,24 @@ export default function BrandClueStartFlow({
   onCancel,
 }: Props) {
   const [step, setStep] = useState<Step>('clue');
-  const [text, setText] = useState('');
-  const [inputType, setInputType] = useState<BrandClueInputType | null>(null);
+  const [activeField, setActiveField] = useState<BrandClueInputType>('website_url');
+  const [brandNameInput, setBrandNameInput] = useState('');
+  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [socialLink, setSocialLink] = useState('');
+  const [description, setDescription] = useState('');
   const [files, setFiles] = useState<Array<{ id: string; name: string; url: string; mimeType?: string }>>([]);
   const [goal, setGoal] = useState<OnboardingGoal>('geo_quick_start');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleTextChange = (value: string) => {
-    setText(value);
-    if (value.trim()) setInputType(detectBrandClueInputType(value));
-  };
+  const resolvedBrandName = brandName || brandNameInput.trim();
+  const hasWebsite = Boolean(websiteUrl.trim());
+  const hasSocial = Boolean(socialLink.trim());
+  const hasDescription = Boolean(description.trim());
+  const hasFiles = files.length > 0;
+  const canProceed =
+    Boolean(resolvedBrandName) || hasWebsite || hasSocial || hasDescription || hasFiles;
 
   const handleFileUpload = async (list: FileList | null) => {
     if (!list?.length) return;
@@ -60,7 +73,7 @@ export default function BrandClueStartFlow({
         });
       }
       setFiles((prev) => [...prev, ...uploaded]);
-      setInputType('file');
+      setActiveField('file');
     } catch (e) {
       setError(e instanceof Error ? e.message : '上传失败');
     } finally {
@@ -68,24 +81,37 @@ export default function BrandClueStartFlow({
     }
   };
 
-  const canProceed = Boolean(brandName || text.trim() || files.length);
-
   const handleStart = async () => {
     if (!canProceed) return;
     setLoading(true);
     setError('');
     try {
-      const result = await startOnboarding({
-        brandName: brandName || undefined,
-        text: text.trim() || undefined,
-        inputType: inputType ?? undefined,
+      const payload = buildBrandCluePayload({
+        brandName: resolvedBrandName || undefined,
+        brandUrl: websiteUrl.trim() || undefined,
+        socialLink: socialLink.trim() || undefined,
+        description: description.trim() || undefined,
         files,
-        goal,
       });
+      const result = await startOnboarding({ ...payload, goal });
+      const website =
+        result.clue?.brandUrl?.trim() ||
+        result.clue?.website?.trim() ||
+        result.brand.website?.trim() ||
+        websiteUrl.trim();
       onComplete({
         brandName: result.brand.name,
         extractTaskId: result.extractTask.id,
         goal: result.goal ?? goal,
+        brand: result.brand,
+        clue: {
+          brandUrl: website || undefined,
+          website: website || undefined,
+          socialLink:
+            result.clue?.socialLink?.trim() || socialLink.trim() || undefined,
+          description:
+            result.clue?.description?.trim() || description.trim() || undefined,
+        },
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : '启动失败');
@@ -95,6 +121,88 @@ export default function BrandClueStartFlow({
   };
 
   const isModal = variant === 'modal';
+
+  const fieldPanel: Record<BrandClueInputType, ReactNode> = {
+    brand_name: !brandName ? (
+      <label className="block text-xs text-[var(--neutral-text-03)]">
+        品牌名称
+        <input
+          className="geo-input w-full mt-1"
+          placeholder="如：汇智智能"
+          value={brandNameInput}
+          onChange={(e) => setBrandNameInput(e.target.value)}
+        />
+      </label>
+    ) : (
+      <p className="text-xs text-[var(--neutral-text-03)] rounded-lg border px-3 py-2">
+        当前品牌：<span className="font-medium text-[var(--neutral-text-01)]">{displayBrandName ?? brandName}</span>
+      </p>
+    ),
+    website_url: (
+      <label className="block text-xs text-[var(--neutral-text-03)]">
+        官网 URL
+        <input
+          className="geo-input w-full mt-1"
+          placeholder="https://www.example.com"
+          value={websiteUrl}
+          onChange={(e) => setWebsiteUrl(e.target.value)}
+        />
+        <span className="text-[10px] mt-1 block">将写入任务入参 brandUrl / website</span>
+      </label>
+    ),
+    file: (
+      <div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*,.pdf,.ppt,.pptx,.doc,.docx"
+          multiple
+          className="hidden"
+          onChange={(e) => void handleFileUpload(e.target.files)}
+        />
+        <button
+          type="button"
+          className="geo-btn-secondary geo-btn-sm inline-flex items-center gap-1.5"
+          onClick={() => fileRef.current?.click()}
+          disabled={loading}
+        >
+          <Upload className="w-3.5 h-3.5" />
+          上传海报 / PPT / PDF / 产品图
+        </button>
+        {files.length > 0 && (
+          <ul className="mt-2 text-xs text-[var(--neutral-text-02)] space-y-1">
+            {files.map((f) => (
+              <li key={f.id}>· {f.name}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    ),
+    social_link: (
+      <label className="block text-xs text-[var(--neutral-text-03)]">
+        小红书 / 抖音 / 店铺链接
+        <input
+          className="geo-input w-full mt-1"
+          placeholder="https://www.xiaohongshu.com/..."
+          value={socialLink}
+          onChange={(e) => setSocialLink(e.target.value)}
+        />
+        <span className="text-[10px] mt-1 block">将写入任务入参 socialLink</span>
+      </label>
+    ),
+    description: (
+      <label className="block text-xs text-[var(--neutral-text-03)]">
+        业务描述
+        <textarea
+          className="geo-input w-full mt-1 min-h-[88px] resize-y"
+          placeholder="简述主营业务、服务区域、目标客户等"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+        <span className="text-[10px] mt-1 block">将写入任务入参 description</span>
+      </label>
+    ),
+  };
 
   return (
     <div className={isModal ? '' : 'geo-card p-6 md:p-8'}>
@@ -108,7 +216,7 @@ export default function BrandClueStartFlow({
               {brandName ? `为「${displayBrandName ?? brandName}」启动项目` : '开始你的第一个 GEO 项目'}
             </h3>
             <p className="text-xs" style={{ color: 'var(--neutral-text-03)' }}>
-              没有官网也可以。品牌名、海报、PPT 或社媒链接均可开始。
+              按字段填写线索，每项将直接映射为 JSON 入参。
             </p>
           </div>
         </div>
@@ -116,56 +224,36 @@ export default function BrandClueStartFlow({
 
       {step === 'clue' ? (
         <div className="space-y-4">
-          <textarea
-            className="geo-input w-full min-h-[88px] resize-y"
-            placeholder="输入品牌名、官网、店铺链接或业务描述"
-            value={text}
-            onChange={(e) => handleTextChange(e.target.value)}
-          />
-
-          <div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*,.pdf,.ppt,.pptx,.doc,.docx"
-              multiple
-              className="hidden"
-              onChange={(e) => void handleFileUpload(e.target.files)}
-            />
-            <button
-              type="button"
-              className="geo-btn-secondary geo-btn-sm inline-flex items-center gap-1.5"
-              onClick={() => fileRef.current?.click()}
-              disabled={loading}
-            >
-              <Upload className="w-3.5 h-3.5" />
-              上传海报 / PPT / PDF / 产品图
-            </button>
-            {files.length > 0 && (
-              <ul className="mt-2 text-xs text-[var(--neutral-text-02)] space-y-1">
-                {files.map((f) => (
-                  <li key={f.id}>· {f.name}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-
           <div className="flex flex-wrap gap-2">
-            {CLUE_TYPE_CHIPS.map((chip) => (
+            {CLUE_TYPE_CHIPS.filter((chip) => chip.type !== 'brand_name' || !brandName).map((chip) => (
               <button
                 key={chip.type}
                 type="button"
                 className={`text-xs px-2.5 py-1 rounded-full border ${
-                  inputType === chip.type
+                  activeField === chip.type
                     ? 'border-[var(--color-accent)] bg-[var(--color-accent-light)] text-[var(--color-accent)]'
                     : 'border-[var(--color-border)] text-[var(--neutral-text-03)]'
                 }`}
-                onClick={() => setInputType(chip.type)}
+                onClick={() => setActiveField(chip.type)}
               >
                 {chip.label}
               </button>
             ))}
           </div>
+
+          <div className="rounded-xl border border-[var(--color-border)] p-3 space-y-3">
+            {fieldPanel[activeField]}
+          </div>
+
+          {(hasWebsite || hasSocial || hasDescription || hasFiles) && (
+            <div className="text-[10px] text-[var(--neutral-text-03)] rounded-lg bg-[var(--color-bg-secondary)] px-3 py-2 space-y-0.5">
+              <p className="font-medium text-[var(--neutral-text-02)]">已填字段预览（JSON 入参）：</p>
+              {hasWebsite && <p>brandUrl: {websiteUrl.trim()}</p>}
+              {hasSocial && <p>socialLink → sourceMaterials: {socialLink.trim()}</p>}
+              {hasDescription && <p>brandDesc: {description.trim().slice(0, 48)}{description.trim().length > 48 ? '…' : ''}</p>}
+              {hasFiles && <p>sourceMaterials: {files.length} 个文件</p>}
+            </div>
+          )}
 
           <p className="text-[10px] text-[var(--neutral-text-03)]">
             Agent 执行发生在你的本机 Hermes，模型能力由公司词元体系支持。

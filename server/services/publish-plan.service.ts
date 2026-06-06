@@ -241,12 +241,15 @@ export async function createSelfAccountPublishFromBatch(input: {
     input: {
       contentBatchId: batch.id,
       contentItemIds: selectedItems.map((item) => item.id),
+      contentTitles: selectedItems.map((item) => item.title),
       targetPlatform: batch.platform,
       accountBindingId: account.id,
       accountName: account.accountName,
       planId: plan.id,
       publishRecordId: record.id,
       userConfirmed: true,
+      mockHermes: true,
+      requiredEvidence: ['published_url', 'screenshot', 'platform_message'],
     },
     businessRef: plan.id,
   });

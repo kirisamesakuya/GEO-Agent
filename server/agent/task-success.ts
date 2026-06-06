@@ -7,12 +7,12 @@ import { createGeoReport } from '../services/campaign.service.js';
 import { createGeoReportFromTaskOutput } from '../services/geo-audit.service.js';
 import { createCampaignPlan } from '../services/campaign.service.js';
 import { createWebsiteRequest } from '../services/website.service.js';
-import { saveBrandProfile } from '../services/brand.service.js';
 import { saveIndexResults } from '../services/indexing.service.js';
 import { updatePublishRecordFromTask } from '../services/publish-plan.service.js';
 import { findBrandRow } from '../services/brand.service.js';
 import { prisma } from '../db/client.js';
 import type { AgentTask } from './types.js';
+import { markTaskPendingResultConfirmation } from '../services/agent-result-confirmation.service.js';
 
 export async function handleTaskSuccess(
   task: AgentTask,
@@ -84,32 +84,81 @@ export async function handleTaskSuccess(
     await updateAgentTask(task.id, { output: nextOutput });
   }
 
-  if (task.type === 'hermes_publish' && output.publishLink) {
-    await appendLog(
-      task.id,
-      'info',
-      `自动发布完成：${String(output.publishLink)}`,
-      JSON.stringify({ userConfirmed: task.input.userConfirmed })
-    );
+  if (task.type === 'hermes_publish') {
+    type EvidenceRow = {
+      contentItemId: string;
+      title: string;
+      status: string;
+      publishLink?: string;
+      screenshotUrl?: string;
+      platformMessage?: string;
+      errorCode?: string;
+    };
+    const evidenceItems = Array.isArray(output.evidenceItems)
+      ? (output.evidenceItems as EvidenceRow[])
+      : [];
+    const reviewCategory =
+      typeof output.reviewCategory === 'string' ? output.reviewCategory : null;
+    const publishLink = output.publishLink ? String(output.publishLink) : undefined;
     const publishJobId = task.input.publishJobId as string | undefined;
+    const publishRecordId = task.input.publishRecordId as string | undefined;
+    const planId = task.input.planId as string | undefined;
+    const partial = resultStatus === 'partial';
+    const allOk = resultStatus === 'succeeded' && !reviewCategory;
+
+    if (publishLink || evidenceItems.length) {
+      await appendLog(
+        task.id,
+        partial ? 'warn' : 'info',
+        partial
+          ? `Hermes 部分发布完成${publishLink ? `：${publishLink}` : ''}`
+          : `自动发布完成${publishLink ? `：${publishLink}` : ''}`,
+        JSON.stringify({ userConfirmed: task.input.userConfirmed, evidenceItems })
+      );
+    }
+
     if (publishJobId) {
       const { updatePublishJobFromTask } = await import('../services/publish-plan.service.js');
-      await updatePublishJobFromTask(publishJobId, true, {
-        publishLink: String(output.publishLink),
+      await updatePublishJobFromTask(publishJobId, allOk, {
+        publishLink,
+        errorCode: partial ? 'partial_publish' : undefined,
+        reviewCategory: reviewCategory ?? (partial ? 'need_manual_publish' : undefined),
       });
     }
-    const planId = task.input.planId as string | undefined;
-    if (planId && task.brandName && !publishJobId) {
+
+    if (publishRecordId) {
+      await prisma.publishRecord.update({
+        where: { id: publishRecordId },
+        data: {
+          status: allOk ? 'succeeded' : partial ? 'partial' : 'failed',
+          publishedUrl: publishLink ?? null,
+          errorCode: partial ? 'partial_publish' : null,
+          reviewCategory: reviewCategory ?? (partial ? 'need_manual_publish' : null),
+          executedAt: new Date(),
+        },
+      });
+    }
+
+    if (planId && task.brandName && !publishJobId && publishLink && allOk) {
       const brand = await findBrandRow(task.brandName);
       if (brand) {
-        await updatePublishRecordFromTask(planId, brand.id, true, String(output.publishLink));
+        await updatePublishRecordFromTask(planId, brand.id, true, publishLink);
       }
     }
+
     const contentBatchId = String(task.input.contentBatchId ?? task.businessRef ?? '');
     const pubBatch = contentBatchId
       ? await prisma.contentBatch.findUnique({ where: { id: contentBatchId } })
       : null;
-    if (pubBatch) {
+
+    if (pubBatch && evidenceItems.length) {
+      for (const row of evidenceItems) {
+        await prisma.contentItem.updateMany({
+          where: { id: row.contentItemId, batchId: pubBatch.id },
+          data: { status: row.status === 'published' ? 'published' : 'failed' },
+        });
+      }
+    } else if (pubBatch && publishLink && allOk) {
       const selectedItemIds = Array.isArray(task.input.contentItemIds)
         ? task.input.contentItemIds.map((id) => String(id))
         : [];
@@ -120,9 +169,12 @@ export async function handleTaskSuccess(
         },
         data: { status: 'published' },
       });
+    }
 
-      const publishRecordId = task.input.publishRecordId as string | undefined;
-      const publishLink = String(output.publishLink ?? '');
+    if (pubBatch && publishLink && allOk) {
+      const selectedItemIds = Array.isArray(task.input.contentItemIds)
+        ? task.input.contentItemIds.map((id) => String(id))
+        : [];
       const { createArticleEffectRetestPlans } = await import(
         '../services/article-effect.service.js'
       );
@@ -131,6 +183,7 @@ export async function handleTaskSuccess(
           batchId: pubBatch.id,
           ...(selectedItemIds.length ? { id: { in: selectedItemIds } } : {}),
           effectBaselineJson: { not: null },
+          status: 'published',
         },
       });
       for (const item of publishedItems) {
@@ -152,6 +205,14 @@ export async function handleTaskSuccess(
           // non-blocking
         }
       }
+    }
+
+    if (partial || reviewCategory === 'need_manual_publish' || reviewCategory === 'need_reauth') {
+      await updateAgentTask(task.id, {
+        needsReview: true,
+        reviewCategory: reviewCategory ?? 'need_manual_publish',
+        output: { ...output, reviewCategory: reviewCategory ?? 'need_manual_publish' },
+      });
     }
   }
 
@@ -286,20 +347,23 @@ export async function handleTaskSuccess(
   }
 
   if (task.type === 'brand_extract' && output.profile) {
-    const profile = output.profile as Record<string, unknown>;
-    await saveBrandProfile({
-      website: String(task.input.website ?? profile.website ?? ''),
-      name: String(profile.name ?? task.brandName ?? ''),
-      industry: String(profile.industry ?? ''),
-      city: String(profile.city ?? ''),
-      storeCount: Number(profile.storeCount ?? 1),
-      description: String(profile.description ?? ''),
-      keywords: (profile.keywords as string[]) ?? [],
-      competitors: (profile.competitors as string[]) ?? [],
-      forbiddenWords: (profile.forbiddenWords as string[]) ?? [],
-      sourceMaterials: Array.isArray(task.input.sourceMaterials)
-        ? (task.input.sourceMaterials as import('../../lib/brand-source-material.js').BrandSourceMaterial[])
-        : undefined,
-    });
+    await markTaskPendingResultConfirmation(
+      { ...task, output: { ...output, profile: output.profile } },
+      'brand_profile'
+    );
+  }
+
+  if (task.type === 'keyword_mining' && output.suggestions) {
+    await markTaskPendingResultConfirmation(
+      { ...task, output: { ...output, suggestions: output.suggestions } },
+      'keyword_suggestions'
+    );
+  }
+
+  if (task.type === 'knowledge_extract' && output.entries) {
+    await markTaskPendingResultConfirmation(
+      { ...task, output: { ...output, entries: output.entries } },
+      'knowledge_entries'
+    );
   }
 }

@@ -1,24 +1,29 @@
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import type { AgentExecutor, AgentTask, AgentTaskStatus } from '../types.js';
-import { DirectModelExecutor } from './direct-model.js';
 import { skillNameForTaskType } from '../../lib/agent-skill.js';
+import {
+  buildGeoWebsiteConstraint,
+  buildSkillPayloadForHermes,
+  resolveCanonicalWebsite,
+} from '../../lib/hermes-geo-input.js';
 
 const HERMES_BASE_URL = process.env.HERMES_API_URL ?? 'http://127.0.0.1:8642';
 const HERMES_API_KEY = process.env.HERMES_API_KEY ?? '';
-/** Hermes 任务最长等待时间（毫秒），超时后返回 running 让 worker 下次继续轮询 */
-const HERMES_POLL_TIMEOUT_MS = 300_000; // 5 分钟
-const HERMES_POLL_INTERVAL_MS = 3_000; // 每 3 秒查询一次
 
-function isDemoMode(): boolean {
-  return process.env.GEO_DEMO_MODE === '1' || process.env.NODE_ENV !== 'production';
-}
+const HERMES_DISCONNECTED_USER_MSG =
+  '无法连接本机 Hermes：请保持 Gateway / API Server（8642）运行；关闭客户端会中断检测，不支持 Mock 降级';
 
 function mapHermesStatus(status: string): AgentTaskStatus {
   switch (status) {
     case 'queued':
     case 'pending':
+    case 'started':
       return 'queued';
     case 'running':
     case 'in_progress':
+    case 'waiting_for_approval':
       return 'running';
     case 'completed':
     case 'succeeded':
@@ -32,6 +37,51 @@ function mapHermesStatus(status: string): AgentTaskStatus {
     default:
       return 'running';
   }
+}
+
+function parseHermesRunOutput(output: unknown): Record<string, unknown> {
+  if (typeof output === 'string') {
+    try {
+      const parsed = JSON.parse(output) as unknown;
+      if (parsed && typeof parsed === 'object') {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // plain text response
+    }
+    return { summary: output, rawText: output };
+  }
+  if (output && typeof output === 'object') {
+    return output as Record<string, unknown>;
+  }
+  return {};
+}
+
+function estimateHermesRunProgress(data: {
+  status?: string;
+  last_event?: string;
+}): number {
+  const event = data.last_event ?? '';
+  if (event === 'run.completed') return 95;
+  if (event === 'tool.completed') return 70;
+  if (event === 'tool.started') return 45;
+  if (event === 'approval.request') return 35;
+  if (data.status === 'waiting_for_approval') return 35;
+  if (data.status === 'queued' || data.status === 'started') return 25;
+  return 40;
+}
+
+function formatHermesRunEvent(data: {
+  status?: string;
+  last_event?: string;
+}): string {
+  if (data.status === 'waiting_for_approval' || data.last_event === 'approval.request') {
+    return '等待工具审批确认（请在 Hermes 客户端批准）';
+  }
+  if (data.last_event === 'tool.started') return '正在调用工具';
+  if (data.last_event === 'tool.completed') return '工具执行完成，继续分析';
+  if (data.last_event) return data.last_event;
+  return data.status ?? 'running';
 }
 
 async function hermesFetch(path: string, init?: RequestInit) {
@@ -50,23 +100,48 @@ async function hermesFetch(path: string, init?: RequestInit) {
   return res.json();
 }
 
-export class NousHermesExecutor implements AgentExecutor {
-  private fallback = new DirectModelExecutor();
+function buildHermesRunPayload(task: AgentTask) {
+  const skill = skillNameForTaskType(task.type);
+  const payload = buildSkillPayloadForHermes(task);
+  const website = resolveCanonicalWebsite(payload);
+  const userMessage = [
+    `请使用 Hermes 技能「${skill}」完成以下 GEO 任务，并输出结构化 JSON（含 audit、data、metrics、findings、actionPlan；如有报告文件写入 artifacts）。`,
+    buildGeoWebsiteConstraint(payload),
+    '',
+    `任务类型：${task.type}`,
+    `任务标题：${task.title}`,
+    '结构化参数（已映射为技能字段 brandUrl / brandName）：',
+    JSON.stringify(payload, null, 2),
+  ].join('\n');
 
-  async submit(task: AgentTask) {
-    const skill = skillNameForTaskType(task.type);
-    const body = {
+  return {
+    input: userMessage,
+    instructions: [
+      `You are executing GEO-Agent task ${task.id}.`,
+      `Required skill: ${skill}.`,
+      website
+        ? `Canonical website URL (brandUrl): ${website}. Never search for or substitute another domain.`
+        : 'No website URL provided; do not invent a domain for technical site audits.',
+      'Follow the skill contract and return machine-readable JSON when finished.',
+      'Do not ask follow-up questions when brandUrl and brandName are already provided.',
+    ].join(' '),
+    metadata: {
+      taskId: task.id,
+      type: task.type,
       skill,
-      input: {
-        brandName: task.brandName ?? (task.input.brand as string),
-        ...task.input,
+      brandName: task.brandName ?? null,
+      input: payload,
+      outputContract: {
+        format: 'json',
+        requiredFields: ['audit', 'data', 'metrics', 'findings', 'artifacts', 'actionPlan'],
       },
-      metadata: {
-        taskId: task.id,
-        type: task.type,
-        skill,
-      },
-    };
+    },
+  };
+}
+
+export class NousHermesExecutor implements AgentExecutor {
+  async submit(task: AgentTask) {
+    const body = buildHermesRunPayload(task);
     const data = (await hermesFetch('/v1/runs', {
       method: 'POST',
       body: JSON.stringify(body),
@@ -76,109 +151,98 @@ export class NousHermesExecutor implements AgentExecutor {
 
   async poll(task: AgentTask): Promise<Awaited<ReturnType<AgentExecutor['poll']>>> {
     if (!task.externalRunId) {
-      if (isDemoMode()) {
-        return this.fallback.poll(task) as ReturnType<AgentExecutor['poll']>;
-      }
       return {
         status: 'failed',
         progress: 0,
         errorMessage: 'Hermes run 未创建',
-        userErrorMessage: '本机 Hermes 未就绪，请完成安装与绑定',
-        log: { level: 'error', message: '缺少 Hermes externalRunId，生产环境禁止静默 mock' },
+        userErrorMessage: HERMES_DISCONNECTED_USER_MSG,
+        log: { level: 'error', message: '缺少 Hermes externalRunId，任务已终止（已禁用 Mock 降级）' },
       };
     }
 
-    const started = Date.now();
+    try {
+      const data = (await hermesFetch(`/v1/runs/${task.externalRunId}`)) as {
+        status?: string;
+        output?: unknown;
+        error?: string;
+        progress?: number;
+        summary?: string;
+        last_event?: string;
+        artifacts?: Array<{
+          type: string;
+          name: string;
+          url?: string;
+          preview?: string;
+        }>;
+      };
 
-    while (Date.now() - started < HERMES_POLL_TIMEOUT_MS) {
-      try {
-        const data = (await hermesFetch(`/v1/runs/${task.externalRunId}`)) as {
-          status?: string;
-          output?: Record<string, unknown>;
-          error?: string;
-          progress?: number;
-          summary?: string;
-          artifacts?: Array<{
-            type: string;
-            name: string;
-            url?: string;
-            preview?: string;
-          }>;
-        };
+      const status = mapHermesStatus(data.status ?? 'running') as AgentTaskStatus;
+      const progress =
+        data.progress ??
+        (status === 'succeeded' ? 100 : estimateHermesRunProgress(data));
 
-        const status = mapHermesStatus(data.status ?? 'running') as AgentTaskStatus;
-        const progress = data.progress ?? (status === 'succeeded' ? 100 : status === 'running' ? 50 : 10);
-
-        // 终端状态：直接返回
-        if (status === 'succeeded') {
-          const normalized = this.normalizeResult(task, data.output ?? {}, data);
-          return {
-            status,
-            progress: 100,
-            output: normalized,
-            log: { level: 'info' as const, message: data.summary ?? 'Hermes 任务已完成' },
-          };
-        }
-
-        if (status === 'failed') {
-          return {
-            status,
-            progress,
-            errorMessage: data.error ?? 'Hermes run failed',
-            userErrorMessage: 'Hermes 执行失败，可在 Agent 任务页重试',
-            log: {
-              level: 'error' as const,
-              message: 'Hermes 执行失败',
-              detail: data.error,
-            },
-          };
-        }
-
-        if (status === 'canceled') {
-          return {
-            status,
-            progress,
-            errorMessage: '任务已取消',
-            log: { level: 'info' as const, message: 'Hermes 任务已取消' },
-          };
-        }
-
-        // 非终端状态：等一会再查
-        await new Promise((resolve) => setTimeout(resolve, HERMES_POLL_INTERVAL_MS));
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        // 连接失败，降级到 Mock
-        if (message.includes('fetch failed') || message.includes('ECONNREFUSED')) {
-          if (isDemoMode()) {
-            return this.fallback.poll(task) as unknown as Awaited<ReturnType<AgentExecutor['poll']>>;
-          }
-          return {
-            status: 'failed' as const,
-            progress: 0,
-            errorMessage: message,
-            userErrorMessage: '无法连接本机 Hermes，请确认 Hermes 已启动并完成绑定',
-            log: { level: 'error' as const, message: 'Hermes 连接失败', detail: message },
-          };
-        }
+      if (status === 'succeeded') {
+        const rawOutput = parseHermesRunOutput(data.output);
+        const normalized = this.normalizeResult(task, rawOutput, data);
         return {
-          status: 'failed' as const,
-          progress: 0,
-          errorMessage: message,
-          userErrorMessage: '无法连接 Hermes API Server，请确认 gateway 已启动',
-          log: { level: 'error' as const, message: 'Hermes 连接失败', detail: message },
+          status,
+          progress: 100,
+          output: normalized,
+          log: { level: 'info' as const, message: data.summary ?? 'Hermes 任务已完成' },
         };
       }
-    }
 
-    // 超时：返回 running 状态，让 worker 稍后重新 poll
-    return {
-      status: 'running',
-      progress: 50,
-      log: {
-        level: 'info' as const,
-        message: 'Hermes 任务仍在执行中，等待下次轮询',
-      },
-    };
+      if (status === 'failed') {
+        return {
+          status,
+          progress,
+          errorMessage: data.error ?? 'Hermes run failed',
+          userErrorMessage: 'Hermes 执行失败，可在 Agent 任务页重试',
+          log: {
+            level: 'error' as const,
+            message: 'Hermes 执行失败',
+            detail: data.error,
+          },
+        };
+      }
+
+      if (status === 'canceled') {
+        return {
+          status,
+          progress,
+          errorMessage: '任务已取消',
+          log: { level: 'info' as const, message: 'Hermes 任务已取消' },
+        };
+      }
+
+      const eventLabel = formatHermesRunEvent(data);
+      return {
+        status: 'running',
+        progress,
+        log: {
+          level: 'info' as const,
+          message: `Hermes 执行中：${eventLabel}`,
+        },
+      };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      const disconnected =
+        message.includes('fetch failed') ||
+        message.includes('ECONNREFUSED') ||
+        message.includes('ECONNRESET') ||
+        message.includes('socket hang up');
+      return {
+        status: 'failed' as const,
+        progress: task.progress ?? 0,
+        errorMessage: message,
+        userErrorMessage: disconnected ? HERMES_DISCONNECTED_USER_MSG : 'Hermes API 调用失败',
+        log: {
+          level: 'error' as const,
+          message: disconnected ? 'Hermes 连接中断（已禁用 Mock 降级）' : 'Hermes 连接失败',
+          detail: message,
+        },
+      };
+    }
   }
 
   async cancel(task: AgentTask) {
@@ -282,9 +346,48 @@ export type HermesHealthResult = {
   apiGatewayOk?: boolean;
   desktopRunning?: boolean;
   gatewayRunning?: boolean;
+  /** Agent 内核版本（/api/status 的 version 字段） */
+  agentVersion?: string | null;
+  /** 桌面安装包版本（updates/state.json 的 installed_version） */
+  desktopAppVersion?: string | null;
+  /** 兼容旧字段：优先桌面版，其次 Agent 内核 */
   clientVersion?: string | null;
   apiServerEnabled?: boolean;
+  bindClientSupported?: boolean;
 };
+
+function readInstalledDesktopVersion(): string | null {
+  const candidates = [
+    process.env.HERMES_HOME,
+    process.platform === 'win32'
+      ? path.join(process.env.LOCALAPPDATA ?? '', 'hermes')
+      : path.join(os.homedir(), '.hermes'),
+  ].filter(Boolean) as string[];
+
+  for (const home of candidates) {
+    const statePath = path.join(home, 'updates', 'state.json');
+    try {
+      if (!fs.existsSync(statePath)) continue;
+      const state = JSON.parse(fs.readFileSync(statePath, 'utf8')) as {
+        installed_version?: string;
+      };
+      const version = state.installed_version?.trim();
+      if (version) return version;
+    } catch {
+      // ignore malformed state file
+    }
+  }
+  return null;
+}
+
+function formatDesktopVersionLabel(
+  desktopAppVersion: string | null | undefined,
+  agentVersion: string | null | undefined
+): string {
+  if (desktopAppVersion) return `v${desktopAppVersion}`;
+  if (agentVersion) return `Agent v${agentVersion}`;
+  return '未知版本';
+}
 
 async function probeHermesDesktopStatus(): Promise<HermesHealthResult | null> {
   try {
@@ -295,6 +398,15 @@ async function probeHermesDesktopStatus(): Promise<HermesHealthResult | null> {
     const data = (await res.json()) as HermesDesktopStatus;
     if (!data.gateway_running) return null;
     const apiServerEnabled = Boolean(data.gateway_health_url);
+    const agentVersion = data.version ?? null;
+    const desktopAppVersion = readInstalledDesktopVersion();
+    const versionLabel = formatDesktopVersionLabel(desktopAppVersion, agentVersion);
+    const versionNote =
+      desktopAppVersion && agentVersion && desktopAppVersion !== agentVersion
+        ? `（桌面 ${desktopAppVersion} · Agent 内核 ${agentVersion}）`
+        : agentVersion && !desktopAppVersion
+          ? `（Agent 内核 ${agentVersion}）`
+          : '';
     return {
       ok: true,
       url: HERMES_DESKTOP_STATUS_URL,
@@ -302,11 +414,14 @@ async function probeHermesDesktopStatus(): Promise<HermesHealthResult | null> {
       apiGatewayOk: false,
       desktopRunning: true,
       gatewayRunning: true,
-      clientVersion: data.version ?? null,
+      agentVersion,
+      desktopAppVersion,
+      clientVersion: desktopAppVersion ?? agentVersion,
       apiServerEnabled,
+      bindClientSupported: false,
       detail: apiServerEnabled
-        ? `汇智爱马仕助手 v${data.version ?? '未知'} 运行中`
-        : `汇智爱马仕助手 v${data.version ?? '未知'} 运行中，但 API 服务（8642）未开启，请完成绑定或启用 API Server`,
+        ? `汇智爱马仕助手 ${versionLabel} 运行中${versionNote}`
+        : `汇智爱马仕助手 ${versionLabel} 运行中${versionNote}，请在设置中开启 API Server（8642）以连接 GEO`,
     };
   } catch {
     return null;
@@ -320,6 +435,7 @@ export async function checkHermesHealth(): Promise<HermesHealthResult> {
       signal: AbortSignal.timeout(3000),
     });
     if (res.ok) {
+      const desktopAppVersion = readInstalledDesktopVersion();
       return {
         ok: true,
         url: HERMES_BASE_URL,
@@ -328,7 +444,12 @@ export async function checkHermesHealth(): Promise<HermesHealthResult> {
         desktopRunning: true,
         gatewayRunning: true,
         apiServerEnabled: true,
-        detail: 'Hermes API Gateway 在线',
+        desktopAppVersion,
+        clientVersion: desktopAppVersion,
+        bindClientSupported: false,
+        detail: desktopAppVersion
+          ? `汇智爱马仕助手 v${desktopAppVersion} 已连接（API Gateway 8642）`
+          : 'Hermes API Gateway 在线',
       };
     }
   } catch {
