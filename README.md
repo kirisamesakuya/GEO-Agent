@@ -3,6 +3,52 @@
 本地开发与运行说明。  
 **项目现状问答（含三端进度、本期范围、迭代索引）** → [`docs/GEO-Agent_项目现状问答.md`](docs/GEO-Agent_项目现状问答.md)（更新于 2026-06-06）
 
+## 仓库版本说明（2026-06 新架构）
+
+自 **2026-06** 起，`main` 为全新主线：PostgreSQL 迁移、Hermes 绑定收敛、内容交付信息架构、结果中心与后台生产化改造等。与 2026-06 之前的 Demo 版**不共享 Git 历史**（本地若曾 clone 旧仓库，不能直接 `git pull` 合并）。
+
+| 引用 | 说明 |
+|------|------|
+| `main` | **当前最新版**，请以此为准开发 |
+| `legacy-v0` | 重写前最后一版 Demo（三端早期实现），仅作对照或回查 |
+
+### 老机器拉取全新代码
+
+在**已有旧 clone** 的目录中，若你不需要保留本地未提交修改，直接对齐远程 `main`：
+
+```powershell
+cd D:\path\to\GEO-Agent
+git fetch origin
+git checkout main
+git reset --hard origin/main
+```
+
+若 `git pull` 报 unrelated histories 或大量冲突，**不要**尝试 merge，用上方的 `reset --hard` 即可。
+
+需要查看旧版代码时：
+
+```powershell
+git fetch origin
+git checkout legacy-v0
+```
+
+回到最新开发线：
+
+```powershell
+git checkout main
+git reset --hard origin/main
+```
+
+**全新 clone**（推荐新环境使用）：
+
+```powershell
+git clone https://github.com/kirisamesakuya/GEO-Agent.git
+cd GEO-Agent
+npm install
+```
+
+拉下新代码后，请按下方 **Run Locally** 与 [`docs/PostgreSQL数据库迁移与部署说明.md`](docs/PostgreSQL数据库迁移与部署说明.md) 配置数据库与环境变量（与旧版 SQLite / 旧 schema 不兼容）。
+
 ## Demo 与生产边界
 
 本项目是早期 Demo 版，页面结构和用户流程可参考，但以下逻辑**不可直接用于生产**：
