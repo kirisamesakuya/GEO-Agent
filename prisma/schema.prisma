@@ -1,0 +1,878 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id                String               @id @default(uuid())
+  name              String
+  certStatus        String               @default("uncertified")
+  legalName         String?
+  uscc              String?
+  contactName       String?
+  contactPhone      String?
+  certSubmittedAt   DateTime?
+  certReviewedAt    DateTime?
+  certRejectReason  String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  brands            Brand[]
+  members           OrganizationMember[]
+  externalLinks     ExternalAccountLink[]
+}
+
+model Brand {
+  id              String           @id @default(uuid())
+  organizationId  String?
+  organization    Organization?    @relation(fields: [organizationId], references: [id])
+  website         String
+  name            String
+  status          String           @default("active")
+  isDefault       Boolean          @default(false)
+  industry        String
+  city            String
+  /// 品牌运营负责人（展示名，非系统账号）
+  ownerName       String           @default("")
+  storeCount      Int              @default(1)
+  description     String
+  keywords        String
+  competitors     String
+  forbiddenWords  String
+  /// 品牌资料参考材料 JSON：[{ id, kind, name, url, mimeType? }]
+  sourceMaterials String           @default("[]")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  accountBindings AccountBinding[]
+  permissions     BrandMemberPermission[]
+  keywordEntries  KeywordEntry[]
+  knowledgeEntries KnowledgeEntry[]
+  indexQueryPlans IndexQueryPlan[]
+  mediaAssets     MediaAsset[]
+  publishPlans       PublishPlan[]
+  geoContentProjects GeoContentProject[]
+}
+
+model KeywordEntry {
+  id        String   @id @default(uuid())
+  brandId   String
+  brand     Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  term      String
+  group     String   @default("brand")
+  source    String   @default("manual")
+  createdAt DateTime @default(now())
+
+  @@unique([brandId, term])
+}
+
+model KnowledgeEntry {
+  id        String   @id @default(uuid())
+  brandId   String
+  brand     Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  category  String
+  title     String
+  body      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model IndexQueryPlan {
+  id          String        @id @default(uuid())
+  brandId     String
+  brand       Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  name        String
+  platforms   String
+  keywordIds  String
+  status      String        @default("draft")
+  taskId      String?
+  /// regular_monitor | article_effect
+  verificationType       String?
+  sourceContentItemId    String?
+  sourcePublishRecordId  String?
+  baselineResultIdsJson  String?
+  /// 本次收录查询的基准时间（快照时点）
+  queryAt     DateTime      @default(now())
+  /// 计划执行时间（由周期配置推算的下一次执行，可选）
+  scheduledAt       DateTime?
+  /// 执行周期：hourly | daily | weekly | monthly
+  scheduleFrequency String?
+  /// 执行时间点 HH:mm（本地）
+  scheduleRunTime   String?
+  /// 每周：0=周日 … 6=周六
+  scheduleWeekday   Int?
+  /// 每月：1–28
+  scheduleMonthDay  Int?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  results     IndexResult[]
+}
+
+model IndexResult {
+  id              String         @id @default(uuid())
+  planId          String
+  plan            IndexQueryPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  keyword         String
+  platform        String
+  hit             Boolean
+  citedMerchant   Boolean        @default(false)
+  citationSnippet String?
+  sampledAt       DateTime       @default(now())
+}
+
+model MediaAsset {
+  id        String   @id @default(uuid())
+  brandId   String
+  brand     Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  url       String
+  name      String
+  group     String   @default("general")
+  tags      String   @default("[]")
+  platforms String   @default("[]")
+  useCount  Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model GeoContentProject {
+  id                       String        @id @default(uuid())
+  brandId                  String
+  brand                    Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  name                     String
+  sourceType               String        @default("manual")
+  sourceRef                String?
+  targetQuestionsJson      String        @default("[]")
+  targetKeywordsJson       String        @default("[]")
+  targetAiPlatformsJson    String        @default("[]")
+  targetPublishPlatformsJson String      @default("[]")
+  status                   String        @default("draft")
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+  batches                  ContentBatch[]
+  items                    ContentItem[]
+  publishJobs              PublishJob[]
+}
+
+model PublishPlan {
+  id               String          @id @default(uuid())
+  brandId          String
+  brand            Brand           @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  name             String
+  sourceType       String
+  sourceRef        String?
+  targetAccountIds String          @default("[]")
+  firstPublishAt   DateTime?
+  frequency        String          @default("once")
+  runCount         Int             @default(1)
+  autoComment      Boolean         @default(false)
+  status           String          @default("draft")
+  scheduleMode     String?
+  scheduleMetaJson String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  records          PublishRecord[]
+  jobs             PublishJob[]
+}
+
+model PublishJob {
+  id                String             @id @default(uuid())
+  planId            String
+  plan              PublishPlan        @relation(fields: [planId], references: [id], onDelete: Cascade)
+  projectId         String?
+  project           GeoContentProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  contentItemId     String
+  platform          String
+  accountBindingId  String?
+  scheduledAt       DateTime
+  status            String             @default("pending")
+  agentTaskId       String?
+  publishRecordId   String?
+  attemptCount      Int                @default(0)
+  lastErrorCode     String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model PublishRecord {
+  id              String       @id @default(uuid())
+  planId          String?
+  plan            PublishPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+  brandId         String
+  contentItemId   String?
+  platform        String
+  accountBindingId String?
+  status          String
+  publishedUrl    String?
+  errorCode       String?
+  reviewCategory  String?
+  executedAt      DateTime?
+  createdAt       DateTime     @default(now())
+}
+
+model BudgetRechargeOrder {
+  id        String   @id @default(uuid())
+  brandName String
+  amount    Float
+  status    String   @default("pending")
+  note      String?
+  createdAt DateTime @default(now())
+  paidAt    DateTime?
+}
+
+model AccountBinding {
+  id                String              @id @default(uuid())
+  brandId           String
+  brand             Brand               @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  platform          String
+  accountName       String
+  status            String
+  permissions       String
+  lastChecked       String
+  authMethod        String              @default("browser")
+  bindSessionId     String?
+  externalAccountId String?
+  expiresAt         DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  logs              AccountBindingLog[]
+}
+
+model AccountBindingLog {
+  id               String         @id @default(uuid())
+  accountBindingId String
+  accountBinding   AccountBinding @relation(fields: [accountBindingId], references: [id], onDelete: Cascade)
+  action           String
+  detail           String?
+  createdAt        DateTime       @default(now())
+}
+
+/// 投放账号资产（兼容期通过 legacyBindingId 关联 AccountBinding）
+model AdAccount {
+  id                String                @id @default(uuid())
+  platform          String
+  accountName       String
+  externalAccountId String?
+  ownerType         String
+  ownerId           String
+  ownerName         String
+  authMethod        String                @default("browser")
+  authStatus        String                @default("unauthorized")
+  riskStatus        String                @default("normal")
+  permissions       String                @default("{}")
+  expiresAt         DateTime?
+  lastCheckedAt     DateTime?
+  legacyBindingId   String?               @unique
+  disabled          Boolean               @default(false)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  assignments       AdAccountAssignment[]
+  authSessions      AdAccountAuthSession[]
+  usageLogs         AdAccountUsageLog[]
+}
+
+model AdAccountAssignment {
+  id         String    @id @default(uuid())
+  accountId  String
+  account    AdAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  targetType String
+  targetId   String
+  targetName String?
+  role       String    @default("owner")
+  isDefault  Boolean   @default(false)
+  enabled    Boolean   @default(true)
+  createdBy  String?
+  createdAt  DateTime  @default(now())
+
+  @@unique([accountId, targetType, targetId])
+}
+
+model AdAccountAuthSession {
+  id          String    @id @default(uuid())
+  accountId   String
+  account     AdAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  platform    String
+  mode        String
+  status      String    @default("pending")
+  loginUrl    String?
+  bindSessionId String?
+  agentTaskId String?
+  createdAt   DateTime  @default(now())
+  finishedAt  DateTime?
+}
+
+model AdAccountUsageLog {
+  id              String    @id @default(uuid())
+  accountId       String
+  account         AdAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  action          String
+  businessRefType String?
+  businessRefId   String?
+  operatorId      String?
+  result          String    @default("success")
+  detail          String?
+  createdAt       DateTime  @default(now())
+}
+
+model AgentTask {
+  id               String         @id @default(uuid())
+  type             String
+  title            String
+  status           String
+  progress         Int            @default(0)
+  executor         String
+  brandName        String?
+  input            String
+  output           String?
+  errorMessage     String?
+  userErrorMessage String?
+  externalRunId    String?
+  businessRef      String?
+  needsReview      Boolean        @default(false)
+  reviewCategory   String?
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  logs             AgentTaskLog[]
+}
+
+model AgentTaskLog {
+  id        String    @id @default(uuid())
+  taskId    String
+  task      AgentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  level     String
+  message   String
+  detail    String?
+  createdAt DateTime  @default(now())
+}
+
+model ContentBatch {
+  id           String             @id @default(uuid())
+  brandName    String
+  platform     String
+  projectId    String?
+  project      GeoContentProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  taskId       String?
+  articleCount Int
+  status       String
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  items        ContentItem[]
+}
+
+model ContentItem {
+  id                     String             @id @default(uuid())
+  batchId                String
+  batch                  ContentBatch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  projectId              String?
+  project                GeoContentProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  title                  String
+  platform               String
+  targetQuestionsJson    String?
+  publishStatus          String             @default("not_scheduled")
+  previewText            String
+  fullContent            String
+  structure              String
+  generationMetaJson     String?
+  qualityChecksJson      String?
+  effectBaselineJson     String?
+  effectVerificationJson String?
+  status                 String             @default("draft")
+  version                Int                @default(1)
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+}
+
+model AiCredits {
+  brandName String   @id
+  balance   Int      @default(1000)
+  updatedAt DateTime @updatedAt
+  mirror    AiCreditMirror?
+}
+
+model AiCreditMirror {
+  brandName       String    @id
+  credits         AiCredits @relation(fields: [brandName], references: [brandName], onDelete: Cascade)
+  mirroredBalance Int       @default(0)
+  externalUserId  String?
+  lastSyncAt      DateTime?
+}
+
+model AiCreditSyncLog {
+  id        String   @id @default(uuid())
+  brandName String
+  balance   Int
+  status    String
+  detail    String?
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id           String             @id @default(uuid())
+  phone        String?            @unique
+  email        String?            @unique
+  passwordHash String?
+  displayName  String?
+  status       String             @default("active")
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  sessions     Session[]
+  providerLinks ProviderUser[]
+  platformRoles PlatformUserRole[]
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model ProviderUser {
+  id         String   @id @default(uuid())
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       String   @default("owner")
+  createdAt  DateTime @default(now())
+
+  @@unique([providerId, userId])
+  @@index([userId])
+}
+
+model PlatformUserRole {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, role])
+}
+
+model OrganizationMember {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  /// 成员 userId；Demo 阶段可为任意字符串，生产环境应关联 User.id
+  userId         String
+  displayName    String
+  role           String       @default("member")
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, userId])
+}
+
+model BrandMemberPermission {
+  id        String   @id @default(uuid())
+  brandId   String
+  brand     Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  /// 授权 userId；Demo 阶段可为任意字符串，生产环境应关联 User.id
+  userId    String
+  role      String   @default("editor")
+  createdAt DateTime @default(now())
+
+  @@unique([brandId, userId])
+}
+
+model ExternalAccountLink {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  externalUserId String
+  provider       String       @default("agentsyun")
+  linkedAt       DateTime     @default(now())
+}
+
+model BudgetAccount {
+  brandName String   @id
+  balance   Float    @default(10000)
+  frozen    Float    @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+model BudgetLedger {
+  id        String   @id @default(uuid())
+  brandName String
+  type      String
+  amount    Float
+  balance   Float
+  note      String?
+  refId     String?
+  createdAt DateTime @default(now())
+}
+
+model BudgetDepositRequest {
+  id         String    @id @default(uuid())
+  brandName  String
+  amount     Float
+  note       String?
+  status     String    @default("pending")
+  createdAt  DateTime  @default(now())
+  reviewedAt DateTime?
+}
+
+model GeoReport {
+  id                      String   @id @default(uuid())
+  brandName               String
+  title                   String   @default("")
+  taskId                  String?
+  /// quick_start | audit | analysis | assets | compare
+  reportType              String   @default("analysis")
+  mentionRate             Int?
+  rank                    Int?
+  gapsFound               Int?
+  totalScore              Int?
+  platformsJson           String?
+  keywordsJson            String?
+  prospectMode            Boolean  @default(false)
+  isBaseline              Boolean  @default(false)
+  brandMentionSummary     String
+  competitorAnalysis      String
+  contentGap              String
+  optimizationSuggestions String
+  scoresJson              String?
+  findingsJson            String?
+  artifactsJson           String?
+  actionPlanJson          String?
+  rawJson                 String?
+  createdAt               DateTime @default(now())
+}
+
+model GeoActionConfirmation {
+  id          String    @id @default(uuid())
+  reportId    String
+  actionType  String
+  riskLevel   String
+  payloadJson String?
+  confirmedBy String?
+  confirmedAt DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model CampaignPlan {
+  id        String             @id @default(uuid())
+  brandName String
+  goal      String
+  platforms String
+  budgetMin Float
+  budgetMax Float
+  status    String             @default("draft")
+  taskId    String?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  packages  TaskPackageDraft[]
+}
+
+model TaskPackageDraft {
+  id             String       @id @default(uuid())
+  planId         String
+  plan           CampaignPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  name           String
+  platform       String
+  payeeType      String
+  quantity       Int          @default(1)
+  unitPrice      Float?
+  budget         Float
+  deliverable    String
+  acceptance     String
+  publishToLobby Boolean      @default(true)
+  status         String       @default("pending_confirm")
+}
+
+model TaskOrder {
+  id           String                    @id @default(uuid())
+  brandName    String
+  title        String
+  type         String
+  platform     String
+  budget       Float
+  deliverable  String
+  acceptance   String
+  description  String?
+  industry     String?
+  city         String?
+  status       String                    @default("published")
+  providerId   String?
+  providerName String?
+  deadline     DateTime?
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+  deliveries   OrderDelivery[]
+  revisions    OrderRevision[]
+  applications TaskOrderApplication[]
+  assignments  ProviderOrderAssignment[]
+  settlement   SettlementRecord?
+}
+
+model ProviderOrderAssignment {
+  id           String    @id @default(uuid())
+  orderId      String
+  order        TaskOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  providerId   String
+  providerName String
+  reason       String?
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+}
+
+model SettlementRecord {
+  id         String    @id @default(uuid())
+  orderId    String    @unique
+  order      TaskOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status     String    @default("pending_platform")
+  amount     Float
+  note       String?
+  operatorId String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model OrderDelivery {
+  id           String    @id @default(uuid())
+  orderId      String
+  order        TaskOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  content      String
+  link         String?
+  attachments  String?
+  /// submitted | revision_response | draft 等记录类型
+  status       String    @default("submitted")
+  /// draft = 文章草稿；final = 发布链接/截图等最终交付
+  stage        String    @default("final")
+  /// 草稿审稿：submitted | approved | revision_requested
+  reviewStatus String?
+  reviewNote   String?
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+}
+
+model OrderRevision {
+  id        String    @id @default(uuid())
+  orderId   String
+  order     TaskOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  reason    String
+  status    String    @default("open")
+  createdAt DateTime  @default(now())
+}
+
+model Provider {
+  id                String                @id @default(uuid())
+  name              String
+  type              String
+  capabilities      String
+  status            String                @default("active")
+  applicationStatus String                @default("draft")
+  contactName       String?
+  phone             String?
+  email             String?
+  city              String?
+  serviceTypes      String?
+  platforms         String?
+  industryTags      String?
+  serviceAreas      String?
+  budgetMin         Float?
+  budgetMax         Float?
+  caseLinks         String?
+  reviewNote        String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @default(now()) @updatedAt
+  applications      ProviderApplication[]
+  reviewLogs        ProviderReviewLog[]
+  orderApplications TaskOrderApplication[]
+  assets            ProviderAsset[]
+  notifications     ProviderNotification[]
+  pricingRules      ProviderPricingRule[]
+  withdrawalRequests ProviderWithdrawalRequest[]
+  users             ProviderUser[]
+}
+
+model ProviderWithdrawalRequest {
+  id           String    @id @default(uuid())
+  providerId   String
+  provider     Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  amount       Float
+  channel      String
+  channelLabel String?
+  status       String    @default("pending")
+  note         String?
+  operatorId   String?
+  createdAt    DateTime  @default(now())
+  reviewedAt   DateTime?
+  paidAt       DateTime?
+
+  @@index([providerId, status, createdAt])
+}
+
+model ProviderNotification {
+  id         String   @id @default(uuid())
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  type       String
+  title      String
+  body       String
+  read       Boolean  @default(false)
+  refId      String?
+  createdAt  DateTime @default(now())
+}
+
+/// 发布端（商家）站内通知，按品牌维度存储
+model PublisherNotification {
+  id         String   @id @default(uuid())
+  brandName  String
+  type       String
+  title      String
+  body       String
+  read       Boolean  @default(false)
+  refId      String?
+  actionView String?
+  createdAt  DateTime @default(now())
+
+  @@index([brandName, read, createdAt])
+}
+
+model ProviderPricingRule {
+  id         String   @id @default(uuid())
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  taskType   String
+  minBudget  Float?
+  maxBudget  Float?
+  note       String?
+  createdAt  DateTime @default(now())
+}
+
+model ProviderAsset {
+  id         String   @id @default(uuid())
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  title      String
+  type       String   @default("case")
+  url        String
+  note       String?
+  createdAt  DateTime @default(now())
+}
+
+model ProviderApplication {
+  id         String   @id @default(uuid())
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  version    Int      @default(1)
+  payload    String
+  status     String   @default("submitted")
+  reviewNote String?
+  createdAt  DateTime @default(now())
+}
+
+model ProviderReviewLog {
+  id         String   @id @default(uuid())
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  action     String
+  note       String?
+  reviewerId String?
+  createdAt  DateTime @default(now())
+}
+
+model TaskOrderApplication {
+  id           String    @id @default(uuid())
+  orderId      String
+  order        TaskOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  providerId   String
+  provider     Provider  @relation(fields: [providerId], references: [id])
+  providerName String
+  message      String?
+  status       String    @default("pending")
+  createdAt    DateTime  @default(now())
+}
+
+model AgentSkillRun {
+  id            String   @id @default(uuid())
+  taskId        String?
+  skillName     String
+  executor      String?
+  status        String
+  inputSummary  String?
+  outputSummary String?
+  durationMs    Int?
+  needsReview   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+}
+
+model LocalAutomationRun {
+  id            String   @id @default(uuid())
+  taskId        String?
+  environment   String   @default("local")
+  hostName      String?
+  automationType String?
+  status        String
+  inputSummary  String?
+  outputSummary String?
+  evidenceUrl   String?
+  errorMessage  String?
+  createdAt     DateTime @default(now())
+}
+
+model SystemConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model SystemConfigVersion {
+  id        String   @id @default(uuid())
+  key       String
+  value     String
+  reason    String?
+  createdAt DateTime @default(now())
+}
+
+model WebsiteRequest {
+  id           String         @id @default(uuid())
+  brandName    String
+  pageType     String
+  goal         String
+  referenceUrl String?
+  modules      String
+  attachments  String?
+  status       String         @default("draft")
+  previewHtml  String?
+  taskId       String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  orders       WebsiteOrder[]
+}
+
+model WebsiteOrder {
+  id             String         @id @default(uuid())
+  requestId      String
+  request        WebsiteRequest @relation(fields: [requestId], references: [id])
+  brandName      String
+  status         String         @default("pending")
+  assigneeId     String?
+  assigneeName   String?
+  previewUrl     String?
+  deliveryNote   String?
+  revisionReason String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  detail    String?
+  source    String   @default("web")
+  createdAt DateTime @default(now())
+}

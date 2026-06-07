@@ -1,0 +1,15 @@
+[
+  { "taskType": "geo_analysis", "skillName": "geo-analysis-web", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "geo_report", "skillName": "geo-report-web", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "geo_proposal", "skillName": "geo-proposal-web", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "geo_prospect", "skillName": "geo-prospect-web", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "keyword_mining", "skillName": "geo-keyword-mining-web", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "index_sampling", "skillName": "geo-platform-ranking-sampling", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "knowledge_extract", "skillName": "geo-knowledge-extract-web", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "article_generation", "skillName": "geo-article-generation-web", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "article_rewrite", "skillName": "geo-article-rewrite-web", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "campaign_plan", "skillName": "geo-campaign-plan-web", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "website_preview", "skillName": "geo-website-preview-web", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "hermes_publish", "skillName": "hermes-publish-web", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "account_verify", "skillName": "account-verify-web", "executor": "nous_hermes", "enabled": true, "priority": 1 }
+]

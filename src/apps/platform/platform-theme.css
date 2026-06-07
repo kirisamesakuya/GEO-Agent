@@ -1,0 +1,276 @@
+:root {
+  --platform-bg: #f6f8fb;
+  --platform-surface: #ffffff;
+  --platform-surface-subtle: #f9fafc;
+
+  --platform-border: #e5eaf3;
+  --platform-border-subtle: #eef2f7;
+  --platform-border-hover: #9dbdff;
+
+  --platform-text-title: #111827;
+  --platform-text-primary: #1f2937;
+  --platform-text-secondary: #46546b;
+  --platform-text-tertiary: #8a94a6;
+  --platform-text-placeholder: #98a2b3;
+
+  --platform-primary: #1f6fff;
+  --platform-primary-hover: #155eef;
+  --platform-primary-bg: #eaf2ff;
+
+  --platform-success: #12b76a;
+  --platform-success-bg: #e7f8f0;
+
+  --platform-warning: #f79009;
+  --platform-warning-bg: #fff4e5;
+
+  --platform-danger: #f04438;
+  --platform-danger-bg: #fff1f0;
+
+  --platform-info: #2f7df6;
+  --platform-info-bg: #f3f8ff;
+}
+
+.platform-card {
+  background: var(--platform-surface);
+  border: 1px solid var(--platform-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 26px rgba(15, 23, 42, 0.04);
+}
+
+.platform-status-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.platform-status-tag--success {
+  background: var(--platform-success-bg);
+  color: var(--platform-success);
+}
+
+.platform-status-tag--warning {
+  background: var(--platform-warning-bg);
+  color: var(--platform-warning);
+}
+
+.platform-status-tag--danger {
+  background: var(--platform-danger-bg);
+  color: var(--platform-danger);
+}
+
+.platform-status-tag--pending {
+  background: var(--platform-primary-bg);
+  color: var(--platform-primary);
+}
+
+.platform-status-tag--muted {
+  background: #f2f4f7;
+  color: var(--platform-text-tertiary);
+}
+
+.platform-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.platform-filter-input {
+  height: 32px;
+  border: 1px solid var(--platform-border);
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--platform-text-primary);
+  background: var(--platform-surface);
+}
+
+.platform-filter-input:focus {
+  outline: none;
+  border-color: var(--platform-border-hover);
+}
+
+.platform-card-header {
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--platform-text-title);
+  border-bottom: 1px solid var(--platform-border);
+  background: var(--platform-surface);
+}
+
+.platform-table {
+  width: 100%;
+  font-size: 14px;
+  border-collapse: collapse;
+}
+
+.platform-table thead th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--platform-text-secondary);
+  border-bottom: 1px solid var(--platform-border);
+  padding: 12px 16px;
+  background: var(--platform-surface-subtle);
+  white-space: nowrap;
+}
+
+.platform-table tbody td {
+  padding: 12px 16px;
+  min-height: 48px;
+  border-bottom: 1px solid var(--platform-border-subtle);
+  color: var(--platform-text-primary);
+  vertical-align: middle;
+}
+
+.platform-table tbody tr:hover {
+  background: #f5f8ff;
+}
+
+.platform-table tbody tr.cursor-pointer:hover {
+  cursor: pointer;
+}
+
+.platform-table--compact {
+  font-size: 12px;
+}
+
+.platform-table--compact thead th {
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.platform-table--compact tbody td {
+  padding: 10px 12px;
+}
+
+.platform-table-empty {
+  text-align: center;
+  padding: 24px 16px !important;
+  color: var(--platform-text-tertiary);
+}
+
+.platform-tab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.platform-tab {
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--platform-text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.platform-tab--active {
+  color: var(--platform-primary);
+  background: var(--platform-primary-bg);
+  border-color: #cfe0ff;
+}
+
+.platform-dashboard-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.platform-dashboard-kpis {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .platform-dashboard-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .platform-dashboard-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .platform-dashboard-kpis {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .platform-dashboard-grid {
+    gap: 16px;
+  }
+}
+
+@media (max-width: 1279px) {
+  .platform-card {
+    padding: 14px 16px;
+  }
+}
+
+/* ── 平台端壳层响应式（对齐发布端 geo-sidebar 模式） ── */
+:root {
+  --platform-sidebar-width: 240px;
+  --platform-main-offset: var(--platform-sidebar-width);
+}
+
+@media (max-width: 1023px) {
+  :root {
+    --platform-main-offset: 0px;
+  }
+
+  .platform-sidebar {
+    transform: translateX(-100%);
+  }
+
+  .platform-sidebar--open {
+    transform: translateX(0);
+  }
+}
+
+@media (min-width: 1024px) {
+  .platform-sidebar-backdrop {
+    display: none;
+  }
+}
+
+.platform-sidebar {
+  width: var(--platform-sidebar-width);
+  transition: transform 200ms ease-out;
+}
+
+.platform-sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+  background: rgba(15, 23, 42, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease-out;
+}
+
+.platform-sidebar-backdrop--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.platform-layout-main {
+  margin-left: var(--platform-main-offset);
+  transition: margin-left 200ms ease-out;
+}
+
+@media (max-width: 1023px) {
+  .platform-header-search,
+  .platform-header-date {
+    display: none;
+  }
+}

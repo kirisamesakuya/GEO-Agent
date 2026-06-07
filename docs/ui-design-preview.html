@@ -1,0 +1,1343 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GEO 助手 UI 设计规范可视化</title>
+    <style>
+      :root {
+        --color-primary: #1d4ed8;
+        --color-primary-hover: #1e40af;
+        --color-primary-light: #eff6ff;
+        --color-primary-soft: #bfdbfe;
+        --color-title: #000000;
+        --color-text: #666666;
+        --color-text-secondary: #999999;
+        --color-text-placeholder: #b3b3b3;
+        --color-border: #eaeaea;
+        --color-border-hover: #e5e5e5;
+        --color-bg: #f9f9f9;
+        --color-bg-card: #ffffff;
+        --color-bg-hover: #eaeaea;
+        --color-success: #059669;
+        --color-success-bg: #ecfdf5;
+        --color-warning: #d97706;
+        --color-warning-bg: #fffbeb;
+        --color-danger: #dc2626;
+        --color-danger-bg: #fef2f2;
+        --color-info: #2563eb;
+        --color-info-bg: #eff6ff;
+        --neutral-text-01: #000000;
+        --neutral-text-02: #666666;
+        --neutral-text-03: #999999;
+        --neutral-text-04: #b3b3b3;
+        --neutral-text-05: #cccccc;
+        --neutral-text-white: #ffffff;
+        --neutral-divider-01: #e5e5e5;
+        --neutral-divider-02: #eaeaea;
+        --neutral-divider-03: #f3f3f3;
+        --neutral-divider-04: #000000;
+        --neutral-bg-01: #eaeaea;
+        --neutral-bg-02: #f3f3f3;
+        --neutral-bg-03: #f9f9f9;
+        --neutral-bg-black: #000000;
+        --neutral-bg-white: #ffffff;
+        --font-family: "Microsoft YaHei", "PingFang SC", -apple-system, BlinkMacSystemFont, sans-serif;
+        --font-size-h1: 24px;
+        --font-size-h2: 18px;
+        --font-size-h3: 16px;
+        --font-size-body: 14px;
+        --font-size-caption: 12px;
+        --font-size-data: 32px;
+        --font-size-data-sm: 18px;
+        --sp-xs: 4px;
+        --sp-sm: 8px;
+        --sp-md: 12px;
+        --sp-base: 16px;
+        --sp-lg: 24px;
+        --sp-xl: 32px;
+        --sp-2xl: 48px;
+        --radius-sm: 6px;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+        --radius-xl: 16px;
+        --transition: 200ms ease-out;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--color-bg);
+        color: var(--color-text);
+        font-family: var(--font-family);
+        font-size: 14px;
+        line-height: 20px;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .page-shell {
+        display: grid;
+        min-height: 100vh;
+        grid-template-columns: 240px minmax(0, 1fr);
+      }
+
+      .sidebar {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        border-right: 1px solid var(--neutral-divider-02);
+        background: var(--neutral-bg-03);
+        padding: 20px 16px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: 40px;
+        color: var(--neutral-text-01);
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 32px;
+        height: 32px;
+        place-items: center;
+        border-radius: 8px;
+        background: var(--color-primary);
+        color: var(--neutral-text-white, #ffffff);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .nav {
+        display: grid;
+        gap: 4px;
+        margin-top: 24px;
+      }
+
+      .nav a {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 38px;
+        border-radius: 8px;
+        padding: 0 12px;
+        color: var(--neutral-text-02);
+        transition: background var(--transition), color var(--transition);
+      }
+
+      .nav a.active,
+      .nav a:hover {
+        background: var(--neutral-bg-01);
+        color: var(--neutral-text-01);
+      }
+
+      .nav-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: currentColor;
+      }
+
+      .main {
+        min-width: 0;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        height: 56px;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--neutral-divider-02);
+        background: rgba(255, 255, 255, 0.92);
+        padding: 0 32px;
+        backdrop-filter: blur(12px);
+      }
+
+      .search {
+        display: flex;
+        width: min(420px, 46vw);
+        height: 36px;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--neutral-divider-02);
+        border-radius: 8px;
+        background: #ffffff;
+        padding: 0 12px;
+        color: var(--neutral-text-04);
+      }
+
+      .avatar {
+        display: grid;
+        width: 32px;
+        height: 32px;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--neutral-text-01);
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .content {
+        padding: 32px;
+      }
+
+      .hero {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 28px;
+      }
+
+      .eyebrow {
+        color: var(--color-primary);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        color: var(--neutral-text-01);
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 32px;
+      }
+
+      h2 {
+        color: var(--neutral-text-01);
+        font-size: 18px;
+        font-weight: 600;
+        line-height: 26px;
+      }
+
+      h3 {
+        color: var(--neutral-text-01);
+        font-size: 16px;
+        font-weight: 600;
+        line-height: 24px;
+      }
+
+      .muted {
+        color: var(--neutral-text-02);
+      }
+
+      .section {
+        margin-top: 32px;
+      }
+
+      .section-head {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+
+      .grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .grid.two {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .grid.three {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .grid.four {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .card {
+        border: 1px solid var(--neutral-divider-02);
+        border-radius: 12px;
+        background: var(--neutral-bg-white, #ffffff);
+        transition: border-color var(--transition);
+      }
+
+      .card:hover {
+        border-color: var(--neutral-divider-01);
+      }
+
+      .card-pad {
+        padding: 24px;
+      }
+
+      .swatch {
+        min-height: 118px;
+        overflow: hidden;
+      }
+
+      .swatch-color {
+        height: 58px;
+        border-bottom: 1px solid var(--neutral-divider-02);
+        background: var(--swatch);
+      }
+
+      .swatch-body {
+        display: grid;
+        gap: 2px;
+        padding: 12px;
+      }
+
+      .token-name {
+        color: var(--neutral-text-01);
+        font-weight: 600;
+      }
+
+      .token-value {
+        color: var(--neutral-text-03);
+        font-size: 12px;
+      }
+
+      .type-row {
+        display: grid;
+        grid-template-columns: 160px minmax(0, 1fr) 120px;
+        align-items: center;
+        gap: 16px;
+        padding: 16px 0;
+      }
+
+      .type-row:first-child {
+        padding-top: 0;
+      }
+
+      .type-sample.h1 {
+        color: var(--color-title);
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 32px;
+      }
+
+      .type-sample.h2 {
+        color: var(--color-title);
+        font-size: 18px;
+        font-weight: 600;
+        line-height: 26px;
+      }
+
+      .type-sample.h3 {
+        color: var(--color-title);
+        font-size: 16px;
+        font-weight: 600;
+        line-height: 24px;
+      }
+
+      .type-sample.body {
+        font-size: 14px;
+        line-height: 20px;
+      }
+
+      .type-sample.caption {
+        color: var(--color-text-secondary);
+        font-size: 12px;
+        line-height: 16px;
+      }
+
+      .type-sample.data {
+        color: var(--color-title);
+        font-size: 32px;
+        font-weight: 700;
+        line-height: 40px;
+      }
+
+      .spec-table {
+        overflow-x: auto;
+        overflow-y: hidden;
+        border: 1px solid var(--neutral-divider-02);
+        border-radius: 12px;
+        background: var(--neutral-bg-white);
+      }
+
+      .spec-table table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .spec-table th {
+        background: var(--neutral-bg-02);
+        color: var(--neutral-text-01);
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 16px;
+        text-align: left;
+      }
+
+      .spec-table th,
+      .spec-table td {
+        border-bottom: 1px solid var(--neutral-divider-03);
+        padding: 12px 16px;
+        vertical-align: middle;
+      }
+
+      .spec-table tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .style-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--neutral-text-01);
+        font-weight: 600;
+      }
+
+      .style-swatch {
+        width: 34px;
+        height: 20px;
+        border: 1px solid var(--neutral-divider-02);
+        border-radius: 6px;
+        background: var(--swatch);
+      }
+
+      .usage-list {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .usage-list li {
+        border-left: 3px solid var(--neutral-divider-04);
+        background: var(--neutral-bg-03);
+        padding: 10px 12px;
+        color: var(--neutral-text-02);
+      }
+
+      .type-scale-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .type-scale-card {
+        border: 1px solid var(--neutral-divider-02);
+        border-radius: 8px;
+        background: var(--neutral-bg-white);
+        padding: 14px;
+      }
+
+      .type-scale-sample {
+        min-height: 84px;
+        color: var(--neutral-text-01);
+        font-weight: 600;
+        overflow: hidden;
+      }
+
+      .button-spec-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        align-items: start;
+      }
+
+      .space-scale {
+        display: grid;
+        gap: 12px;
+      }
+
+      .space-row {
+        display: grid;
+        grid-template-columns: 92px minmax(0, 1fr) 76px;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .space-bar {
+        height: 16px;
+        border-radius: 4px;
+        background: var(--color-primary);
+        width: var(--space);
+      }
+
+      .radius-demo {
+        display: grid;
+        min-height: 92px;
+        place-items: center;
+        border: 1px solid var(--color-border);
+        background: var(--color-bg-hover);
+        color: var(--color-text-secondary);
+      }
+
+      .surface-demo {
+        min-height: 92px;
+        border: 1px solid var(--color-border);
+        border-radius: 12px;
+        background: #ffffff;
+        padding: 16px;
+      }
+
+      .button-row,
+      .tag-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .btn {
+        display: inline-flex;
+        min-height: 40px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        padding: 10px 20px;
+        font: inherit;
+        font-size: 14px;
+        line-height: 20px;
+        cursor: default;
+        transition: background var(--transition), border-color var(--transition), color var(--transition);
+      }
+
+      .btn.primary {
+        background: var(--color-primary);
+        color: #ffffff;
+      }
+
+      .btn.primary:hover {
+        background: var(--color-primary-hover);
+      }
+
+      .btn.secondary {
+        border-color: var(--color-border);
+        background: #ffffff;
+        color: var(--color-text);
+      }
+
+      .btn.secondary:hover {
+        border-color: var(--color-border-hover);
+        background: var(--color-bg-hover);
+      }
+
+      .btn.text {
+        background: transparent;
+        color: var(--color-text-secondary);
+      }
+
+      .btn.danger {
+        background: var(--color-danger);
+        color: #ffffff;
+      }
+
+      .btn.md {
+        min-height: 40px;
+        padding: 10px 20px;
+      }
+
+      .btn.sm {
+        min-height: 36px;
+        padding: 8px 18px;
+      }
+
+      .btn.xs {
+        min-height: 32px;
+        padding: 6px 16px;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 16px;
+      }
+
+      .tag.success {
+        background: var(--color-success-bg);
+        color: var(--color-success);
+      }
+
+      .tag.warning {
+        background: var(--color-warning-bg);
+        color: var(--color-warning);
+      }
+
+      .tag.danger {
+        background: var(--color-danger-bg);
+        color: var(--color-danger);
+      }
+
+      .tag.info {
+        background: var(--color-info-bg);
+        color: var(--color-info);
+      }
+
+      .field-stack {
+        display: grid;
+        gap: 12px;
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        color: var(--color-title);
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+        background: #ffffff;
+        color: var(--color-text);
+        font: inherit;
+        font-size: 14px;
+        outline: none;
+        transition: border-color var(--transition), outline-color var(--transition);
+      }
+
+      input,
+      select {
+        height: 40px;
+        padding: 0 12px;
+      }
+
+      textarea {
+        min-height: 88px;
+        resize: vertical;
+        padding: 10px 12px;
+      }
+
+      input::placeholder,
+      textarea::placeholder {
+        color: var(--color-text-placeholder);
+      }
+
+      input:hover,
+      select:hover,
+      textarea:hover {
+        border-color: var(--color-border-hover);
+      }
+
+      input:focus,
+      select:focus,
+      textarea:focus {
+        border-color: var(--color-primary);
+        outline: 3px solid var(--color-primary-light);
+        outline-offset: 0;
+      }
+
+      .stat {
+        display: grid;
+        gap: 10px;
+        min-height: 136px;
+      }
+
+      .stat-label {
+        color: var(--color-text-secondary);
+        font-size: 12px;
+      }
+
+      .stat-number {
+        color: var(--color-title);
+        font-size: 32px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+
+      .stat-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--color-text-secondary);
+        font-size: 12px;
+      }
+
+      .table-wrap {
+        overflow: hidden;
+        border: 1px solid var(--color-border);
+        border-radius: 12px;
+        background: #ffffff;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th {
+        background: var(--color-primary);
+        color: #ffffff;
+        font-weight: 600;
+        text-align: left;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid var(--neutral-divider-02);
+        padding: 13px 16px;
+        white-space: nowrap;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      tbody tr:hover {
+        background: var(--color-primary-light);
+      }
+
+      .layout-demo {
+        overflow: hidden;
+        border: 1px solid var(--color-border);
+        border-radius: 12px;
+        background: #ffffff;
+      }
+
+      .layout-top {
+        display: flex;
+        height: 56px;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--color-border);
+        padding: 0 16px;
+      }
+
+      .layout-body {
+        display: grid;
+        min-height: 340px;
+        grid-template-columns: 180px minmax(0, 1fr) 260px;
+      }
+
+      .layout-side {
+        border-right: 1px solid var(--color-border);
+        background: var(--neutral-bg-03);
+        padding: 16px;
+      }
+
+      .layout-main {
+        padding: 24px;
+      }
+
+      .layout-chat {
+        border-left: 1px solid var(--color-border);
+        background: #ffffff;
+        padding: 16px;
+      }
+
+      .mini-line {
+        height: 10px;
+        border-radius: 999px;
+        background: var(--neutral-divider-02);
+      }
+
+      .mini-line.dark {
+        background: var(--color-title);
+      }
+
+      .mini-line.blue {
+        background: var(--color-primary-soft);
+      }
+
+      .mini-stack {
+        display: grid;
+        gap: 10px;
+      }
+
+      .modal-preview {
+        display: grid;
+        min-height: 360px;
+        place-items: center;
+        border-radius: 12px;
+        background: linear-gradient(135deg, rgba(15, 23, 42, 0.72), rgba(30, 41, 59, 0.66));
+        padding: 32px;
+      }
+
+      .modal {
+        width: min(460px, 100%);
+        overflow: hidden;
+        border-radius: 16px;
+        background: #ffffff;
+      }
+
+      .modal-head {
+        border-bottom: 1px solid var(--color-border);
+        padding: 24px;
+      }
+
+      .modal-body {
+        display: grid;
+        gap: 12px;
+        padding: 20px 28px;
+      }
+
+      .modal-foot {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 16px 24px;
+      }
+
+      .login-preview {
+        display: grid;
+        min-height: 420px;
+        place-items: center;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #0f172a, #1e293b, #1e3a5f);
+        padding: 32px;
+      }
+
+      .login-card {
+        width: min(420px, 100%);
+        border-radius: 16px;
+        background: #ffffff;
+        padding: 32px;
+      }
+
+      .login-title {
+        color: var(--color-title);
+        font-size: 26px;
+        font-weight: 700;
+        letter-spacing: 1px;
+        line-height: 1.3;
+      }
+
+      .principles {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .caption {
+        color: var(--color-text-secondary);
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
+      @media (max-width: 1180px) {
+        .page-shell {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          position: static;
+          height: auto;
+          border-right: 0;
+          border-bottom: 1px solid var(--color-border);
+        }
+
+        .nav {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .grid.four,
+        .grid.three,
+        .grid.two,
+        .type-scale-grid,
+        .button-spec-grid,
+        .principles {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .layout-body {
+          grid-template-columns: 160px minmax(0, 1fr);
+        }
+
+        .layout-chat {
+          display: none;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .topbar,
+        .content {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+
+        .nav,
+        .grid.four,
+        .grid.three,
+        .grid.two,
+        .type-scale-grid,
+        .button-spec-grid,
+        .principles {
+          grid-template-columns: 1fr;
+        }
+
+        .section-head,
+        .type-row,
+        .space-row {
+          grid-template-columns: 1fr;
+        }
+
+        .section-head {
+          display: grid;
+          align-items: start;
+        }
+
+        .topbar {
+          gap: 12px;
+        }
+
+        .search {
+          width: 100%;
+        }
+
+        .layout-body {
+          grid-template-columns: 1fr;
+        }
+
+        .layout-side {
+          display: none;
+        }
+
+        .table-wrap {
+          overflow-x: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">GEO</span>
+          <span>UI 规范确认</span>
+        </div>
+        <nav class="nav" aria-label="页面章节">
+          <a class="active" href="#principles"><span class="nav-dot"></span>设计原则</a>
+          <a href="#color"><span class="nav-dot"></span>Color Styles</a>
+          <a href="#type"><span class="nav-dot"></span>Typography</a>
+          <a href="#components"><span class="nav-dot"></span>组件状态</a>
+          <a href="#layout"><span class="nav-dot"></span>布局示例</a>
+          <a href="#login"><span class="nav-dot"></span>登录页</a>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="search">搜索规范、组件、色值</div>
+          <div class="avatar">FH</div>
+        </header>
+
+        <div class="content">
+          <section class="hero">
+            <div class="eyebrow">版本 v2.1 / 更新日期 2026-06-03</div>
+            <h1>GEO 助手 UI 设计规范可视化</h1>
+            <p class="muted">用于把 Markdown 规范转成可确认的设计稿：颜色、字号、间距、组件状态和核心页面结构都集中在这一页。</p>
+          </section>
+
+          <section id="principles" class="section">
+            <div class="section-head">
+              <h2>设计原则</h2>
+              <p class="caption">商务 / 专业 / 数据优先 / shadcn-lar 管理端方向</p>
+            </div>
+            <div class="principles">
+              <article class="card card-pad principle">
+                <h3>稳重克制</h3>
+                <p class="muted">低饱和度配色，清晰层级，不过度装饰。</p>
+              </article>
+              <article class="card card-pad principle">
+                <h3>数据优先</h3>
+                <p class="muted">突出数字、趋势、表格和 B2B 看板效率。</p>
+              </article>
+              <article class="card card-pad principle">
+                <h3>一致性</h3>
+                <p class="muted">统一间距、圆角、字体和组件状态。</p>
+              </article>
+              <article class="card card-pad principle">
+                <h3>可读性</h3>
+                <p class="muted">对比度充足，信息密度适中，适合长时间使用。</p>
+              </article>
+            </div>
+          </section>
+
+          <section id="color" class="section">
+            <div class="section-head">
+              <h2>品牌主色</h2>
+              <p class="caption">品牌主色仍按产品蓝色执行，中性色仅补充层级。</p>
+            </div>
+            <div class="grid four">
+              <article class="card swatch" style="--swatch: #1d4ed8">
+                <div class="swatch-color"></div>
+                <div class="swatch-body"><span class="token-name">Primary</span><span class="token-value">#1D4ED8 / 按钮、链接</span></div>
+              </article>
+              <article class="card swatch" style="--swatch: #1e40af">
+                <div class="swatch-color"></div>
+                <div class="swatch-body"><span class="token-name">Primary Hover</span><span class="token-value">#1E40AF / 悬浮</span></div>
+              </article>
+              <article class="card swatch" style="--swatch: #eff6ff">
+                <div class="swatch-color"></div>
+                <div class="swatch-body"><span class="token-name">Primary Light</span><span class="token-value">#EFF6FF / 激活背景</span></div>
+              </article>
+              <article class="card swatch" style="--swatch: #bfdbfe">
+                <div class="swatch-color"></div>
+                <div class="swatch-body"><span class="token-name">Primary Soft</span><span class="token-value">#BFDBFE / 次级强调</span></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <h2>Figma Neutral Color Styles</h2>
+              <p class="caption">该色组只定义中性层级，不从这里新增品牌色。</p>
+            </div>
+            <div class="grid three">
+              <article class="card card-pad">
+                <h3>Text</h3>
+                <div class="spec-table" style="margin-top: 16px">
+                  <table>
+                    <thead><tr><th>Style</th><th>Color</th></tr></thead>
+                    <tbody>
+                      <tr><td><span class="style-chip"><span class="style-swatch" style="--swatch: #000000"></span>文字/01重要</span></td><td>#000000</td></tr>
+                      <tr><td><span class="style-chip"><span class="style-swatch" style="--swatch: #666666"></span>文字/02次要</span></td><td>#666666</td></tr>
+                      <tr><td><span class="style-chip"><span class="style-swatch" style="--swatch: #999999"></span>文字/03提示</span></td><td>#999999</td></tr>
+                      <tr><td><span class="style-chip"><span class="style-swatch" style="--swatch: #b3b3b3"></span>文字/04占位</span></td><td>#B3B3B3</td></tr>
+                      <tr><td><span class="style-chip"><span class="style-swatch" style="--swatch: #cccccc"></span>文字/05失效</span></td><td>#CCCCCC</td></tr>
+                      <tr><td><span class="style-chip"><span class="style-swatch" style="--swatch: #ffffff"></span>文字/白字</span></td><td>#FFFFFF</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+              <article class="card card-pad">
+                <h3>Divider</h3>
+                <div class="spec-table" style="margin-top: 16px">
+                  <table>
+                    <thead><tr><th>Style</th><th>Color</th></tr></thead>
+                    <tbody>
+                      <tr><td><span class="style-chip"><span class="style-swatch" style="--swatch: #e5e5e5"></span>分割线/01深灰背景分割线</span></td><td>#E5E5E5</td></tr>
+                      <tr><td><span class="style-chip"><span class="style-swatch" style="--swatch: #eaeaea"></span>分割线/02浅灰背景分割线</span></td><td>#EAEAEA</td></tr>
+                      <tr><td><span class="style-chip"><span class="style-swatch" style="--swatch: #f3f3f3"></span>分割线/03白底分割线</span></td><td>#F3F3F3</td></tr>
+                      <tr><td><span class="style-chip"><span class="style-swatch" style="--swatch: #000000"></span>分割线/04选中</span></td><td>#000000</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+              <article class="card card-pad">
+                <h3>Background</h3>
+                <div class="spec-table" style="margin-top: 16px">
+                  <table>
+                    <thead><tr><th>Style</th><th>Color</th></tr></thead>
+                    <tbody>
+                      <tr><td><span class="style-chip"><span class="style-swatch" style="--swatch: #eaeaea"></span>背景/01选中背景</span></td><td>#EAEAEA</td></tr>
+                      <tr><td><span class="style-chip"><span class="style-swatch" style="--swatch: #f3f3f3"></span>背景/02深灰背景</span></td><td>#F3F3F3</td></tr>
+                      <tr><td><span class="style-chip"><span class="style-swatch" style="--swatch: #f9f9f9"></span>背景/03浅灰背景</span></td><td>#F9F9F9</td></tr>
+                      <tr><td><span class="style-chip"><span class="style-swatch" style="--swatch: #000000"></span>背景/黑色背景</span></td><td>#000000</td></tr>
+                      <tr><td><span class="style-chip"><span class="style-swatch" style="--swatch: #ffffff"></span>背景/白色背景</span></td><td>#FFFFFF</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+            </div>
+            <article class="card card-pad" style="margin-top: 16px">
+              <h3>Usage Notes</h3>
+              <ul class="usage-list" style="margin-top: 16px">
+                <li>Typography hierarchy 优先使用 <strong>文字/*</strong> 样式，不随意引入新的灰度色。</li>
+                <li>Borders、table separators、modal separators、sidebar lines 优先使用 <strong>分割线/*</strong> 样式。</li>
+                <li>Page surfaces、selected states、panel fills、empty-state blocks 优先使用 <strong>背景/*</strong> 样式。</li>
+                <li>不要从该 Figma color set 中引入新的 brand color；它只定义 neutral color styles。</li>
+              </ul>
+            </article>
+            <div class="card card-pad" style="margin-top: 16px">
+              <div class="tag-row">
+                <span class="tag success">Success #059669</span>
+                <span class="tag warning">Warning #D97706</span>
+                <span class="tag danger">Danger #DC2626</span>
+                <span class="tag info">Info #2563EB</span>
+              </div>
+            </div>
+          </section>
+
+          <section id="type" class="section">
+            <div class="section-head">
+              <h2>Typography</h2>
+              <p class="caption">Default font size is 14px；新增字号必须优先从下表选择。</p>
+            </div>
+            <div class="card card-pad">
+              <div class="type-row">
+                <span class="token-name">Default</span>
+                <span class="type-sample body">默认正文：14px / 20px，用于表格、表单、说明文字和普通信息展示。</span>
+                <span class="token-value">14px / 20px</span>
+              </div>
+              <div class="type-row">
+                <span class="token-name">H1</span>
+                <span class="type-sample h1">页面标题：发布方数据概览</span>
+                <span class="token-value">24px / 32px</span>
+              </div>
+              <div class="type-row">
+                <span class="token-name">H2</span>
+                <span class="type-sample h2">区块标题：待处理工单</span>
+                <span class="token-value">18px / 26px</span>
+              </div>
+              <div class="type-row">
+                <span class="token-name">H3</span>
+                <span class="type-sample h3">卡片标题：服务商履约质量</span>
+                <span class="token-value">16px / 24px</span>
+              </div>
+              <div class="type-row">
+                <span class="token-name">Caption</span>
+                <span class="type-sample caption">标签、辅助信息、时间戳</span>
+                <span class="token-value">12px / 16px</span>
+              </div>
+              <div class="type-row">
+                <span class="token-name">Data</span>
+                <span class="type-sample data">128,430</span>
+                <span class="token-value">32px / 40px</span>
+              </div>
+            </div>
+            <div class="type-scale-grid" style="margin-top: 16px">
+              <article class="type-scale-card"><div class="type-scale-sample" style="font-size: 12px; line-height: 16px">12px<br />Aa 数据</div><div class="token-value">Line Height 16px</div></article>
+              <article class="type-scale-card"><div class="type-scale-sample" style="font-size: 14px; line-height: 20px">14px<br />Aa 数据</div><div class="token-value">Line Height 20px</div></article>
+              <article class="type-scale-card"><div class="type-scale-sample" style="font-size: 16px; line-height: 24px">16px<br />Aa 数据</div><div class="token-value">Line Height 24px</div></article>
+              <article class="type-scale-card"><div class="type-scale-sample" style="font-size: 18px; line-height: 26px">18px<br />Aa 数据</div><div class="token-value">Line Height 26px</div></article>
+              <article class="type-scale-card"><div class="type-scale-sample" style="font-size: 20px; line-height: 28px">20px<br />Aa 数据</div><div class="token-value">Line Height 28px</div></article>
+              <article class="type-scale-card"><div class="type-scale-sample" style="font-size: 24px; line-height: 32px">24px<br />Aa 数据</div><div class="token-value">Line Height 32px</div></article>
+              <article class="type-scale-card"><div class="type-scale-sample" style="font-size: 28px; line-height: 36px">28px<br />Aa</div><div class="token-value">Line Height 36px</div></article>
+              <article class="type-scale-card"><div class="type-scale-sample" style="font-size: 32px; line-height: 40px">32px<br />Aa</div><div class="token-value">Line Height 40px</div></article>
+              <article class="type-scale-card"><div class="type-scale-sample" style="font-size: 36px; line-height: 44px">36px</div><div class="token-value">Line Height 44px</div></article>
+              <article class="type-scale-card"><div class="type-scale-sample" style="font-size: 40px; line-height: 48px">40px</div><div class="token-value">Line Height 48px</div></article>
+              <article class="type-scale-card"><div class="type-scale-sample" style="font-size: 48px; line-height: 56px">48</div><div class="token-value">Line Height 56px</div></article>
+              <article class="type-scale-card"><div class="type-scale-sample" style="font-size: 56px; line-height: 64px">56</div><div class="token-value">Line Height 64px</div></article>
+              <article class="type-scale-card"><div class="type-scale-sample" style="font-size: 64px; line-height: 72px">64</div><div class="token-value">Line Height 72px</div></article>
+              <article class="type-scale-card"><div class="type-scale-sample" style="font-size: 72px; line-height: 80px">72</div><div class="token-value">Line Height 80px</div></article>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <h2>间距与圆角</h2>
+              <p class="caption">4px 基准，卡片之间 16px，卡片内边距 24px，页面内边距 32px。</p>
+            </div>
+            <div class="grid two">
+              <article class="card card-pad">
+                <h3>间距刻度</h3>
+                <div class="space-scale" style="margin-top: 16px">
+                  <div class="space-row"><span>xs</span><span class="space-bar" style="--space: 4px"></span><span class="token-value">4px</span></div>
+                  <div class="space-row"><span>sm</span><span class="space-bar" style="--space: 8px"></span><span class="token-value">8px</span></div>
+                  <div class="space-row"><span>md</span><span class="space-bar" style="--space: 12px"></span><span class="token-value">12px</span></div>
+                  <div class="space-row"><span>base</span><span class="space-bar" style="--space: 16px"></span><span class="token-value">16px</span></div>
+                  <div class="space-row"><span>lg</span><span class="space-bar" style="--space: 24px"></span><span class="token-value">24px</span></div>
+                  <div class="space-row"><span>xl</span><span class="space-bar" style="--space: 32px"></span><span class="token-value">32px</span></div>
+                </div>
+              </article>
+              <article class="card card-pad">
+                <h3>圆角规则</h3>
+                <div class="grid two" style="margin-top: 16px">
+                  <div class="radius-demo" style="border-radius: 6px">sm 6</div>
+                  <div class="radius-demo" style="border-radius: 8px">md 8</div>
+                  <div class="radius-demo" style="border-radius: 12px">lg 12</div>
+                  <div class="radius-demo" style="border-radius: 16px">xl 16</div>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section id="components" class="section">
+            <div class="section-head">
+              <h2>组件状态</h2>
+              <p class="caption">按钮、输入框、标签、统计卡片、表格和弹窗。</p>
+            </div>
+            <div class="grid two">
+              <article class="card card-pad" style="grid-column: 1 / -1">
+                <h3>Buttons / Sizes</h3>
+                <div class="button-spec-grid" style="margin-top: 16px">
+                  <div class="spec-table">
+                    <table>
+                      <thead>
+                        <tr><th>Size</th><th>Font</th><th>Line</th><th>Padding</th><th>Min Height</th></tr>
+                      </thead>
+                      <tbody>
+                        <tr><td>md</td><td>14px</td><td>20px</td><td>10px 20px</td><td>40px</td></tr>
+                        <tr><td>sm</td><td>14px</td><td>20px</td><td>8px 18px</td><td>36px</td></tr>
+                        <tr><td>xs</td><td>14px</td><td>20px</td><td>6px 16px</td><td>32px</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="button-row">
+                    <button class="btn primary md">md 提交审核</button>
+                    <button class="btn secondary md">md 取消</button>
+                    <button class="btn primary sm">sm 卡片操作</button>
+                    <button class="btn secondary sm">sm 次要操作</button>
+                    <button class="btn primary xs">xs 行内操作</button>
+                    <button class="btn secondary xs">xs 查看</button>
+                  </div>
+                </div>
+              </article>
+              <article class="card card-pad">
+                <h3>表单</h3>
+                <div class="field-stack" style="margin-top: 16px">
+                  <label>任务名称<input placeholder="请输入发布任务名称" /></label>
+                  <label>任务类型<select><option>GEO 内容发布</option><option>品牌可见度分析</option></select></label>
+                  <label>备注<textarea placeholder="补充说明、审核要求或服务商注意事项"></textarea></label>
+                </div>
+              </article>
+            </div>
+
+            <div class="grid four" style="margin-top: 16px">
+              <article class="card card-pad stat">
+                <span class="stat-label">今日新增订单</span>
+                <span class="stat-number">328</span>
+                <div class="stat-foot"><span>较昨日</span><span class="tag success">+12.8%</span></div>
+              </article>
+              <article class="card card-pad stat">
+                <span class="stat-label">待处理工单</span>
+                <span class="stat-number">46</span>
+                <div class="stat-foot"><span>超时风险</span><span class="tag warning">8 项</span></div>
+              </article>
+              <article class="card card-pad stat">
+                <span class="stat-label">服务商通过率</span>
+                <span class="stat-number">94.2%</span>
+                <div class="stat-foot"><span>本周稳定</span><span class="tag info">正常</span></div>
+              </article>
+              <article class="card card-pad stat">
+                <span class="stat-label">异常内容</span>
+                <span class="stat-number">7</span>
+                <div class="stat-foot"><span>需复核</span><span class="tag danger">高优先级</span></div>
+              </article>
+            </div>
+
+            <div class="table-wrap" style="margin-top: 16px">
+              <table>
+                <thead>
+                  <tr>
+                    <th>订单编号</th>
+                    <th>发布方</th>
+                    <th>服务商</th>
+                    <th>状态</th>
+                    <th>更新时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>GEO-20260603-001</td>
+                    <td>星云科技</td>
+                    <td>晨光传媒</td>
+                    <td><span class="tag success">已交付</span></td>
+                    <td>2026-06-03 15:20</td>
+                  </tr>
+                  <tr>
+                    <td>GEO-20260603-002</td>
+                    <td>青桐智能</td>
+                    <td>蓝海内容</td>
+                    <td><span class="tag warning">待审核</span></td>
+                    <td>2026-06-03 14:48</td>
+                  </tr>
+                  <tr>
+                    <td>GEO-20260603-003</td>
+                    <td>云策咨询</td>
+                    <td>北辰工作室</td>
+                    <td><span class="tag danger">需修改</span></td>
+                    <td>2026-06-03 13:12</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <h2>弹窗示例</h2>
+              <p class="caption">圆角 16px，标题区 24px，内容区 20px 28px，底部按钮右对齐。</p>
+            </div>
+            <div class="modal-preview">
+              <div class="modal">
+                <div class="modal-head">
+                  <h3>确认提交审核</h3>
+                  <p class="muted">提交后服务商将收到新的内容审核任务。</p>
+                </div>
+                <div class="modal-body">
+                  <label>审核备注<textarea placeholder="请输入给审核人员的补充说明"></textarea></label>
+                </div>
+                <div class="modal-foot">
+                  <button class="btn secondary sm">取消</button>
+                  <button class="btn primary sm">确认提交</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="layout" class="section">
+            <div class="section-head">
+              <h2>管理端布局示例</h2>
+              <p class="caption">Header 56px，侧边栏 240px，内容区 32px，右侧聊天面板 360px 可折叠。</p>
+            </div>
+            <div class="layout-demo">
+              <div class="layout-top">
+                <strong style="color: var(--color-title)">GEO 管理后台</strong>
+                <span class="tag info">Header 56px</span>
+              </div>
+              <div class="layout-body">
+                <aside class="layout-side">
+                  <div class="mini-stack">
+                    <div class="mini-line dark" style="width: 68%"></div>
+                    <div class="mini-line blue" style="width: 92%"></div>
+                    <div class="mini-line" style="width: 76%"></div>
+                    <div class="mini-line" style="width: 84%"></div>
+                  </div>
+                </aside>
+                <section class="layout-main">
+                  <div class="grid two">
+                    <div class="surface-demo"><div class="mini-stack"><div class="mini-line dark" style="width: 45%"></div><div class="mini-line blue" style="width: 80%"></div><div class="mini-line" style="width: 64%"></div></div></div>
+                    <div class="surface-demo"><div class="mini-stack"><div class="mini-line dark" style="width: 50%"></div><div class="mini-line blue" style="width: 72%"></div><div class="mini-line" style="width: 88%"></div></div></div>
+                  </div>
+                  <div class="table-wrap" style="margin-top: 16px">
+                    <table>
+                      <thead><tr><th>模块</th><th>状态</th><th>负责人</th></tr></thead>
+                      <tbody><tr><td>订单审核</td><td><span class="tag warning">处理中</span></td><td>平台运营</td></tr><tr><td>数据看板</td><td><span class="tag success">正常</span></td><td>产品</td></tr></tbody>
+                    </table>
+                  </div>
+                </section>
+                <aside class="layout-chat">
+                  <h3>聊天面板</h3>
+                  <div class="mini-stack" style="margin-top: 16px">
+                    <div class="mini-line blue" style="width: 80%"></div>
+                    <div class="mini-line" style="width: 62%"></div>
+                    <div class="mini-line blue" style="width: 94%"></div>
+                    <div class="mini-line" style="width: 70%"></div>
+                  </div>
+                </aside>
+              </div>
+            </div>
+          </section>
+
+          <section id="login" class="section">
+            <div class="section-head">
+              <h2>登录页规范</h2>
+              <p class="caption">深蓝到深灰蓝渐变，登录卡片宽 420px，圆角 16px。</p>
+            </div>
+            <div class="login-preview">
+              <div class="login-card">
+                <div class="login-title">GEO 助手</div>
+                <p class="muted" style="margin-top: 8px">登录管理端，继续处理发布方、服务商与平台工单。</p>
+                <div class="field-stack" style="margin-top: 24px">
+                  <label>账号<input placeholder="请输入邮箱或手机号" /></label>
+                  <label>密码<input type="password" placeholder="请输入密码" /></label>
+                  <button class="btn primary" style="width: 100%">登录</button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

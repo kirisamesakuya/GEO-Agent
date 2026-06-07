@@ -1,0 +1,6 @@
+{
+  "name": "GEO 投放助手",
+  "description": "基于 AI 的 GEO 友好内容生成、品牌分析、投放计划与多账号绑定管理助手",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: geo-agent-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: geo_agent
+      POSTGRES_PASSWORD: geo_agent_dev
+      POSTGRES_DB: geo_agent_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - geo_agent_pgdata:/var/lib/postgresql/data
+
+volumes:
+  geo_agent_pgdata:

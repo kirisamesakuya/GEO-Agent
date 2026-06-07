@@ -1,0 +1,88 @@
+import { prisma } from './client.js';
+import { refreshSkillRoutesFromDb, type SkillRouteEntry } from '../lib/agent-skill.js';
+
+const DEFAULT_SKILL_ROUTE_ENTRIES: SkillRouteEntry[] = [
+  { taskType: 'article_generation', skillName: 'geo.article.generate', executor: 'direct_model', enabled: true, priority: 1 },
+  { taskType: 'geo_analysis', skillName: 'geo.analysis.run', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_quick_start', skillName: 'geo-quick-start', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_audit', skillName: 'geo-audit', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_schema', skillName: 'geo-schema', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_llmstxt', skillName: 'geo-llmstxt', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_citability', skillName: 'geo-citability', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_technical', skillName: 'geo-technical', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_crawlers', skillName: 'geo-crawlers', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_content', skillName: 'geo-content', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_platform_optimizer', skillName: 'geo-platform-optimizer', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_report_pdf', skillName: 'geo-report-pdf', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'geo_compare', skillName: 'geo-compare', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'campaign_plan', skillName: 'geo.campaign.plan', executor: 'direct_model', enabled: true, priority: 1 },
+  { taskType: 'website_preview', skillName: 'geo.website.preview', executor: 'direct_model', enabled: true, priority: 1 },
+  { taskType: 'brand_extract', skillName: 'geo-brand-mentions', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'hermes_publish', skillName: 'hermes.publish.auto', executor: 'hermes_gateway', enabled: true, priority: 2 },
+  { taskType: 'account_verify', skillName: 'geo.account.verify', executor: 'direct_model', enabled: true, priority: 1 },
+];
+
+const DEFAULT_SKILL_ROUTES = JSON.stringify(DEFAULT_SKILL_ROUTE_ENTRIES);
+
+async function mergeSkillRoutes() {
+  const row = await prisma.systemConfig.findUnique({ where: { key: 'skill_routes' } });
+  if (!row) return;
+
+  try {
+    const existing = JSON.parse(row.value) as SkillRouteEntry[];
+    const byType = new Map(existing.map((r) => [r.taskType, r]));
+    let changed = false;
+
+    for (const route of DEFAULT_SKILL_ROUTE_ENTRIES) {
+      if (!byType.has(route.taskType)) {
+        byType.set(route.taskType, route);
+        changed = true;
+      }
+    }
+
+    if (!changed) return;
+
+    const merged = [...byType.values()].sort(
+      (a, b) => (a.priority ?? 99) - (b.priority ?? 99)
+    );
+    await prisma.systemConfig.update({
+      where: { key: 'skill_routes' },
+      data: { value: JSON.stringify(merged) },
+    });
+  } catch {
+    // keep existing config if malformed
+  }
+}
+
+const DEFAULT_CONFIGS: Array<{ key: string; value: string }> = [
+  { key: 'platforms', value: JSON.stringify(['小红书', '知乎', '公众号', '网站']) },
+  { key: 'task_types', value: JSON.stringify(['种草', '探店', '问答覆盖', '测评', '网页设计', 'SEO/GEO 顾问']) },
+  { key: 'acceptance_methods', value: JSON.stringify(['截图证明', '链接回传', '数据复盘', '人工确认']) },
+  { key: 'budget_rules', value: JSON.stringify({ minBudget: 500, freezeRatio: 1, releaseOnComplete: true }) },
+  { key: 'model_config', value: JSON.stringify({ defaultModel: 'MiniMax-M3', provider: 'minimax', timeoutMs: 120000, maxRetries: 2 }) },
+  { key: 'automation_env', value: JSON.stringify({ hostName: 'dev-mac', browserPath: '', status: 'unknown' }) },
+  { key: 'hermes_executor_default', value: 'nous_hermes' },
+  { key: 'skill_routes', value: DEFAULT_SKILL_ROUTES },
+];
+
+/** Production-safe idempotent initialization: system config, skill routes, platform bindings. */
+export async function ensureRuntimeDefaults() {
+  const { cleanupLegacyHermesDeviceBinding } = await import(
+    '../services/hermes-binding.service.js'
+  );
+  await cleanupLegacyHermesDeviceBinding();
+
+  for (const { key, value } of DEFAULT_CONFIGS) {
+    const existing = await prisma.systemConfig.findUnique({ where: { key } });
+    if (!existing) {
+      await prisma.systemConfig.create({ data: { key, value } });
+    }
+  }
+
+  await mergeSkillRoutes();
+
+  const { ensurePlatformAccountBindings } = await import('../services/account-bind.service.js');
+  await ensurePlatformAccountBindings();
+
+  await refreshSkillRoutesFromDb();
+}
