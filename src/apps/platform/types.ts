@@ -21,6 +21,8 @@ export type PlatformView =
   | 'platform_members'
   | 'role_permissions'
   | 'menu_admin'
+  | 'media_platforms'
+  | 'custom_publish_platforms'
   | 'publisher_users'
   | 'provider_users'
   | 'configs'

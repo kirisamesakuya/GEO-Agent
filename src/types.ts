@@ -182,7 +182,7 @@ export interface BrandProfile {
 
 export interface AccountBinding {
   id: string;
-  platform: '小红书' | '知乎' | '微信公众号' | '大风网' | '一点号' | '任务接单端';
+  platform: string;
   accountName: string;
   status: '已授权' | '待授权' | '授权中' | '校验失败' | '待确认' | '正常';
   permissions: string;
@@ -200,6 +200,10 @@ export interface PlatformAuthConfig {
   permissionsLabel: string;
   loginHint?: string;
   oauthNote?: string;
+  isCustom?: boolean;
+  logoUrl?: string;
+  abbr?: string;
+  gradient?: string;
 }
 
 export interface PendingBindSession {

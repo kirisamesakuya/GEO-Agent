@@ -28,6 +28,8 @@ import PlatformProviderAccountsView from './views/PlatformProviderAccountsView';
 import PlatformUsersView from './views/PlatformUsersView';
 import PlatformProvidersView from './views/PlatformProvidersView';
 import PlatformMenuAdminView from './views/PlatformMenuAdminView';
+import PlatformMediaPlatformsView from './views/PlatformMediaPlatformsView';
+import PlatformCustomPublishPlatformsView from './views/PlatformCustomPublishPlatformsView';
 import PlatformFilterBar from './components/PlatformFilterBar';
 import PlatformFilterField, { PlatformFilterDateRange } from './components/PlatformFilterField';
 import { isPlatformViewEnabled, isPlatformViewVisibleForRole } from './platform-feature-flags';
@@ -290,6 +292,8 @@ export default function PlatformApp() {
           {(view === 'roles' || view === 'platform_members') && <PlatformRolesView section="members" />}
           {view === 'role_permissions' && <PlatformRolesView section="permissions" />}
           {view === 'menu_admin' && <PlatformMenuAdminView />}
+          {view === 'media_platforms' && <PlatformMediaPlatformsView />}
+          {view === 'custom_publish_platforms' && <PlatformCustomPublishPlatformsView />}
           {view === 'publisher_accounts' && <PlatformPublisherAccountsView section="balances" />}
           {view === 'publisher_deposits' && <PlatformPublisherAccountsView section="deposits" />}
           {view === 'provider_accounts' && <PlatformProviderAccountsView />}

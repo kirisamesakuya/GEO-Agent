@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ExternalLink, Loader2, RefreshCw, Settings2, Unlock, X } from 'lucide-react';
+import { ExternalLink, Loader2, Plus, RefreshCw, Settings2, Unlock, X } from 'lucide-react';
 import { usePlatformAccountAuth } from '../hooks/usePlatformAccountAuth';
-import { fetchPlatformAuthConfig } from '../lib/platform-auth-client';
+import { useToast } from '../context/ToastContext';
+import {
+  CUSTOM_PLATFORM_HINT_MAX,
+  CUSTOM_PLATFORM_NAME_MAX,
+  CUSTOM_PLATFORM_URL_MAX,
+  DEFAULT_CUSTOM_PLATFORM_GRADIENT,
+  defaultCustomPlatformAbbr,
+  validateCustomPlatformInput,
+} from '../../lib/custom-publish-platform';
+import type { MediaPlatformCatalogEntry } from '../lib/media-platform-catalog';
+import PlatformLogoUpload from './common/PlatformLogoUpload';
+import { fetchPlatformAuthConfig, getBundledPlatformAuthConfig } from '../lib/platform-auth-client';
 import {
   PUBLISH_ACCOUNT_SECTION_TITLE,
   bindingToLoginStatus,
@@ -12,6 +23,7 @@ import {
 import type { AccountBinding, PlatformAuthConfig, ViewType } from '../types';
 import BrandSwitcher from './common/BrandSwitcher';
 import HermesStatusStrip from './hermes/HermesStatusStrip';
+import PlatformBadge from './common/PlatformBadge';
 
 interface AssignmentRow {
   id: string;
@@ -37,6 +49,7 @@ interface Props {
 }
 
 export default function PublishAccountManageView({ brandName, onBrandChange, onNavigate }: Props) {
+  const { toast } = useToast();
   const scopeBrand = brandName && brandName !== '__all__' ? brandName : '';
   const [platformConfig, setPlatformConfig] = useState<PlatformAuthConfig[]>([]);
   const [drawer, setDrawer] = useState<DrawerMeta | null>(null);
@@ -44,6 +57,17 @@ export default function PublishAccountManageView({ brandName, onBrandChange, onN
   const [bindingMeta, setBindingMeta] = useState<
     Record<string, { adAccountId?: string; ownerType?: string; ownerName?: string }>
   >({});
+  const [showAddPlatform, setShowAddPlatform] = useState(false);
+  const [newPlatformName, setNewPlatformName] = useState('');
+  const [newPlatformLogoUrl, setNewPlatformLogoUrl] = useState('');
+  const [newPlatformUrl, setNewPlatformUrl] = useState('');
+  const [newPlatformHint, setNewPlatformHint] = useState('');
+  const [addPlatformError, setAddPlatformError] = useState('');
+  const [addingPlatform, setAddingPlatform] = useState(false);
+
+  const reloadPlatformConfig = useCallback(() => {
+    void fetchPlatformAuthConfig(scopeBrand || undefined).then(setPlatformConfig);
+  }, [scopeBrand]);
 
   const loadBindingMeta = useCallback(() => {
     if (!scopeBrand) {
@@ -72,14 +96,108 @@ export default function PublishAccountManageView({ brandName, onBrandChange, onN
 
   useEffect(() => {
     loadBindingMeta();
-    void fetchPlatformAuthConfig().then(setPlatformConfig);
-  }, [loadBindingMeta]);
+    reloadPlatformConfig();
+  }, [loadBindingMeta, reloadPlatformConfig]);
 
   const configByPlatform = useMemo(() => {
     const m: Record<string, PlatformAuthConfig> = {};
     for (const c of platformConfig) m[c.platform] = c;
     return m;
   }, [platformConfig]);
+
+  const customPlatformNames = useMemo(
+    () => new Set(platformConfig.filter((c) => c.isCustom).map((c) => c.platform)),
+    [platformConfig]
+  );
+
+  const customBadgeCatalog = useMemo((): MediaPlatformCatalogEntry[] => {
+    return platformConfig
+      .filter((c) => c.isCustom)
+      .map((c) => ({
+        id: c.platform,
+        label: c.platform,
+        category: 'content_publish' as const,
+        sortOrder: 0,
+        enabled: true,
+        logoUrl: c.logoUrl,
+        abbr: c.abbr ?? defaultCustomPlatformAbbr(c.platform),
+        gradient: c.gradient ?? DEFAULT_CUSTOM_PLATFORM_GRADIENT,
+      }));
+  }, [platformConfig]);
+
+  const resetAddPlatformForm = () => {
+    setNewPlatformName('');
+    setNewPlatformLogoUrl('');
+    setNewPlatformUrl('');
+    setNewPlatformHint('');
+    setAddPlatformError('');
+  };
+
+  const closeAddPlatformModal = (force = false) => {
+    if (!force && addingPlatform) return;
+    setShowAddPlatform(false);
+    resetAddPlatformForm();
+  };
+
+  const submitCustomPlatform = async () => {
+    if (!scopeBrand) return;
+    const builtinNames = getBundledPlatformAuthConfig().map((c) => c.platform);
+    const existingCustom = platformConfig
+      .filter((c) => c.isCustom)
+      .map((c) => ({
+        platform: c.platform,
+        logoUrl: c.logoUrl,
+        abbr: c.abbr,
+        gradient: c.gradient,
+        loginUrl: c.loginUrl || undefined,
+        loginHint: c.loginHint,
+        permissionsLabel: c.permissionsLabel,
+        createdAt: '',
+      }));
+    const validation = validateCustomPlatformInput(
+      {
+        platform: newPlatformName,
+        logoUrl: newPlatformLogoUrl,
+        loginUrl: newPlatformUrl,
+        loginHint: newPlatformHint,
+      },
+      builtinNames,
+      existingCustom,
+      auth.accounts.map((a) => a.platform)
+    );
+    if (!validation.ok) {
+      setAddPlatformError(validation.error);
+      return;
+    }
+    setAddingPlatform(true);
+    setAddPlatformError('');
+    try {
+      const res = await fetch('/api/accounts/custom-platforms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform: validation.normalized.platform,
+          logoUrl: validation.normalized.logoUrl,
+          loginUrl: validation.normalized.loginUrl,
+          loginHint: validation.normalized.loginHint,
+          brandName: scopeBrand,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setAddPlatformError(data.error ?? '添加失败');
+        return;
+      }
+      auth.loadAccounts();
+      reloadPlatformConfig();
+      toast(`已添加发布平台「${validation.normalized.platform}」`, 'success');
+      closeAddPlatformModal(true);
+    } catch {
+      setAddPlatformError('网络异常，请稍后重试');
+    } finally {
+      setAddingPlatform(false);
+    }
+  };
 
   const overview = useMemo(() => {
     const loggedIn = auth.accounts.filter((a) => isPublishReady(a.status)).length;
@@ -237,6 +355,20 @@ export default function PublishAccountManageView({ brandName, onBrandChange, onN
               ))}
             </div>
 
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs" style={{ color: 'var(--neutral-text-03)' }}>
+                系统内置平台与品牌自定义渠道；自定义平台仅当前品牌可见。
+              </p>
+              <button
+                type="button"
+                className="geo-btn-primary geo-btn-sm inline-flex items-center gap-1"
+                onClick={() => setShowAddPlatform(true)}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                新增发布平台
+              </button>
+            </div>
+
             <div className="geo-table-wrap">
               <table className="geo-table geo-table--compact">
                 <thead>
@@ -267,7 +399,14 @@ export default function PublishAccountManageView({ brandName, onBrandChange, onN
                         className="cursor-pointer"
                         onClick={() => openDrawer(binding)}
                       >
-                        <td className="font-medium">{binding.platform}</td>
+                        <td className="font-medium">
+                          <span className="inline-flex items-center gap-1.5 flex-wrap">
+                            <PlatformBadge label={binding.platform} catalog={customBadgeCatalog} size="sm" />
+                            {customPlatformNames.has(binding.platform) && (
+                              <span className="geo-tag text-[10px]">自定义</span>
+                            )}
+                          </span>
+                        </td>
                         <td>{displayName}</td>
                         <td>
                           <span className={`geo-tag text-[10px] ${login.tagClass}`}>{login.label}</span>
@@ -316,8 +455,17 @@ export default function PublishAccountManageView({ brandName, onBrandChange, onN
             <section>
               <h4 className="font-semibold mb-2" style={{ color: 'var(--neutral-text-01)' }}>登录指引</h4>
               <ol className="list-decimal list-inside space-y-1" style={{ color: 'var(--neutral-text-02)' }}>
-                <li>点击「去登录」打开 {drawer.platform} 官方登录页</li>
-                <li>在本机浏览器完成扫码或密码登录</li>
+                {configByPlatform[drawer.platform]?.loginUrl ? (
+                  <>
+                    <li>点击「去登录」打开 {drawer.platform} 官方登录页</li>
+                    <li>在本机浏览器完成扫码或密码登录</li>
+                  </>
+                ) : (
+                  <>
+                    <li>在浏览器中打开 {drawer.platform} 自媒体或创作者后台</li>
+                    <li>完成账号登录（自定义渠道未配置固定登录地址）</li>
+                  </>
+                )}
                 <li>返回本页点击「我已完成登录，检测账号」</li>
               </ol>
               {configByPlatform[drawer.platform]?.loginHint && (
@@ -376,6 +524,118 @@ export default function PublishAccountManageView({ brandName, onBrandChange, onN
 
             <div className="pt-2 border-t" style={{ borderColor: 'var(--neutral-divider-02)' }}>
               {renderActions(drawer.binding)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddPlatform && (
+        <div className="geo-modal-backdrop" role="dialog" aria-modal="true">
+          <div className="geo-modal max-w-md relative">
+            <button
+              type="button"
+              onClick={closeAddPlatformModal}
+              disabled={addingPlatform}
+              className="absolute top-5 right-5 p-1 geo-nav-item rounded-lg disabled:opacity-50"
+              style={{ color: 'var(--neutral-text-03)' }}
+              aria-label="关闭"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="geo-modal-head">
+              <h3 className="font-bold text-sm" style={{ color: 'var(--neutral-text-01)' }}>
+                新增发布平台
+              </h3>
+              <p className="text-xs mt-1" style={{ color: 'var(--neutral-text-03)' }}>
+                添加品牌独有的发布渠道，仅当前品牌可见。登录地址可选，留空时需手动打开平台后台。
+              </p>
+            </div>
+            <div className="geo-modal-body space-y-3">
+              <div>
+                <label className="geo-label block mb-1.5" htmlFor="custom-platform-name">
+                  平台名称 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="custom-platform-name"
+                  value={newPlatformName}
+                  onChange={(e) => setNewPlatformName(e.target.value.slice(0, CUSTOM_PLATFORM_NAME_MAX))}
+                  placeholder="例如：百家号、搜狐号"
+                  className="geo-input w-full"
+                  disabled={addingPlatform}
+                  autoFocus
+                />
+                <p className="text-[10px] mt-1" style={{ color: 'var(--neutral-text-03)' }}>
+                  {newPlatformName.length}/{CUSTOM_PLATFORM_NAME_MAX} 字
+                </p>
+              </div>
+              <div>
+                <label className="geo-label block mb-1.5">平台 LOGO</label>
+                <PlatformLogoUpload
+                  label={newPlatformName.trim() || '预览'}
+                  logoUrl={newPlatformLogoUrl}
+                  onChange={setNewPlatformLogoUrl}
+                  disabled={addingPlatform}
+                  catalogEntry={{
+                    id: 'preview',
+                    label: newPlatformName.trim() || '预览',
+                    category: 'content_publish',
+                    sortOrder: 0,
+                    enabled: true,
+                    abbr: defaultCustomPlatformAbbr(newPlatformName),
+                    gradient: DEFAULT_CUSTOM_PLATFORM_GRADIENT,
+                  }}
+                />
+              </div>
+              <div>
+                <label className="geo-label block mb-1.5" htmlFor="custom-platform-url">
+                  登录地址（可选）
+                </label>
+                <input
+                  id="custom-platform-url"
+                  value={newPlatformUrl}
+                  onChange={(e) => setNewPlatformUrl(e.target.value.slice(0, CUSTOM_PLATFORM_URL_MAX))}
+                  placeholder="https://..."
+                  className="geo-input w-full"
+                  disabled={addingPlatform}
+                />
+              </div>
+              <div>
+                <label className="geo-label block mb-1.5" htmlFor="custom-platform-hint">
+                  登录提示（可选）
+                </label>
+                <textarea
+                  id="custom-platform-hint"
+                  value={newPlatformHint}
+                  onChange={(e) => setNewPlatformHint(e.target.value.slice(0, CUSTOM_PLATFORM_HINT_MAX))}
+                  placeholder="例如：使用手机号验证码登录创作者中心"
+                  className="geo-input w-full min-h-[72px] resize-y"
+                  disabled={addingPlatform}
+                />
+                <p className="text-[10px] mt-1" style={{ color: 'var(--neutral-text-03)' }}>
+                  {newPlatformHint.length}/{CUSTOM_PLATFORM_HINT_MAX} 字
+                </p>
+              </div>
+              {addPlatformError && (
+                <p className="text-xs text-red-600">{addPlatformError}</p>
+              )}
+            </div>
+            <div className="geo-modal-foot">
+              <button
+                type="button"
+                className="geo-btn-secondary geo-btn-sm"
+                onClick={closeAddPlatformModal}
+                disabled={addingPlatform}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="geo-btn-primary geo-btn-sm"
+                disabled={addingPlatform || !newPlatformName.trim()}
+                onClick={() => void submitCustomPlatform()}
+              >
+                {addingPlatform ? '添加中…' : '确认添加'}
+              </button>
             </div>
           </div>
         </div>

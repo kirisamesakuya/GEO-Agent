@@ -40,6 +40,8 @@ export const ROLE_PERMISSIONS: Record<PlatformRole, string[]> = {
     'funds.deposit',
     'merchant.disable',
     'config.write',
+    'media_platforms',
+    'custom_publish_platforms',
     'orders.assign',
     'orders.reassign',
     'settlement.write',

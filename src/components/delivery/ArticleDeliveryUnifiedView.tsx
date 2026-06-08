@@ -7,6 +7,8 @@ import type { ViewType, AccountBinding, ContentBatch } from '../../types';
 import { useToast } from '../../context/ToastContext';
 
 import GeoListPageShell from '../common/GeoListPageShell';
+import PlatformBadge from '../common/PlatformBadge';
+import { useMediaPlatformCatalog } from '../../hooks/useMediaPlatformCatalog';
 
 import HermesWorkingOverlay from '../common/HermesWorkingOverlay';
 
@@ -17,6 +19,8 @@ import {
   ARTICLE_DELIVERY_ACTION_LABEL,
 
   ARTICLE_DELIVERY_PLATFORM_OPTIONS,
+
+  buildArticleDeliveryPlatformOptions,
 
   ARTICLE_DELIVERY_SOURCE_LABEL,
 
@@ -107,6 +111,14 @@ export default function ArticleDeliveryUnifiedView({
 }: Props) {
 
   const { toast } = useToast();
+  const { platforms: platformCatalog } = useMediaPlatformCatalog('publish');
+  const platformFilterOptions = useMemo(
+    () =>
+      platformCatalog.length
+        ? buildArticleDeliveryPlatformOptions(platformCatalog.map((item) => item.label))
+        : ARTICLE_DELIVERY_PLATFORM_OPTIONS,
+    [platformCatalog]
+  );
 
   const [rows, setRows] = useState<ArticleDeliveryRow[]>([]);
 
@@ -716,7 +728,7 @@ export default function ArticleDeliveryUnifiedView({
 
             >
 
-              {ARTICLE_DELIVERY_PLATFORM_OPTIONS.map((o) => (
+              {platformFilterOptions.map((o) => (
 
                 <option key={o.id || 'all'} value={o.id}>
 
@@ -1064,7 +1076,9 @@ export default function ArticleDeliveryUnifiedView({
 
                         </td>
 
-                        <td className="text-xs whitespace-nowrap">{row.platform}</td>
+                        <td className="text-xs whitespace-nowrap">
+                          <PlatformBadge label={row.platform} catalog={platformCatalog} />
+                        </td>
 
                         <td className="text-xs max-w-[140px] truncate">{row.ownerLabel}</td>
 

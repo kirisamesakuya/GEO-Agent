@@ -81,11 +81,16 @@ export const ARTICLE_DELIVERY_QUICK_SOURCE_FILTERS: ArticleDeliverySource[] = [
 
 export const ARTICLE_DELIVERY_PLATFORM_OPTIONS = [
   { id: '', label: '全部平台' },
-  { id: '小红书', label: '小红书' },
-  { id: '知乎', label: '知乎' },
-  { id: '公众号', label: '公众号' },
   { id: '多平台', label: '多平台' },
 ];
+
+export function buildArticleDeliveryPlatformOptions(labels: string[]) {
+  return [
+    { id: '', label: '全部平台' },
+    ...labels.map((label) => ({ id: label, label })),
+    { id: '多平台', label: '多平台' },
+  ];
+}
 
 export const ARTICLE_DELIVERY_SOURCE_LABEL: Record<ArticleDeliverySource, string> = {
   ai_generated: 'AI生成',

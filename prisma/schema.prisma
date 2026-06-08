@@ -45,6 +45,8 @@ model Brand {
   forbiddenWords  String
   /// 品牌资料参考材料 JSON：[{ id, kind, name, url, mimeType? }]
   sourceMaterials String           @default("[]")
+  /// 品牌自定义发布平台 JSON：[{ platform, loginUrl?, loginHint?, permissionsLabel?, createdAt }]
+  customPublishPlatforms String    @default("[]")
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   accountBindings AccountBinding[]

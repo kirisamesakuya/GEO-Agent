@@ -49,7 +49,7 @@ export function usePlatformAccountAuth(brandName: string, onAccountsUpdated?: ()
 
   useEffect(() => {
     loadAccounts();
-    void fetchPlatformAuthConfig().then(setPlatformConfig);
+    void fetchPlatformAuthConfig(scopeBrand || undefined).then(setPlatformConfig);
     fetch('/api/hermes/health')
       .then((res) => res.json())
       .then((data) => setHermesOk(Boolean(data.ok)))
@@ -99,13 +99,12 @@ export function usePlatformAccountAuth(brandName: string, onAccountsUpdated?: ()
       return;
     }
     const cfg = configByPlatform[acc.platform];
-    const loginUrl = cfg?.loginUrl;
-    if (!loginUrl) {
-      toast('平台登录地址未加载，请刷新页面后重试', 'error');
-      return;
+    const loginUrl = cfg?.loginUrl?.trim();
+    let opened = false;
+    if (loginUrl) {
+      opened = openPlatformLogin(loginUrl);
+      if (!opened) toast('浏览器拦截了新标签页，请允许弹窗', 'error');
     }
-    const opened = openPlatformLogin(loginUrl);
-    if (!opened) toast('浏览器拦截了新标签页，请允许弹窗', 'error');
     setLoadingId(acc.id);
     fetch('/api/accounts/bind/start', {
       method: 'POST',
@@ -130,7 +129,14 @@ export function usePlatformAccountAuth(brandName: string, onAccountsUpdated?: ()
             platform: acc.platform,
           },
         }));
-        toast(cfg?.loginHint ?? `已打开 ${acc.platform} 登录页`, 'info');
+        toast(
+          cfg?.loginHint ??
+            (loginUrl
+              ? `已打开 ${acc.platform} 登录页`
+              : `请在浏览器打开 ${acc.platform} 后台完成登录，然后点击确认`)
+          ,
+          'info'
+        );
       })
       .finally(() => setLoadingId(null));
   };

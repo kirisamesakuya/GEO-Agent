@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ViewType } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import AgentInputCard from '../common/AgentInputCard';
@@ -10,19 +10,21 @@ import { navigateToAgentTasks } from '../common/AgentTaskProgressLink';
 import type { AgentTask, AgentTaskStatus } from '../../types';
 import { submitGeoAgentTask } from '../../lib/geo-audit-client';
 import { DEFAULT_GEO_AI_PLATFORMS, GEO_AI_PLATFORM_LABELS } from '../../../lib/media-platforms';
+import { FieldCharLimitBox, FieldLimitLabel, fieldCharLimitInputClass } from '../common/FieldCharLimit';
+import {
+  BRAND_DESCRIPTION_MAX,
+  BRAND_NAME_MAX,
+  validateBrandProfileText,
+} from '../../lib/brand-profile-limits';
 import { useHermesSubmitGuard } from '../hermes/HermesSubmitGuard';
 import {
   CheckCircle2,
   Circle,
-  ClipboardCheck,
-  FileText,
-  FileUp,
-  Image as ImageIcon,
   Link as LinkIcon,
   Plus,
   Search,
-  Trash2,
   Wand2,
+  X,
 } from 'lucide-react';
 
 interface Props {
@@ -31,7 +33,6 @@ interface Props {
   onOpenHistory?: (reportId?: string) => void;
 }
 
-type MaterialKind = 'link' | 'image' | 'document' | 'text';
 type OutputType = 'visibility' | 'technical' | 'content' | 'assets';
 type AnalysisDepth = 'quick' | 'deep';
 
@@ -70,8 +71,7 @@ const DEPTH_CONFIG: Record<
     skill: 'geo-quick-start',
     titleSuffix: 'GEO 快速检测',
     cardTitle: 'GEO 快速检测',
-    cardDescription:
-      '上传或粘贴材料后，AI 自动拆解轻量检测方案（平台提及、内容缺口）；确认后提交 Hermes 执行。',
+    cardDescription: '填写品牌资料，确认方案后检测 AI 平台提及与内容缺口。',
     submitLabel: '提交 Hermes 快速检测',
     completeToast: 'GEO 快速检测完成',
     outputs: QUICK_OUTPUTS,
@@ -82,8 +82,7 @@ const DEPTH_CONFIG: Record<
     skill: 'geo-audit',
     titleSuffix: 'GEO 深度分析',
     cardTitle: 'GEO 深度分析',
-    cardDescription:
-      '上传或粘贴材料后，AI 自动拆解完整检测方案（平台提及、官网技术、内容引用、技术资产）；确认后提交 Hermes 执行。',
+    cardDescription: '填写品牌资料，确认方案后输出全模块 GEO 检测与技术资产建议。',
     submitLabel: '提交 Hermes 深度分析',
     completeToast: 'GEO 深度分析完成',
     outputs: DEEP_OUTPUTS,
@@ -91,35 +90,24 @@ const DEPTH_CONFIG: Record<
   },
 };
 
-interface MaterialInput {
-  id: string;
-  kind: MaterialKind;
-  name: string;
-  value: string;
-}
-
 function splitList(value: string): string[] {
   return value.split(/[,，\n]/).map((s) => s.trim()).filter(Boolean);
 }
 
-function materialIcon(kind: MaterialKind) {
-  if (kind === 'image') return ImageIcon;
-  if (kind === 'document') return FileText;
-  if (kind === 'link') return LinkIcon;
-  return ClipboardCheck;
-}
+const REFERENCE_LINK_MAX = 10;
 
 export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory }: Props) {
   const { toast } = useToast();
   const { ensureHermesReady, showHermesError } = useHermesSubmitGuard();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [name, setName] = useState(brandName === '__all__' ? '' : brandName);
+  const [name, setName] = useState(() =>
+    (brandName === '__all__' ? '' : brandName).slice(0, BRAND_NAME_MAX)
+  );
   const [city, setCity] = useState('');
   const [services, setServices] = useState('');
   const [websiteUrl, setWebsiteUrl] = useState('');
-  const [materialUrl, setMaterialUrl] = useState('');
+  const [referenceLinks, setReferenceLinks] = useState<string[]>([]);
+  const [linkDraft, setLinkDraft] = useState('');
   const [freeText, setFreeText] = useState('');
-  const [materials, setMaterials] = useState<MaterialInput[]>([]);
   const [platforms, setPlatforms] = useState<string[]>([...DEFAULT_GEO_AI_PLATFORMS, 'Kimi']);
   const [analysisDepth, setAnalysisDepth] = useState<AnalysisDepth>('quick');
   const [planConfirmed, setPlanConfirmed] = useState(false);
@@ -130,7 +118,8 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
   const [queueHint, setQueueHint] = useState<TaskQueueHint | null>(null);
 
   const serviceList = useMemo(() => splitList(services), [services]);
-  const evidenceCount = materials.length + (websiteUrl.trim() ? 1 : 0) + (freeText.trim() ? 1 : 0);
+  const evidenceCount =
+    (websiteUrl.trim() ? 1 : 0) + referenceLinks.length + (freeText.trim() ? 1 : 0);
 
   const readinessChecklist = useMemo(
     () => [
@@ -143,6 +132,7 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
   );
 
   const depthConfig = DEPTH_CONFIG[analysisDepth];
+  const activeDepthOption = ANALYSIS_DEPTH_OPTIONS.find((o) => o.id === analysisDepth)!;
 
   const aiPlan = useMemo(() => {
     const missing = readinessChecklist.filter((item) => !item.done).map((item) => item.label);
@@ -195,44 +185,42 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
     setPlatforms((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
   };
 
-  const addLinkMaterial = () => {
-    const value = materialUrl.trim();
-    if (!value) return;
+  const addReferenceLink = () => {
+    const url = linkDraft.trim();
+    if (!url) return;
+    if (referenceLinks.length >= REFERENCE_LINK_MAX) {
+      toast(`最多添加 ${REFERENCE_LINK_MAX} 条参考链接`, 'error');
+      return;
+    }
+    if (referenceLinks.includes(url)) {
+      toast('该链接已添加', 'error');
+      return;
+    }
     setPlanConfirmed(false);
-    setMaterials((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), kind: 'link', name: value.replace(/^https?:\/\//, '').slice(0, 42), value },
-    ]);
-    setMaterialUrl('');
+    setReferenceLinks((prev) => [...prev, url]);
+    setLinkDraft('');
   };
 
-  const addTextMaterial = () => {
-    const value = freeText.trim();
-    if (!value) return;
+  const removeReferenceLink = (index: number) => {
     setPlanConfirmed(false);
-    setMaterials((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), kind: 'text', name: `补充说明 ${prev.filter((m) => m.kind === 'text').length + 1}`, value },
-    ]);
-    setFreeText('');
-  };
-
-  const addFiles = (files: FileList | null) => {
-    if (!files?.length) return;
-    setPlanConfirmed(false);
-    const next = Array.from(files).map((file) => ({
-      id: crypto.randomUUID(),
-      kind: file.type.startsWith('image/') ? 'image' : 'document',
-      name: file.name,
-      value: `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)}MB · ${file.type || 'unknown'}`,
-    })) satisfies MaterialInput[];
-    setMaterials((prev) => [...prev, ...next]);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    setReferenceLinks((prev) => prev.filter((_, i) => i !== index));
   };
 
   const submit = async () => {
+    const profileError = validateBrandProfileText({
+      name,
+      description: freeText.trim() ? freeText : undefined,
+    });
+    if (profileError) {
+      toast(profileError, 'error');
+      return;
+    }
     if (!name.trim()) {
       toast('请填写品牌名称', 'error');
+      return;
+    }
+    if (services.trim().length > BRAND_DESCRIPTION_MAX) {
+      toast(`产品/服务不能超过 ${BRAND_DESCRIPTION_MAX} 字`, 'error');
       return;
     }
     if (!planConfirmed) {
@@ -260,9 +248,16 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
         requestedOutputs: depthConfig.outputs,
         sourceMaterials: [
           ...(websiteUrl.trim()
-            ? [{ kind: 'link', name: '官网 URL', value: websiteUrl.trim() }]
+            ? [{ kind: 'link' as const, name: '官网 URL', value: websiteUrl.trim() }]
             : []),
-          ...materials,
+          ...referenceLinks.map((url, index) => ({
+            kind: 'link' as const,
+            name: referenceLinks.length > 1 ? `参考链接 ${index + 1}` : '参考链接',
+            value: url,
+          })),
+          ...(freeText.trim()
+            ? [{ kind: 'text' as const, name: '补充说明', value: freeText.trim() }]
+            : []),
         ],
         plannedQuestions: aiPlan.questions,
         plannedModules: aiPlan.modules,
@@ -287,31 +282,39 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
     setLoading(false);
   };
 
+  const analysisDepthSwitcher = (
+    <div
+      className="flex h-full shrink-0 items-center gap-1 p-1 rounded-lg bg-[var(--neutral-bg-03)]"
+      role="group"
+      aria-label="分析模式"
+    >
+      {ANALYSIS_DEPTH_OPTIONS.map((opt) => (
+        <button
+          key={opt.id}
+          type="button"
+          onClick={() => switchAnalysisDepth(opt.id)}
+          className={`h-full min-h-[2.5rem] text-xs px-3 rounded-md font-medium transition whitespace-nowrap ${
+            analysisDepth === opt.id
+              ? 'bg-white text-[var(--color-primary)] shadow-sm'
+              : 'text-[var(--neutral-text-02)] hover:text-[var(--color-title)]'
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
       <div className="flex-1 min-h-0 overflow-y-auto geo-page-content space-y-4 max-w-4xl">
         <AgentInputCard
           title={depthConfig.cardTitle}
           description={depthConfig.cardDescription}
+          headerLeading={analysisDepthSwitcher}
           footer={
-            <div className="flex flex-col gap-2 w-full">
-              <div className="flex flex-wrap gap-2 p-1 rounded-lg bg-[var(--neutral-bg-03)] w-full sm:w-auto">
-                {ANALYSIS_DEPTH_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => switchAnalysisDepth(opt.id)}
-                    className={`flex-1 sm:flex-none text-xs px-3 py-2 rounded-md font-medium transition ${
-                      analysisDepth === opt.id
-                        ? 'bg-white text-[var(--color-primary)] shadow-sm'
-                        : 'text-[var(--neutral-text-02)] hover:text-[var(--color-title)]'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-2 w-full sm:flex-row sm:justify-end sm:items-center">
+              <div className="flex flex-wrap gap-2 sm:ml-auto">
                 <button
                   type="button"
                   className="geo-btn-secondary text-sm"
@@ -333,7 +336,7 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
                 </button>
               </div>
               {!taskId && loading && (
-                <p className="text-xs text-[var(--neutral-text-03)]">正在创建任务…</p>
+                <p className="text-xs text-[var(--neutral-text-03)] sm:w-full">正在创建任务…</p>
               )}
             </div>
           }
@@ -341,15 +344,18 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
           <div className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-3">
               <div>
-                <label className="geo-label">品牌名称 *</label>
-                <input
-                  className="geo-input w-full mt-1"
-                  value={name}
-                  onChange={(e) => {
-                    setPlanConfirmed(false);
-                    setName(e.target.value);
-                  }}
-                />
+                <FieldLimitLabel label="品牌名称 *" className="block mb-1" />
+                <FieldCharLimitBox current={name.length} max={BRAND_NAME_MAX} className="mt-0">
+                  <input
+                    className={`geo-input w-full ${fieldCharLimitInputClass()}`}
+                    value={name}
+                    maxLength={BRAND_NAME_MAX}
+                    onChange={(e) => {
+                      setPlanConfirmed(false);
+                      setName(e.target.value.slice(0, BRAND_NAME_MAX));
+                    }}
+                  />
+                </FieldCharLimitBox>
               </div>
               <div>
                 <label className="geo-label">城市 / 目标市场</label>
@@ -367,16 +373,19 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
 
             <div className="grid sm:grid-cols-2 gap-3">
               <div>
-                <label className="geo-label">产品 / 服务</label>
-                <input
-                  className="geo-input w-full mt-1"
-                  value={services}
-                  onChange={(e) => {
-                    setPlanConfirmed(false);
-                    setServices(e.target.value);
-                  }}
-                  placeholder="种植牙, 隐形矫正"
-                />
+                <FieldLimitLabel label="产品 / 服务" className="block mb-1" />
+                <FieldCharLimitBox current={services.length} max={BRAND_DESCRIPTION_MAX}>
+                  <input
+                    className={`geo-input w-full ${fieldCharLimitInputClass()}`}
+                    value={services}
+                    maxLength={BRAND_DESCRIPTION_MAX}
+                    onChange={(e) => {
+                      setPlanConfirmed(false);
+                      setServices(e.target.value.slice(0, BRAND_DESCRIPTION_MAX));
+                    }}
+                    placeholder="种植牙, 隐形矫正"
+                  />
+                </FieldCharLimitBox>
               </div>
               <div>
                 <label className="geo-label">官网 URL（可选）</label>
@@ -393,90 +402,93 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
             </div>
 
             <div className="rounded-lg bg-[var(--neutral-bg-03)] p-3 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold text-[var(--color-title)]">输入材料</p>
-                  <p className="text-[11px] text-[var(--neutral-text-03)]">支持官网、文章链接、落地页截图、品牌文档、客户案例或补充说明。</p>
-                </div>
-                <button type="button" className="geo-btn-secondary geo-btn-xs shrink-0" onClick={() => fileInputRef.current?.click()}>
-                  <FileUp className="w-3.5 h-3.5" />
-                  上传图片/文档
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  className="hidden"
-                  accept="image/*,.pdf,.doc,.docx,.txt,.md"
-                  onChange={(e) => addFiles(e.target.files)}
-                />
+              <div>
+                <p className="text-xs font-semibold text-[var(--color-title)]">输入材料（可选）</p>
+                <p className="text-[11px] text-[var(--neutral-text-03)] mt-0.5">
+                  可添加多条参考链接或补充说明，提交时将自动带入检测任务。
+                </p>
               </div>
 
               <div
                 className="rounded-lg border bg-white p-3 space-y-2"
                 style={{ borderColor: 'var(--neutral-divider-02)' }}
               >
-                <p className="text-[11px] font-medium text-[var(--neutral-text-02)]">粘贴链接</p>
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-[11px] font-medium text-[var(--neutral-text-02)]">参考链接</p>
+                  <span className="text-[10px] text-[var(--neutral-text-03)] shrink-0">
+                    已添加 {referenceLinks.length}/{REFERENCE_LINK_MAX} 条
+                  </span>
+                </div>
                 <div className="grid sm:grid-cols-[1fr_auto] gap-2 items-center">
                   <div className="relative min-w-0">
                     <LinkIcon className="pointer-events-none w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--neutral-text-03)]" />
                     <input
                       className="geo-input w-full geo-input-with-icon !pl-11"
-                      value={materialUrl}
-                      onChange={(e) => setMaterialUrl(e.target.value)}
-                      placeholder="粘贴官网、文章、竞品或发布内容链接"
+                      value={linkDraft}
+                      onChange={(e) => setLinkDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          addReferenceLink();
+                        }
+                      }}
+                      placeholder="粘贴文章、竞品或发布内容链接"
+                      disabled={referenceLinks.length >= REFERENCE_LINK_MAX}
                     />
                   </div>
-                  <button type="button" className="geo-btn-secondary geo-btn-sm h-10 px-4" onClick={addLinkMaterial}>
+                  <button
+                    type="button"
+                    className="geo-btn-secondary geo-btn-sm h-10 px-4 shrink-0"
+                    onClick={addReferenceLink}
+                    disabled={!linkDraft.trim() || referenceLinks.length >= REFERENCE_LINK_MAX}
+                  >
                     <Plus className="w-4 h-4" />
-                    加入
+                    添加
                   </button>
                 </div>
+                {referenceLinks.length > 0 && (
+                  <ul className="space-y-1.5">
+                    {referenceLinks.map((url, index) => (
+                      <li
+                        key={`${url}-${index}`}
+                        className="flex items-center gap-2 rounded-md bg-[var(--neutral-bg-03)] px-2.5 py-2 text-xs"
+                      >
+                        <LinkIcon className="w-3.5 h-3.5 shrink-0 text-[var(--color-primary)]" />
+                        <span className="flex-1 truncate text-[var(--neutral-text-02)]" title={url}>
+                          {url}
+                        </span>
+                        <button
+                          type="button"
+                          className="p-1 text-[var(--neutral-text-03)] hover:text-[var(--color-danger)] shrink-0"
+                          onClick={() => removeReferenceLink(index)}
+                          aria-label="移除链接"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               <div
                 className="rounded-lg border bg-white p-3 space-y-2"
                 style={{ borderColor: 'var(--neutral-divider-02)' }}
               >
-                <p className="text-[11px] font-medium text-[var(--neutral-text-02)]">粘贴文本 / 说明</p>
-                <div className="grid sm:grid-cols-[1fr_auto] gap-2 items-start">
+                <FieldLimitLabel label="补充说明" className="block mb-1" />
+                <FieldCharLimitBox current={freeText.length} max={BRAND_DESCRIPTION_MAX} multiline>
                   <textarea
-                    className="geo-input w-full min-h-[80px]"
+                    className={`geo-input w-full min-h-[80px] ${fieldCharLimitInputClass(true)}`}
                     value={freeText}
-                    onChange={(e) => setFreeText(e.target.value)}
-                    placeholder="也可以直接粘贴品牌介绍、客户案例、页面文案或想检测的问题"
+                    maxLength={BRAND_DESCRIPTION_MAX}
+                    onChange={(e) => {
+                      setPlanConfirmed(false);
+                      setFreeText(e.target.value.slice(0, BRAND_DESCRIPTION_MAX));
+                    }}
+                    placeholder="品牌介绍、客户案例、页面文案或想检测的问题"
                   />
-                  <button type="button" className="geo-btn-secondary geo-btn-sm h-10 px-4" onClick={addTextMaterial}>
-                    <ClipboardCheck className="w-4 h-4" />
-                    加入说明
-                  </button>
-                </div>
+                </FieldCharLimitBox>
               </div>
-
-              {materials.length > 0 && (
-                <div className="grid sm:grid-cols-2 gap-2">
-                  {materials.map((m) => {
-                    const Icon = materialIcon(m.kind);
-                    return (
-                      <div key={m.id} className="flex items-center gap-2 rounded-lg bg-[var(--neutral-bg-03)] px-3 py-2 text-xs">
-                        <Icon className="w-4 h-4 shrink-0 text-[var(--color-primary)]" />
-                        <span className="flex-1 truncate">{m.name}</span>
-                        <button
-                          type="button"
-                          className="p-1 text-[var(--neutral-text-03)] hover:text-[var(--color-danger)]"
-                          onClick={() => {
-                            setPlanConfirmed(false);
-                            setMaterials((prev) => prev.filter((x) => x.id !== m.id));
-                          }}
-                          aria-label="移除材料"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
             </div>
 
             <div>
@@ -555,35 +567,16 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
           </ul>
           <div>
             <p className="font-medium text-[var(--neutral-text-02)] mb-2">分析模式</p>
-            <div className="grid grid-cols-2 gap-2">
-              {ANALYSIS_DEPTH_OPTIONS.map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => switchAnalysisDepth(opt.id)}
-                  className={`rounded-lg p-3 text-left border transition ${
-                    analysisDepth === opt.id
-                      ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-                      : 'border-transparent bg-[var(--neutral-bg-03)] hover:border-[var(--neutral-divider-02)]'
-                  }`}
-                >
-                  <p className="font-semibold text-[var(--color-title)]">{opt.label}</p>
-                  <p className="text-[10px] text-[var(--neutral-text-03)] mt-1 leading-relaxed">{opt.hint}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-lg bg-[var(--neutral-bg-03)] p-3">
-              <span className="text-[var(--neutral-text-03)]">当前模式</span>
-              <p className="font-semibold text-[var(--color-title)]">
-                {ANALYSIS_DEPTH_OPTIONS.find((o) => o.id === analysisDepth)?.label}
+            <div className="rounded-lg border border-[var(--color-primary)]/25 bg-[var(--color-primary)]/5 p-3">
+              <p className="font-semibold text-[var(--color-title)]">{activeDepthOption.label}</p>
+              <p className="text-[10px] text-[var(--neutral-text-03)] mt-1 leading-relaxed">
+                {activeDepthOption.hint}
               </p>
             </div>
-            <div className="rounded-lg bg-[var(--neutral-bg-03)] p-3">
-              <span className="text-[var(--neutral-text-03)]">AI 分析数</span>
-              <p className="font-semibold text-[var(--color-title)]">{aiPlan.questions} 条</p>
-            </div>
+          </div>
+          <div className="rounded-lg bg-[var(--neutral-bg-03)] p-3">
+            <span className="text-[var(--neutral-text-03)]">AI 分析数</span>
+            <p className="font-semibold text-[var(--color-title)]">{aiPlan.questions} 条</p>
           </div>
           <div>
             <p className="font-medium text-[var(--neutral-text-02)] mb-2">将执行</p>

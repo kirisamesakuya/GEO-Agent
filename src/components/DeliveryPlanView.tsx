@@ -17,6 +17,11 @@ import GeoRiskConfirmModal from './geo/GeoRiskConfirmModal';
 import { GEO_ASSET_RISK_LABELS } from '../lib/geo-asset';
 import { LOBBY_PLATFORM_LABELS } from '../../lib/media-platforms';
 import { parseIndexingGapFromUrl, parseIndexingGapHint } from '../lib/article-effect-nav';
+import { FieldCharLimitBox, FieldLimitLabel, fieldCharLimitInputClass } from './common/FieldCharLimit';
+import {
+  CAMPAIGN_SUPPLEMENT_NOTES_MAX,
+  validateSupplementNotes,
+} from '../lib/campaign-form-limits';
 
 type CreateMode = 'ai' | 'manual';
 type PlanSourceType = 'brand_profile' | 'geo_report' | 'indexing_result';
@@ -314,6 +319,11 @@ export default function DeliveryPlanView({
       toast('请从排名监控选择采样结果', 'error');
       return;
     }
+    const notesError = validateSupplementNotes(supplementNotes);
+    if (notesError) {
+      toast(notesError, 'error');
+      return;
+    }
     setLoading(true);
     setTaskStatus('queued');
     const res = await fetch('/api/campaign-plans/generate', {
@@ -600,14 +610,23 @@ export default function DeliveryPlanView({
                   </div>
                 </div>
                 <div>
-                  <FieldLabel>补充说明（可选）</FieldLabel>
-                  <textarea
-                    value={supplementNotes}
-                    onChange={(e) => setSupplementNotes(e.target.value)}
-                    rows={2}
-                    placeholder="如：重点覆盖种植牙与隐形矫正相关问答，或指定优先平台"
-                    className="geo-input w-full text-sm max-w-xl min-h-[72px]"
-                  />
+                  <FieldLimitLabel label="补充说明（可选）" className="block mb-1" />
+                  <FieldCharLimitBox
+                    current={supplementNotes.length}
+                    max={CAMPAIGN_SUPPLEMENT_NOTES_MAX}
+                    multiline
+                  >
+                    <textarea
+                      value={supplementNotes}
+                      onChange={(e) =>
+                        setSupplementNotes(e.target.value.slice(0, CAMPAIGN_SUPPLEMENT_NOTES_MAX))
+                      }
+                      maxLength={CAMPAIGN_SUPPLEMENT_NOTES_MAX}
+                      rows={2}
+                      placeholder="如：重点覆盖种植牙与隐形矫正相关问答，或指定优先平台"
+                      className={`geo-input w-full text-sm max-w-xl min-h-[72px] ${fieldCharLimitInputClass(true)}`}
+                    />
+                  </FieldCharLimitBox>
                 </div>
                 <p className="text-xs text-[var(--neutral-text-03)]">
                   AI 将按来源与预算，为各内容平台自动生成文章数量、写作要求与预算分配，生成后可修改。

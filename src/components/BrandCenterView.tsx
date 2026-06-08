@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
-import type { BrandCenterTab } from '../lib/brand-center';
-import { brandCenterTabLabel } from '../lib/brand-center';
+import {
+  BRAND_CENTER_ASSET_LIBRARY_ENABLED,
+  brandCenterTabLabel,
+  brandCenterVisibleTabs,
+  resolveBrandCenterTab,
+  type BrandCenterTab,
+} from '../lib/brand-center';
 import type { ViewType } from '../types';
 import { ArrowLeft } from 'lucide-react';
 import BrandProfileView from './BrandProfileView';
@@ -17,7 +22,7 @@ interface Props {
   onNavigate?: (view: ViewType, hint?: string) => void;
 }
 
-const TABS: BrandCenterTab[] = ['profile', 'keywords', 'knowledge', 'assets'];
+const TABS = brandCenterVisibleTabs();
 
 export default function BrandCenterView({
   brandName,
@@ -27,10 +32,10 @@ export default function BrandCenterView({
   onBackToBrandManagement,
   onNavigate,
 }: Props) {
-  const [tab, setTab] = useState<BrandCenterTab>(initialTab);
+  const [tab, setTab] = useState<BrandCenterTab>(() => resolveBrandCenterTab(initialTab));
 
   useEffect(() => {
-    setTab(initialTab);
+    setTab(resolveBrandCenterTab(initialTab));
   }, [initialTab, brandName]);
 
   return (
@@ -87,7 +92,10 @@ export default function BrandCenterView({
         {tab === 'knowledge' && (
           <KnowledgeBaseView brandName={brandName} embedded onNavigate={onNavigate} />
         )}
-        {tab === 'assets' && <AssetLibraryView brandName={brandName} embedded />}
+        {/* 本期隐藏图片素材库 Tab；BRAND_CENTER_ASSET_LIBRARY_ENABLED 开启后恢复 */}
+        {tab === 'assets' && BRAND_CENTER_ASSET_LIBRARY_ENABLED && (
+          <AssetLibraryView brandName={brandName} embedded />
+        )}
       </div>
     </div>
   );

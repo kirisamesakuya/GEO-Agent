@@ -2,6 +2,9 @@ import type { ViewType } from '../types';
 
 export type BrandCenterTab = 'profile' | 'keywords' | 'knowledge' | 'assets';
 
+/** 本期暂不开放品牌中心「图片素材库」Tab，保留路由与 AssetLibraryView 供下一期启用 */
+export const BRAND_CENTER_ASSET_LIBRARY_ENABLED = false;
+
 const VIEW_TO_TAB: Partial<Record<ViewType, BrandCenterTab>> = {
   brand_profile: 'profile',
   keyword_library: 'keywords',
@@ -15,6 +18,17 @@ const TAB_LABELS: Record<BrandCenterTab, string> = {
   knowledge: '企业知识库',
   assets: '图片素材库',
 };
+
+const ALL_TABS: BrandCenterTab[] = ['profile', 'keywords', 'knowledge', 'assets'];
+
+export function brandCenterVisibleTabs(): BrandCenterTab[] {
+  return ALL_TABS.filter((tab) => tab !== 'assets' || BRAND_CENTER_ASSET_LIBRARY_ENABLED);
+}
+
+export function resolveBrandCenterTab(tab: BrandCenterTab): BrandCenterTab {
+  if (tab === 'assets' && !BRAND_CENTER_ASSET_LIBRARY_ENABLED) return 'knowledge';
+  return tab;
+}
 
 export function brandCenterTabToView(tab: BrandCenterTab): ViewType {
   const map: Record<BrandCenterTab, ViewType> = {
@@ -41,7 +55,7 @@ export function brandCenterTabLabel(tab: BrandCenterTab): string {
 export function resolveBrandCenterTabFromUrl(): BrandCenterTab | null {
   const tab = new URLSearchParams(window.location.search).get('tab');
   if (tab === 'profile' || tab === 'keywords' || tab === 'knowledge' || tab === 'assets') {
-    return tab;
+    return resolveBrandCenterTab(tab);
   }
   return null;
 }
@@ -51,7 +65,7 @@ export function viewToBrandCenterTabWithHint(
   urlTab: BrandCenterTab | null
 ): BrandCenterTab {
   const fromView = viewToBrandCenterTab(view);
-  if (fromView) return fromView;
-  if (urlTab) return urlTab;
+  if (fromView) return resolveBrandCenterTab(fromView);
+  if (urlTab) return resolveBrandCenterTab(urlTab);
   return 'profile';
 }

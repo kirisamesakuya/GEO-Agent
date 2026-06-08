@@ -6,7 +6,6 @@ import {
   Sparkles,
   Plus,
   X,
-  Award,
   ShieldAlert,
   Loader2,
   CheckCircle2,
@@ -21,11 +20,17 @@ import {
 } from '../../lib/brand-source-material';
 import RegionCascader from './common/RegionCascader';
 import IndustrySelect from './common/IndustrySelect';
+import { FieldCharLimitBox, FieldLimitLabel, fieldCharLimitInputClass } from './common/FieldCharLimit';
 import {
   applyBrandProfileDraft,
   clearBrandProfileDraft,
   loadBrandProfileDraft,
 } from '../lib/brand-profile-draft';
+import {
+  BRAND_DESCRIPTION_MAX,
+  BRAND_NAME_MAX,
+  validateBrandProfileText,
+} from '../lib/brand-profile-limits';
 
 interface BrandProfileViewProps {
   brandName: string;
@@ -96,16 +101,21 @@ export default function BrandProfileView({ brandName, onBrandNameChange, onNavig
       .then((res) => res.json())
       .then((data) => {
         const base = data?.name ? (data as BrandProfile) : emptyProfile(brandName);
+        const normalized = {
+          ...base,
+          name: base.name.slice(0, BRAND_NAME_MAX),
+          description: (base.description ?? '').slice(0, BRAND_DESCRIPTION_MAX),
+        };
         const draft = loadBrandProfileDraft(brandName);
         if (draft?.profile) {
-          setProfile(applyBrandProfileDraft(base, draft.profile));
+          setProfile(applyBrandProfileDraft(normalized, draft.profile));
           setDraftNotice(
             draft.taskId
               ? '已加载 AI 提取建议草稿，请核对后手动保存（尚未写入品牌库）'
               : '已加载品牌资料草稿，请核对后手动保存'
           );
         } else {
-          setProfile(base);
+          setProfile(normalized);
         }
       })
       .catch(() => setProfile(emptyProfile(brandName)))
@@ -238,19 +248,32 @@ export default function BrandProfileView({ brandName, onBrandNameChange, onNavig
   };
 
   const handleSave = () => {
+    const validationError = validateBrandProfileText({
+      name: profile.name,
+      description: profile.description,
+    });
+    if (validationError) {
+      toast(validationError, 'error');
+      return;
+    }
+
     fetch(`/api/brand-profile?brandName=${encodeURIComponent(brandName)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(profile)
-    }).then(res => res.json())
-      .then(data => {
+      body: JSON.stringify(profile),
+    })
+      .then((res) => res.json())
+      .then((data) => {
         if (data.success) {
           clearBrandProfileDraft(brandName);
           setDraftNotice(null);
           toast('品牌资料保存成功', 'success');
           if (profile.name !== brandName) onBrandNameChange(profile.name);
+          return;
         }
-      });
+        toast(typeof data.error === 'string' ? data.error : '保存失败', 'error');
+      })
+      .catch(() => toast('保存失败，请重试', 'error'));
   };
 
   const dismissDraft = () => {
@@ -518,14 +541,19 @@ export default function BrandProfileView({ brandName, onBrandNameChange, onNavig
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           <div className="grid grid-cols-2 gap-5 text-left">
             <div>
-              <label className="geo-label">品牌名称 / 别名</label>
-              <input
-                type="text"
-                value={profile.name}
-                onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                className="geo-input font-semibold"
-                placeholder="云杉口腔"
-              />
+              <FieldLimitLabel label="品牌名称 / 别名" className="block mb-1" />
+              <FieldCharLimitBox current={profile.name.length} max={BRAND_NAME_MAX}>
+                <input
+                  type="text"
+                  value={profile.name}
+                  maxLength={BRAND_NAME_MAX}
+                  onChange={(e) =>
+                    setProfile({ ...profile, name: e.target.value.slice(0, BRAND_NAME_MAX) })
+                  }
+                  className={`geo-input font-semibold ${fieldCharLimitInputClass()}`}
+                  placeholder="云杉口腔"
+                />
+              </FieldCharLimitBox>
             </div>
 
             <div>
@@ -568,13 +596,21 @@ export default function BrandProfileView({ brandName, onBrandNameChange, onNavig
             </div>
 
             <div className="col-span-2">
-              <label className="geo-label">核心业务特色描述</label>
-              <textarea
-                value={profile.description}
-                onChange={(e) => setProfile({ ...profile, description: e.target.value })}
-                className="geo-input h-20 resize-none"
-                placeholder="提供高品质数字化口腔种植矫正服务..."
-              />
+              <FieldLimitLabel label="核心业务特色描述" className="block mb-1" />
+              <FieldCharLimitBox current={profile.description.length} max={BRAND_DESCRIPTION_MAX} multiline>
+                <textarea
+                  value={profile.description}
+                  maxLength={BRAND_DESCRIPTION_MAX}
+                  onChange={(e) =>
+                    setProfile({
+                      ...profile,
+                      description: e.target.value.slice(0, BRAND_DESCRIPTION_MAX),
+                    })
+                  }
+                  className={`geo-input h-20 resize-none ${fieldCharLimitInputClass(true)}`}
+                  placeholder="提供高品质数字化口腔种植矫正服务..."
+                />
+              </FieldCharLimitBox>
             </div>
 
             <div className="col-span-2">
@@ -696,27 +732,6 @@ export default function BrandProfileView({ brandName, onBrandNameChange, onNavig
           </p>
 
           <span className="geo-badge">已建立 GEO 投放语料库</span>
-        </div>
-
-        <div className="geo-card p-5 space-y-3">
-          <h4 className="text-xs font-semibold flex items-center gap-1.5" style={{ color: 'var(--color-title)' }}>
-            <Award className="w-4 h-4" style={{ color: 'var(--color-accent)' }} />
-            最新全网大模型检索看板
-          </h4>
-          <div className="space-y-2 text-xs">
-            <div className="flex justify-between py-1.5 border-b" style={{ borderColor: 'var(--neutral-divider-03)' }}>
-              <span style={{ color: 'var(--neutral-text-03)' }}>大模型提及覆盖率</span>
-              <span className="font-semibold" style={{ color: 'var(--color-title)' }}>62%</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b" style={{ borderColor: 'var(--neutral-divider-03)' }}>
-              <span style={{ color: 'var(--neutral-text-03)' }}>同场景 AI 推荐位</span>
-              <span className="font-semibold" style={{ color: 'var(--color-title)' }}>第 4 位</span>
-            </div>
-            <div className="flex justify-between py-1.5">
-              <span style={{ color: 'var(--neutral-text-03)' }}>关键内容高潜缺口</span>
-              <span className="font-semibold geo-tag-warning px-2 py-0.5">7 项需卡位</span>
-            </div>
-          </div>
         </div>
 
         <div className="geo-card p-5 space-y-3">

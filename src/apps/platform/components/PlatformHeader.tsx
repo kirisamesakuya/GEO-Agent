@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, ChevronDown, Menu, Search } from 'lucide-react';
+import { CalendarDays, ChevronDown, Menu, Search } from 'lucide-react';
 import { PLATFORM_VIEW_LABELS } from '../nav';
 import type { PlatformView } from '../types';
 
@@ -38,10 +38,6 @@ export default function PlatformHeader({ view, onMenuToggle }: Props) {
           <span className="flex-1 truncate">搜索商家 / Agent / 订单 / 内容</span>
           <Search className="h-4 w-4 shrink-0 text-[var(--platform-text-primary)]" />
         </label>
-        <button type="button" className="relative grid h-9 w-9 place-items-center rounded-full text-[var(--platform-text-title)] hover:bg-[var(--platform-surface-subtle)]">
-          <Bell className="h-5 w-5" />
-          <span className="absolute right-1 top-0 grid h-4 min-w-4 place-items-center rounded-full bg-[#ff4757] px-1 text-[10px] font-bold text-white">12</span>
-        </button>
         <div className="hidden sm:flex items-center gap-2 text-sm font-medium text-[var(--platform-text-primary)]">
           <span className="grid h-9 w-9 place-items-center rounded-full bg-[#667085] text-sm font-bold text-white">A</span>
           <span className="hidden md:inline">admin</span>

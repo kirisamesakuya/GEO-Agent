@@ -25,14 +25,18 @@ export function registerKnowledgeRoutes(app: Express) {
     if (!category || !title) {
       return res.status(400).json({ error: '缺少必填字段' });
     }
-    const entry = await upsertKnowledge(brandName, {
-      id,
-      category: category as KnowledgeCategory,
-      title,
-      body: body ?? '',
-      sortOrder,
-    });
-    res.json(entry);
+    try {
+      const entry = await upsertKnowledge(brandName, {
+        id,
+        category: category as KnowledgeCategory,
+        title,
+        body: body ?? '',
+        sortOrder,
+      });
+      res.json(entry);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '保存失败' });
+    }
   });
 
   app.delete('/api/knowledge/:id', async (req, res) => {

@@ -83,8 +83,9 @@ export function registerAdAccountRoutes(app: Express) {
     res.json(await listAdAccountUsageLogs({ accountId: req.params.id, limit: 50 }));
   });
 
-  app.get('/api/ad-accounts/platform-config', (_req, res) => {
-    res.json({ platforms: listPlatformAuthConfig() });
+  app.get('/api/ad-accounts/platform-config', async (req, res) => {
+    const brandName = typeof req.query.brandName === 'string' ? req.query.brandName.trim() : undefined;
+    res.json({ platforms: await listPlatformAuthConfig(brandName) });
   });
 
   app.post('/api/ad-accounts/:id/auth/start', async (req, res) => {

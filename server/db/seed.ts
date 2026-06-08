@@ -57,6 +57,7 @@ async function seedDemoExtras(orgId: string, brandName: string) {
   const { ensureDemoUsers } = await import('./demo-users.js');
   const { ensureDemoFinance } = await import('./demo-finance.js');
   const { ensureDemoPlatformSuite } = await import('./demo-platform-suite.js');
+  const { ensureDemoMediaPlatforms } = await import('./demo-media-platforms.js');
 
   await ensureDemoMarketplaceReady();
   await ensureDemoWebsiteOrders(brandName);
@@ -66,6 +67,7 @@ async function seedDemoExtras(orgId: string, brandName: string) {
   await ensureDemoUsers();
   await ensureDemoFinance();
   await ensureDemoPlatformSuite();
+  await ensureDemoMediaPlatforms(brandName);
 }
 
 export async function seedDatabase() {

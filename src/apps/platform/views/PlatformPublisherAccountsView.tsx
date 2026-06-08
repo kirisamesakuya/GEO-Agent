@@ -355,7 +355,7 @@ export default function PlatformPublisherAccountsView({ section = 'balances' }: 
       return;
     }
     const amount = Number(adjustAmount);
-    if (!amount || Number.isNaN(amount)) {
+    if (!Number.isFinite(amount) || amount === 0) {
       toast('请填写有效调整金额', 'error');
       return;
     }
@@ -626,12 +626,14 @@ export default function PlatformPublisherAccountsView({ section = 'balances' }: 
               />
             </div>
             <div>
-              <label className="geo-label block mb-1.5">调整金额</label>
+              <label className="geo-label block mb-1.5">调整金额（元）</label>
               <input
+                type="number"
+                step="1"
                 value={adjustAmount}
                 onChange={(e) => setAdjustAmount(e.target.value)}
                 placeholder="正数增加、负数扣减，如 1000 或 -500"
-                className="w-full px-3 py-2 border rounded-lg text-sm platform-filter-input"
+                className="w-full platform-filter-input"
               />
             </div>
           </div>

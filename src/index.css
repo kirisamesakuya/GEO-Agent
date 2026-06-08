@@ -653,6 +653,15 @@ table.geo-table > thead > tr > th {
   padding-left: 2.75rem;
 }
 
+.geo-input-has-counter {
+  padding-right: 3.25rem;
+}
+
+.geo-input-has-counter-multiline {
+  padding-right: 3.25rem;
+  padding-bottom: 1.625rem;
+}
+
 .geo-input-inline {
   width: auto;
   flex: 1 1 12rem;

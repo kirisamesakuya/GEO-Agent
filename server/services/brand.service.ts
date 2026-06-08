@@ -1,4 +1,9 @@
 import { prisma } from '../db/client.js';
+import {
+  normalizeBrandDescription,
+  normalizeBrandName,
+  validateBrandProfileText,
+} from '../../lib/brand-profile-limits.js';
 import { appendAuditLog } from './audit.service.js';
 import { createAgentTask } from './agent-task.service.js';
 import { resolveExecutorKindForTask } from '../agent/executors/index.js';
@@ -112,24 +117,40 @@ export async function updateBrandProfile(
   patch: Partial<BrandProfileDto>,
   brandName?: string
 ): Promise<BrandProfileDto> {
-  let row = await findBrandRow(brandName ?? patch.name);
+  const validationError = validateBrandProfileText({
+    name: patch.name,
+    description: patch.description,
+  });
+  if (validationError) throw new Error(validationError);
+
+  const normalizedPatch: Partial<BrandProfileDto> = { ...patch };
+  if (patch.name !== undefined) normalizedPatch.name = normalizeBrandName(patch.name);
+  if (patch.description !== undefined) {
+    normalizedPatch.description = normalizeBrandDescription(patch.description);
+  }
+
+  let row = await findBrandRow(brandName ?? normalizedPatch.name);
   if (!row) throw new Error('Brand not found');
 
   row = await prisma.brand.update({
     where: { id: row.id },
     data: {
-      ...(patch.website !== undefined ? { website: patch.website } : {}),
-      ...(patch.name !== undefined ? { name: patch.name } : {}),
-      ...(patch.industry !== undefined ? { industry: patch.industry } : {}),
-      ...(patch.city !== undefined ? { city: patch.city } : {}),
-      ...(patch.ownerName !== undefined ? { ownerName: patch.ownerName } : {}),
-      ...(patch.storeCount !== undefined ? { storeCount: patch.storeCount } : {}),
-      ...(patch.description !== undefined ? { description: patch.description } : {}),
-      ...(patch.keywords !== undefined ? { keywords: JSON.stringify(patch.keywords) } : {}),
-      ...(patch.competitors !== undefined ? { competitors: JSON.stringify(patch.competitors) } : {}),
-      ...(patch.forbiddenWords !== undefined ? { forbiddenWords: JSON.stringify(patch.forbiddenWords) } : {}),
-      ...(patch.sourceMaterials !== undefined
-        ? { sourceMaterials: JSON.stringify(patch.sourceMaterials) }
+      ...(normalizedPatch.website !== undefined ? { website: normalizedPatch.website } : {}),
+      ...(normalizedPatch.name !== undefined ? { name: normalizedPatch.name } : {}),
+      ...(normalizedPatch.industry !== undefined ? { industry: normalizedPatch.industry } : {}),
+      ...(normalizedPatch.city !== undefined ? { city: normalizedPatch.city } : {}),
+      ...(normalizedPatch.ownerName !== undefined ? { ownerName: normalizedPatch.ownerName } : {}),
+      ...(normalizedPatch.storeCount !== undefined ? { storeCount: normalizedPatch.storeCount } : {}),
+      ...(normalizedPatch.description !== undefined ? { description: normalizedPatch.description } : {}),
+      ...(normalizedPatch.keywords !== undefined ? { keywords: JSON.stringify(normalizedPatch.keywords) } : {}),
+      ...(normalizedPatch.competitors !== undefined
+        ? { competitors: JSON.stringify(normalizedPatch.competitors) }
+        : {}),
+      ...(normalizedPatch.forbiddenWords !== undefined
+        ? { forbiddenWords: JSON.stringify(normalizedPatch.forbiddenWords) }
+        : {}),
+      ...(normalizedPatch.sourceMaterials !== undefined
+        ? { sourceMaterials: JSON.stringify(normalizedPatch.sourceMaterials) }
         : {}),
     },
   });
@@ -175,7 +196,8 @@ export async function createBrand(input: {
   city?: string;
   ownerName?: string;
 }): Promise<BrandProfileDto> {
-  const trimmed = input.name.trim();
+  const trimmed = normalizeBrandName(input.name);
+  if (!trimmed) throw new Error('品牌名称不能为空');
   const dup = await prisma.brand.findFirst({
     where: { name: trimmed, status: { not: 'archived' } },
   });

@@ -126,8 +126,12 @@ export function registerBrandRoutes(app: Express) {
   app.post('/api/brand-profile', async (req, res) => {
     const brandName = await requireBrandName(req, res);
     if (!brandName) return;
-    const profile = await updateBrandProfile(req.body ?? {}, brandName);
-    res.json({ success: true, profile });
+    try {
+      const profile = await updateBrandProfile(req.body ?? {}, brandName);
+      res.json({ success: true, profile });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '保存失败' });
+    }
   });
 
   app.get('/api/gate/status', async (req, res) => {
@@ -188,11 +192,35 @@ export function registerBrandRoutes(app: Express) {
     res.json(await listAccounts(brandName));
   });
 
-  const platformAuthHandler = (_req: Request, res: Response) => {
-    res.json({ platforms: listPlatformAuthConfig() });
+  const platformAuthHandler = async (req: Request, res: Response) => {
+    const brandName = typeof req.query.brandName === 'string' ? req.query.brandName.trim() : undefined;
+    res.json({ platforms: await listPlatformAuthConfig(brandName) });
   };
   app.get('/api/platform-auth', platformAuthHandler);
   app.get('/api/accounts/platform-config', platformAuthHandler);
+
+  app.post('/api/accounts/custom-platforms', async (req, res) => {
+    const { platform, logoUrl, abbr, gradient, loginUrl, loginHint } = req.body ?? {};
+    if (!platform || typeof platform !== 'string') {
+      return res.status(400).json({ error: '请填写平台名称' });
+    }
+    const brandName = await requireBrandName(req, res);
+    if (!brandName) return;
+    try {
+      const { createCustomPublishPlatform } = await import('../services/custom-publish-platform.service.js');
+      const result = await createCustomPublishPlatform(brandName, {
+        platform,
+        logoUrl: typeof logoUrl === 'string' ? logoUrl : undefined,
+        abbr: typeof abbr === 'string' ? abbr : undefined,
+        gradient: typeof gradient === 'string' ? gradient : undefined,
+        loginUrl: typeof loginUrl === 'string' ? loginUrl : undefined,
+        loginHint: typeof loginHint === 'string' ? loginHint : undefined,
+      });
+      res.status(201).json({ success: true, ...result });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '添加发布平台失败' });
+    }
+  });
 
   app.post('/api/accounts/bind/start', async (req, res) => {
     const { platform } = req.body ?? {};

@@ -98,6 +98,7 @@ import {
 } from '../services/user-admin.service.js';
 import { cancelAgentTask, retryAgentTask } from '../agent/worker.js';
 import { enqueueAgentTask } from '../agent/worker.js';
+import { registerPlatformMediaPlatformAdminRoutes } from './media-platforms.js';
 
 export function registerPlatformRoutes(app: Express) {
   const publicPaths = new Set(['/role-permissions', '/role-switch']);
@@ -911,4 +912,6 @@ export function registerPlatformRoutes(app: Express) {
   app.get('/api/platform/orders', async (_req, res) => {
     res.json({ orders: await listAllOrders() });
   });
+
+  registerPlatformMediaPlatformAdminRoutes(app, requirePlatformPermission);
 }

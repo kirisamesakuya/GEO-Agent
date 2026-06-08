@@ -13,6 +13,8 @@ export async function ensureDemoPlatformOps(): Promise<void> {
   await ensureDemoOrderApplications();
   await ensureDemoOrgCertifications();
   await ensureDemoProviderResourceReviews();
+  const { ensureDemoMediaPlatforms } = await import('./demo-media-platforms.js');
+  await ensureDemoMediaPlatforms();
 }
 
 async function ensureDemoOrderApplications(): Promise<void> {

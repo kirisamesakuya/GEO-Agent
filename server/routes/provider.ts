@@ -59,7 +59,13 @@ import { loadProviderOnboardingOptions } from '../lib/provider-onboarding-config
  */
 export function registerProviderRoutes(app: Express) {
   app.get('/api/provider/onboarding-options', async (_req, res) => {
-    res.json(loadProviderOnboardingOptions());
+    const base = loadProviderOnboardingOptions();
+    const { getLobbyPlatformLabels } = await import('../services/media-platform-catalog.service.js');
+    const mediaPlatforms = await getLobbyPlatformLabels();
+    res.json({
+      ...base,
+      mediaPlatforms: mediaPlatforms.length ? mediaPlatforms : base.mediaPlatforms,
+    });
   });
 
   app.get('/api/provider/assets', async (req, res) => {

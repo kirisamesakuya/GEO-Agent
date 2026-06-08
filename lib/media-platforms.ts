@@ -41,10 +41,9 @@ export const MEDIA_PLATFORMS: readonly MediaPlatform[] = [
   { id: 'yuanbao', label: '腾讯元宝', category: 'ai_search', sortOrder: 220 },
   { id: 'kimi', label: 'Kimi', category: 'ai_search', sortOrder: 230 },
   { id: 'wenxin', label: '文心一言', category: 'ai_search', sortOrder: 240 },
-  { id: 'tongyi', label: '通义', category: 'ai_search', sortOrder: 250 },
+  { id: 'tongyi', label: 'Qwen', category: 'ai_search', sortOrder: 250 },
   { id: 'zhipu', label: '智谱', category: 'ai_search', sortOrder: 260 },
-  { id: 'xinghuo', label: '星火', category: 'ai_search', sortOrder: 270 },
-  { id: 'hunyuan', label: '混元', category: 'ai_search', sortOrder: 280 },
+  { id: 'minimax', label: 'MiniMax', category: 'ai_search', sortOrder: 270 },
 ] as const;
 
 function sortedLabels(categories: MediaPlatformCategory[]): string[] {

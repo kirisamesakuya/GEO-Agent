@@ -1,5 +1,11 @@
 import { prisma } from '../db/client.js';
 import { findBrandRow } from './brand.service.js';
+import {
+  KNOWLEDGE_MAX_ENTRIES_PER_CATEGORY,
+  normalizeKnowledgeBody,
+  normalizeKnowledgeTitle,
+  validateKnowledgeText,
+} from '../../lib/knowledge-limits.js';
 
 export type KnowledgeCategory =
   | 'intro'
@@ -80,24 +86,42 @@ export async function upsertKnowledge(
 ): Promise<KnowledgeDto> {
   const brand = await findBrandRow(brandName);
   if (!brand) throw new Error('品牌不存在');
+
+  const title = normalizeKnowledgeTitle(data.title, knowledgeCategoryLabel(data.category));
+  const body = normalizeKnowledgeBody(data.body);
+  const validationError = validateKnowledgeText(title, body);
+  if (validationError) throw new Error(validationError);
+
   if (data.id) {
+    const existing = await prisma.knowledgeEntry.findFirst({
+      where: { id: data.id, brandId: brand.id },
+    });
+    if (!existing) throw new Error('条目不存在');
     const row = await prisma.knowledgeEntry.update({
       where: { id: data.id },
       data: {
         category: data.category,
-        title: data.title,
-        body: data.body,
+        title,
+        body,
         sortOrder: data.sortOrder ?? 0,
       },
     });
     return mapRow(row);
   }
+
+  const count = await prisma.knowledgeEntry.count({
+    where: { brandId: brand.id, category: data.category },
+  });
+  if (count >= KNOWLEDGE_MAX_ENTRIES_PER_CATEGORY) {
+    throw new Error(`每个分类最多 ${KNOWLEDGE_MAX_ENTRIES_PER_CATEGORY} 条，请先删除后再新增`);
+  }
+
   const row = await prisma.knowledgeEntry.create({
     data: {
       brandId: brand.id,
       category: data.category,
-      title: data.title,
-      body: data.body,
+      title,
+      body,
       sortOrder: data.sortOrder ?? 0,
     },
   });
@@ -120,9 +144,16 @@ export async function bulkCreateKnowledge(
   if (!brand) throw new Error('品牌不存在');
   const created: KnowledgeDto[] = [];
   for (const item of items) {
-    const title = item.title.trim();
-    const body = item.body.trim();
+    const title = normalizeKnowledgeTitle(item.title);
+    const body = normalizeKnowledgeBody(item.body);
     if (!title || !body) continue;
+    if (validateKnowledgeText(title, body)) continue;
+
+    const categoryCount = await prisma.knowledgeEntry.count({
+      where: { brandId: brand.id, category: item.category },
+    });
+    if (categoryCount >= KNOWLEDGE_MAX_ENTRIES_PER_CATEGORY) continue;
+
     const existing = await prisma.knowledgeEntry.findFirst({
       where: { brandId: brand.id, category: item.category, title },
     });

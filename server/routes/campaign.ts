@@ -21,6 +21,7 @@ import {
   validateGeoAnalysisSubmission,
   validateTaskLobbyPublish,
 } from '../services/gate.service.js';
+import { validateSupplementNotes } from '../../lib/campaign-form-limits.js';
 import { confirmGeoAuditAction } from '../services/geo-audit.service.js';
 import { hasGeoReportConfirmation } from '../services/asset-task.service.js';
 import { getTaskQueueHint } from '../services/hermes-concurrency.service.js';
@@ -161,6 +162,10 @@ export function registerCampaignRoutes(app: Express) {
     const gate = await validateAgentTaskSubmission(name, 'campaign_plan', 15);
     if (!gate.ok) return res.status(400).json({ error: gate.error });
 
+    const notesText = supplementNotes != null ? String(supplementNotes) : undefined;
+    const notesError = validateSupplementNotes(notesText);
+    if (notesError) return res.status(400).json({ error: notesError });
+
     const src = String(source ?? 'brand_profile');
     let planInput: Record<string, unknown>;
     if (src === 'indexing_result') {
@@ -176,13 +181,13 @@ export function registerCampaignRoutes(app: Express) {
         sourceIndexResultIds: resultIds,
         budgetMin: budgetMin != null ? Number(budgetMin) : undefined,
         budgetMax: budgetMax != null ? Number(budgetMax) : undefined,
-        supplementNotes: supplementNotes ? String(supplementNotes) : undefined,
+        supplementNotes: notesText?.trim() || undefined,
       });
     } else {
       planInput = buildCampaignInputFromBrandProfile(name, {
         budgetMin: budgetMin != null ? Number(budgetMin) : undefined,
         budgetMax: budgetMax != null ? Number(budgetMax) : undefined,
-        supplementNotes: supplementNotes ? String(supplementNotes) : undefined,
+        supplementNotes: notesText?.trim() || undefined,
       });
     }
 

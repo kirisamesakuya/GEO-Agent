@@ -7,7 +7,9 @@ import {
   getPlatformAuthEntry,
   loadPlatformAuthConfig,
   resolveLoginUrl,
+  type PlatformAuthEntry,
 } from '../lib/account-platform-config.js';
+import { getCustomPublishPlatform, listCustomPlatformAuthConfig } from './custom-publish-platform.service.js';
 
 async function appendBindingLog(accountBindingId: string, action: string, detail?: string) {
   await prisma.accountBindingLog.create({
@@ -15,8 +17,8 @@ async function appendBindingLog(accountBindingId: string, action: string, detail
   });
 }
 
-export function listPlatformAuthConfig() {
-  return loadPlatformAuthConfig().map((entry) => ({
+export async function listPlatformAuthConfig(brandName?: string) {
+  const builtIn = loadPlatformAuthConfig().map((entry) => ({
     platform: entry.platform,
     authMode: effectiveAuthMode(entry),
     oauthEnabled: entry.oauthEnabled,
@@ -26,6 +28,29 @@ export function listPlatformAuthConfig() {
     loginHint: entry.loginHint,
     oauthNote: entry.oauthNote,
   }));
+  if (!brandName?.trim()) return builtIn;
+  const custom = await listCustomPlatformAuthConfig(brandName.trim());
+  const builtInNames = new Set(builtIn.map((p) => p.platform));
+  return [...builtIn, ...custom.filter((c) => !builtInNames.has(c.platform))];
+}
+
+async function resolvePlatformAuthEntry(
+  brandName: string,
+  platform: string
+): Promise<PlatformAuthEntry | undefined> {
+  const builtIn = getPlatformAuthEntry(platform);
+  if (builtIn) return builtIn;
+  const custom = await getCustomPublishPlatform(brandName, platform);
+  if (!custom) return undefined;
+  return {
+    platform: custom.platform,
+    authMode: 'browser',
+    oauthEnabled: false,
+    loginUrl: custom.loginUrl ?? '',
+    creatorCenterUrl: custom.loginUrl ?? '',
+    permissionsLabel: custom.permissionsLabel ?? '内容发布 / 数据回传',
+    loginHint: custom.loginHint,
+  };
 }
 
 async function findBindingForBrand(brandName: string, platform: string) {
@@ -51,11 +76,11 @@ export async function startAccountBind(
   oauthNote?: string;
   accounts: AccountDto[];
 }> {
-  const entry = getPlatformAuthEntry(platform);
-  if (!entry) throw new Error(`不支持的平台：${platform}`);
-
   const name = brandName?.trim();
   if (!name) throw new Error('请选择品牌');
+
+  const entry = await resolvePlatformAuthEntry(name, platform);
+  if (!entry) throw new Error(`不支持的平台：${platform}`);
 
   const { binding } = await findBindingForBrand(name, platform);
   const bindSessionId = randomUUID();

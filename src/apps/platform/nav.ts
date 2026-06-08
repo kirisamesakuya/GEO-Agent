@@ -12,6 +12,10 @@ import {
 
   Home,
 
+  Layers3,
+
+  Megaphone,
+
   Menu,
 
   ShieldAlert,
@@ -81,6 +85,9 @@ export const PLATFORM_NAV_ICONS: Record<PlatformView, LucideIcon> = {
   role_permissions: UserCog,
 
   menu_admin: Menu,
+  media_platforms: Layers3,
+
+  custom_publish_platforms: Megaphone,
 
   publisher_users: UserPlus,
 
@@ -105,6 +112,9 @@ export function platformNavPermission(view: PlatformView): string {
   if (view === 'platform_members' || view === 'role_permissions' || view === 'menu_admin' || view === 'roles') {
     return 'roles';
   }
+
+  if (view === 'media_platforms') return 'media_platforms';
+  if (view === 'custom_publish_platforms') return 'custom_publish_platforms';
 
   if (
     view === 'publisher_accounts' ||
@@ -236,6 +246,22 @@ export const PLATFORM_NAV_GROUPS: PlatformNavGroup[] = [
 
   {
 
+    id: 'platform_ops',
+
+    label: '平台运营',
+
+    items: [
+
+      { id: 'media_platforms', label: '媒体平台字典' },
+
+      { id: 'custom_publish_platforms', label: '品牌自定义渠道' },
+
+    ],
+
+  },
+
+  {
+
     id: 'system',
 
     label: '系统管理',
@@ -301,6 +327,10 @@ export const PLATFORM_PERMISSION_LABELS: Record<string, string> = {
   role_permissions: '角色与权限',
 
   menu_admin: '后台菜单',
+
+  media_platforms: '媒体平台字典',
+
+  custom_publish_platforms: '品牌自定义渠道',
 
   configs: '系统配置（技术）',
 

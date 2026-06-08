@@ -14,6 +14,7 @@ import { registerCampaignRoutes } from './server/routes/campaign.js';
 import { registerOrderRoutes } from './server/routes/orders.js';
 import { registerWebsiteRoutes } from './server/routes/website.js';
 import { registerPlatformRoutes } from './server/routes/platform.js';
+import { registerMediaPlatformRoutes } from './server/routes/media-platforms.js';
 import { registerProviderRoutes } from './server/routes/provider.js';
 import { registerUploadRoutes } from './server/routes/upload.js';
 import { registerPublisherRoutes } from './server/routes/publisher.js';
@@ -76,6 +77,7 @@ async function bootstrap() {
   registerWebsiteRoutes(app);
   registerProviderRoutes(app);
   registerPlatformRoutes(app);
+  registerMediaPlatformRoutes(app);
   registerUploadRoutes(app);
   registerPublisherRoutes(app);
   registerKeywordRoutes(app);

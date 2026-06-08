@@ -2,7 +2,15 @@ import { useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import type { AgentTask, ViewType } from '../types';
 import { getResultConfirmUiStatus } from '../lib/agent-result-confirmation';
+import {
+  KNOWLEDGE_BODY_MAX,
+  KNOWLEDGE_MAX_ENTRIES_PER_CATEGORY,
+  KNOWLEDGE_TITLE_MAX,
+  validateKnowledgeText,
+} from '../lib/knowledge-limits';
+import { useToast } from '../context/ToastContext';
 import TaskStatusPill from './common/TaskStatusPill';
+import { FieldCharCounter, FieldCharLimitBox, FieldLimitLabel, fieldCharLimitInputClass } from './common/FieldCharLimit';
 
 const CATEGORIES = [
   { id: 'intro', label: '企业介绍' },
@@ -28,6 +36,7 @@ interface Props {
 }
 
 export default function KnowledgeBaseView({ brandName, embedded, onNavigate }: Props) {
+  const { toast } = useToast();
   const [mode, setMode] = useState<'browse' | 'ai'>('browse');
   const [category, setCategory] = useState<string>('intro');
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -37,6 +46,10 @@ export default function KnowledgeBaseView({ brandName, embedded, onNavigate }: P
   const [extracting, setExtracting] = useState(false);
   const [profile, setProfile] = useState<{ industry?: string; description?: string }>({});
   const [lastExtractTask, setLastExtractTask] = useState<AgentTask | null>(null);
+
+  const atEntryLimit = !editingId && entries.length >= KNOWLEDGE_MAX_ENTRIES_PER_CATEGORY;
+  const titleCount = title.length;
+  const bodyCount = body.length;
 
   const load = () => {
     fetch(`/api/knowledge?brandName=${encodeURIComponent(brandName)}&category=${category}`)
@@ -76,17 +89,34 @@ export default function KnowledgeBaseView({ brandName, embedded, onNavigate }: P
   }, [brandName, mode, extracting]);
 
   const save = async () => {
-    await fetch('/api/knowledge', {
+    const resolvedTitle = title.trim() || CATEGORIES.find((c) => c.id === category)?.label || '';
+    const validationError = validateKnowledgeText(resolvedTitle, body);
+    if (validationError) {
+      toast(validationError, 'error');
+      return;
+    }
+    if (atEntryLimit) {
+      toast(`每个分类最多 ${KNOWLEDGE_MAX_ENTRIES_PER_CATEGORY} 条，请先删除后再新增`, 'error');
+      return;
+    }
+
+    const res = await fetch('/api/knowledge', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         brandName,
         id: editingId ?? undefined,
         category,
-        title: title || CATEGORIES.find((c) => c.id === category)?.label,
-        body,
+        title: resolvedTitle,
+        body: body.trim(),
       }),
     });
+    const data = await res.json();
+    if (!res.ok) {
+      toast(typeof data.error === 'string' ? data.error : '保存失败', 'error');
+      return;
+    }
+    toast(editingId ? '已更新条目' : '已保存条目', 'success');
     setTitle('');
     setBody('');
     setEditingId(null);
@@ -95,14 +125,19 @@ export default function KnowledgeBaseView({ brandName, embedded, onNavigate }: P
 
   const edit = (e: Entry) => {
     setEditingId(e.id);
-    setTitle(e.title);
-    setBody(e.body);
+    setTitle(e.title.slice(0, KNOWLEDGE_TITLE_MAX));
+    setBody(e.body.slice(0, KNOWLEDGE_BODY_MAX));
   };
 
   const remove = async (id: string) => {
     await fetch(`/api/knowledge/${id}?brandName=${encodeURIComponent(brandName)}`, {
       method: 'DELETE',
     });
+    if (editingId === id) {
+      setEditingId(null);
+      setTitle('');
+      setBody('');
+    }
     load();
   };
 
@@ -134,7 +169,9 @@ export default function KnowledgeBaseView({ brandName, embedded, onNavigate }: P
   return (
     <div className={`overflow-y-auto h-full space-y-4 ${embedded ? 'p-6' : 'geo-page-content'}`}>
       {!embedded && <h2 className="text-lg font-bold">企业知识库</h2>}
-      <p className="text-xs text-[var(--neutral-text-03)]">文章生成时将自动检索，提高内容真实度</p>
+      <p className="text-xs text-[var(--neutral-text-03)]">
+        文章生成时将自动检索，提高内容真实度。
+      </p>
 
       <div className="flex flex-wrap gap-2">
         {CATEGORIES.map((c) => (
@@ -183,7 +220,7 @@ export default function KnowledgeBaseView({ brandName, embedded, onNavigate }: P
               {extracting ? '提交中…' : '开始 AI 抽取'}
             </button>
             <p className="text-xs text-[var(--neutral-text-03)]">
-              提交后可离开本页，完成后在消息通知中确认入库。
+              提交后可离开本页，完成后在消息通知中确认入库（入库时同样遵守字数与条数限制）。
             </p>
           </div>
 
@@ -228,25 +265,56 @@ export default function KnowledgeBaseView({ brandName, embedded, onNavigate }: P
       ) : (
         <div className="grid md:grid-cols-2 gap-4">
           <div className="geo-card p-4 space-y-3">
-            <h3 className="text-sm font-semibold">{editingId ? '编辑条目' : '新增条目'}</h3>
-            <input
-              className="geo-input w-full text-sm"
-              placeholder="标题"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-            <textarea
-              className="geo-input w-full text-sm min-h-[160px]"
-              placeholder="正文内容"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-            />
-            <button type="button" className="geo-btn-primary text-sm" onClick={save}>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">{editingId ? '编辑条目' : '新增条目'}</h3>
+              {atEntryLimit && (
+                <span className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                  已达 {KNOWLEDGE_MAX_ENTRIES_PER_CATEGORY} 条上限
+                </span>
+              )}
+            </div>
+            <label className="block space-y-1">
+              <FieldLimitLabel label="标题" className="mb-0" />
+              <FieldCharLimitBox current={titleCount} max={KNOWLEDGE_TITLE_MAX}>
+                <input
+                  className={`geo-input w-full text-sm ${fieldCharLimitInputClass()}`}
+                  placeholder="条目标题"
+                  value={title}
+                  maxLength={KNOWLEDGE_TITLE_MAX}
+                  onChange={(e) => setTitle(e.target.value.slice(0, KNOWLEDGE_TITLE_MAX))}
+                />
+              </FieldCharLimitBox>
+            </label>
+            <label className="block space-y-1">
+              <FieldLimitLabel label="正文" className="mb-0" />
+              <FieldCharLimitBox current={bodyCount} max={KNOWLEDGE_BODY_MAX} multiline>
+                <textarea
+                  className={`geo-input w-full text-sm min-h-[160px] ${fieldCharLimitInputClass(true)}`}
+                  placeholder="条目正文内容"
+                  value={body}
+                  maxLength={KNOWLEDGE_BODY_MAX}
+                  onChange={(e) => setBody(e.target.value.slice(0, KNOWLEDGE_BODY_MAX))}
+                />
+              </FieldCharLimitBox>
+            </label>
+            <button
+              type="button"
+              className="geo-btn-primary text-sm"
+              disabled={atEntryLimit && !editingId}
+              onClick={() => void save()}
+            >
               保存
             </button>
           </div>
           <div className="geo-card p-4">
-            <h3 className="text-sm font-semibold mb-3">已有条目</h3>
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <FieldLimitLabel label="已有条目" className="mb-0 flex-1" />
+              <FieldCharCounter
+                current={entries.length}
+                max={KNOWLEDGE_MAX_ENTRIES_PER_CATEGORY}
+                unit="条"
+              />
+            </div>
             {entries.length === 0 ? (
               <p className="text-xs text-[var(--neutral-text-03)]">该分类暂无内容</p>
             ) : (
@@ -258,7 +326,7 @@ export default function KnowledgeBaseView({ brandName, embedded, onNavigate }: P
                     style={{ borderColor: 'var(--neutral-divider-02)' }}
                   >
                     <div className="flex justify-between items-start gap-2">
-                      <strong>{e.title}</strong>
+                      <strong className="truncate">{e.title}</strong>
                       <div className="flex gap-2 shrink-0">
                         <button type="button" className="geo-link text-xs" onClick={() => edit(e)}>
                           编辑

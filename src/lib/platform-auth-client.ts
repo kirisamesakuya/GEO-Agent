@@ -29,10 +29,11 @@ export function getBundledPlatformAuthConfig(): PlatformAuthConfig[] {
   }));
 }
 
-export async function fetchPlatformAuthConfig(): Promise<PlatformAuthConfig[]> {
+export async function fetchPlatformAuthConfig(brandName?: string): Promise<PlatformAuthConfig[]> {
   const fallback = getBundledPlatformAuthConfig();
   try {
-    const res = await fetch('/api/platform-auth');
+    const qs = brandName?.trim() ? `?brandName=${encodeURIComponent(brandName.trim())}` : '';
+    const res = await fetch(`/api/platform-auth${qs}`);
     const contentType = res.headers.get('content-type') ?? '';
     if (!res.ok || !contentType.includes('application/json')) {
       return fallback;
