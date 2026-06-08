@@ -2,11 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import PlatformDataTable from '../components/PlatformDataTable';
 import PlatformDetailDrawer from '../components/PlatformDetailDrawer';
 import PlatformFilterBar from '../components/PlatformFilterBar';
+import PlatformFilterField, { PlatformFilterDateRange } from '../components/PlatformFilterField';
+import { matchesDateRange } from '../lib/platform-filter-utils';
 import PlatformStatusTag from '../components/PlatformStatusTag';
 import PlatformTabBar from '../components/PlatformTabBar';
 import { useToast } from '../../../context/ToastContext';
 import { usePlatformRole } from '../../../hooks/usePlatformRole';
-import { platformFetch } from '../../../lib/platform-api';
+import { platformFetch, platformApiFetch } from '../../../lib/platform-api';
+import { PlatformTableAction, PlatformTableActions } from '../components/PlatformTableActions';
 import type { PlatformStatusKind } from '../types';
 
 interface OrderRow {
@@ -84,6 +87,12 @@ function matchesTab(order: OrderRow, tab: string) {
   return order.status === tab;
 }
 
+const RELEASE_BLOCKED_STATUSES = new Set(['completed', 'published']);
+
+function canReleaseOrder(order: OrderRow) {
+  return Boolean(order.providerId) && !RELEASE_BLOCKED_STATUSES.has(order.status);
+}
+
 export default function PlatformOrdersView() {
   const { toast } = useToast();
   const { role, can } = usePlatformRole();
@@ -93,6 +102,9 @@ export default function PlatformOrdersView() {
   const [tab, setTab] = useState('all');
   const [brandName, setBrandName] = useState('');
   const [providerName, setProviderName] = useState('');
+  const [orderStatus, setOrderStatus] = useState('');
+  const [dateSince, setDateSince] = useState('');
+  const [dateUntil, setDateUntil] = useState('');
   const [selected, setSelected] = useState<OrderDetail | null>(null);
   const [preview, setPreview] = useState<ReassignPreview | null>(null);
   const [providers, setProviders] = useState<Array<{ id: string; name: string; type?: string }>>([]);
@@ -100,9 +112,12 @@ export default function PlatformOrdersView() {
   const [assignProviderName, setAssignProviderName] = useState('');
   const [statusReason, setStatusReason] = useState('');
   const [nextStatus, setNextStatus] = useState('');
+  const [releaseTarget, setReleaseTarget] = useState<OrderRow | null>(null);
+  const [releaseReason, setReleaseReason] = useState('');
+  const [releaseSubmitting, setReleaseSubmitting] = useState(false);
 
   const loadOrders = (p: number, append: boolean) => {
-    fetch(`/api/platform/task-orders?page=${p}&pageSize=30`)
+    platformApiFetch(`/api/platform/task-orders?page=${p}&pageSize=30`)
       .then((r) => r.json())
       .then((d) => {
         setOrders(append ? (prev) => [...prev, ...(d.orders ?? [])] : (d.orders ?? []));
@@ -112,7 +127,7 @@ export default function PlatformOrdersView() {
 
   useEffect(() => {
     loadOrders(1, false);
-    fetch('/api/platform/providers?status=approved')
+    platformApiFetch('/api/platform/providers?status=approved')
       .then((r) => r.json())
       .then((d) => setProviders(d.providers ?? []));
   }, []);
@@ -126,9 +141,11 @@ export default function PlatformOrdersView() {
       if (!matchesTab(o, tab)) return false;
       if (brandName && !o.brandName.includes(brandName)) return false;
       if (providerName && !(o.providerName ?? '').includes(providerName)) return false;
+      if (orderStatus && o.status !== orderStatus) return false;
+      if (!matchesDateRange(o.createdAt, dateSince, dateUntil)) return false;
       return true;
     });
-  }, [orders, tab, brandName, providerName]);
+  }, [orders, tab, brandName, providerName, orderStatus, dateSince, dateUntil]);
 
   const tabCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -140,8 +157,8 @@ export default function PlatformOrdersView() {
 
   const selectOrder = async (id: string) => {
     const [orderRes, previewRes] = await Promise.all([
-      fetch(`/api/platform/task-orders/${id}`),
-      fetch(`/api/platform/task-orders/${id}/reassign-preview`),
+      platformApiFetch(`/api/platform/task-orders/${id}`),
+      platformApiFetch(`/api/platform/task-orders/${id}/reassign-preview`),
     ]);
     const orderData = await orderRes.json();
     const o = orderData.order as OrderDetail | undefined;
@@ -198,6 +215,36 @@ export default function PlatformOrdersView() {
     void reloadSelected();
   };
 
+  const releaseOrder = async (orderId: string, reason: string) => {
+    if (!reason.trim()) {
+      toast('请填写释放原因', 'error');
+      return;
+    }
+    setReleaseSubmitting(true);
+    try {
+      const res = await platformFetch(role, `/api/platform/task-orders/${orderId}/release`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: reason.trim(), role }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        toast(data.error, 'error');
+        return;
+      }
+      toast('已释放到任务大厅，接单方可重新领取', 'success');
+      setReleaseTarget(null);
+      setReleaseReason('');
+      if (selected?.id === orderId) {
+        setSelected(null);
+        setPreview(null);
+      }
+      loadOrders(1, false);
+      setPage(1);
+    } finally {
+      setReleaseSubmitting(false);
+    }
+  };
+
   const advanceSettlement = async (status: string) => {
     if (!selected) return;
     const res = await platformFetch(role, `/api/platform/task-orders/${selected.id}/settlement`, {
@@ -239,23 +286,30 @@ export default function PlatformOrdersView() {
           active={tab}
           onChange={setTab}
         />
-        <PlatformFilterBar onReset={() => { setBrandName(''); setProviderName(''); }}>
-          <input
-            value={brandName}
-            onChange={(e) => setBrandName(e.target.value)}
-            placeholder="品牌"
-            className="platform-filter-input"
-          />
-          <input
-            value={providerName}
-            onChange={(e) => setProviderName(e.target.value)}
-            placeholder="接单方"
-            className="platform-filter-input"
-          />
+        <PlatformFilterBar onReset={() => { setBrandName(''); setProviderName(''); setOrderStatus(''); setDateSince(''); setDateUntil(''); }}>
+          <PlatformFilterField label="品牌">
+            <input value={brandName} onChange={(e) => setBrandName(e.target.value)} placeholder="品牌名称" className="platform-filter-input" />
+          </PlatformFilterField>
+          <PlatformFilterField label="接单方">
+            <input value={providerName} onChange={(e) => setProviderName(e.target.value)} placeholder="接单方名称" className="platform-filter-input" />
+          </PlatformFilterField>
+          <PlatformFilterField label="订单状态">
+            <select value={orderStatus} onChange={(e) => setOrderStatus(e.target.value)} className="platform-filter-input">
+              <option value="">全部</option>
+              <option value="published">待派单</option>
+              <option value="in_progress">执行中</option>
+              <option value="pending_review">待验收</option>
+              <option value="revision">返修中</option>
+              <option value="disputed">争议中</option>
+              <option value="completed">已完成</option>
+            </select>
+          </PlatformFilterField>
+          <PlatformFilterDateRange since={dateSince} until={dateUntil} onSinceChange={setDateSince} onUntilChange={setDateUntil} />
         </PlatformFilterBar>
         <PlatformDataTable<OrderRow>
           rows={filtered}
           rowKey={(r) => r.id}
+          selectedKey={selected?.id}
           onRowClick={(r) => void selectOrder(r.id)}
           columns={[
             { key: 'title', header: '标题', render: (r) => <span className="max-w-[200px] truncate block">{r.title}</span> },
@@ -273,6 +327,27 @@ export default function PlatformOrdersView() {
             },
             { key: 'budget', header: '预算', render: (r) => `¥${Number(r.budget ?? 0)}` },
           ]}
+          renderActions={(r) => (
+            <PlatformTableActions>
+              <PlatformTableAction label="详情" variant="primary" onClick={() => void selectOrder(r.id)} />
+              {!r.providerId && (
+                <PlatformTableAction label="派单" variant="primary" disabled={!can('orders.assign')} onClick={() => void selectOrder(r.id)} />
+              )}
+              {r.providerId && can('orders.reassign') && (
+                <PlatformTableAction label="改派" onClick={() => void selectOrder(r.id)} />
+              )}
+              {canReleaseOrder(r) && can('orders.reassign') && (
+                <PlatformTableAction
+                  label="释放"
+                  variant="danger"
+                  onClick={() => {
+                    setReleaseTarget(r);
+                    setReleaseReason('');
+                  }}
+                />
+              )}
+            </PlatformTableActions>
+          )}
         />
         {hasMore && (
           <button type="button" className="geo-btn-secondary text-sm" onClick={() => setPage((p) => p + 1)}>
@@ -289,6 +364,11 @@ export default function PlatformOrdersView() {
           onClose={() => { setSelected(null); setPreview(null); }}
           footer={(
             <div className="space-y-2">
+              {selected.status === 'disputed' && (
+                <p className="text-xs rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+                  争议在线下沟通解决后，请通过<strong className="font-semibold">改派</strong>或<strong className="font-semibold">释放</strong>登记平台侧处理结果。
+                </p>
+              )}
               <select
                 className="platform-filter-input w-full"
                 value={assignProviderId}
@@ -324,6 +404,28 @@ export default function PlatformOrdersView() {
                   改派给其他接单方
                 </button>
               )}
+              {canReleaseOrder(selected) && (
+                <button
+                  type="button"
+                  className="geo-btn-secondary text-sm w-full text-[var(--color-danger)] border-[var(--color-danger)]/30"
+                  disabled={!can('orders.reassign')}
+                  onClick={() => {
+                    setReleaseTarget({
+                      id: selected.id,
+                      title: selected.title,
+                      brandName: selected.brandName,
+                      providerName: selected.providerName,
+                      providerId: selected.providerId,
+                      status: selected.status,
+                      budget: selected.budget,
+                      createdAt: selected.createdAt,
+                    });
+                    setReleaseReason(statusReason);
+                  }}
+                >
+                  释放到任务大厅
+                </button>
+              )}
               <select className="platform-filter-input w-full" value={nextStatus} onChange={(e) => setNextStatus(e.target.value)}>
                 <option value="published">待派单</option>
                 <option value="in_progress">执行中</option>
@@ -350,7 +452,7 @@ export default function PlatformOrdersView() {
                 className="geo-btn-secondary text-sm w-full"
                 onClick={async () => {
                   if (!statusReason.trim()) { toast('请填写原因', 'error'); return; }
-                  await fetch(`/api/platform/task-orders/${selected.id}/revision`, {
+                  await platformApiFetch(`/api/platform/task-orders/${selected.id}/revision`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ reason: statusReason }),
@@ -360,22 +462,6 @@ export default function PlatformOrdersView() {
                 }}
               >
                 要求返修
-              </button>
-              <button
-                type="button"
-                className="geo-btn-secondary text-sm w-full"
-                onClick={async () => {
-                  if (!statusReason.trim()) { toast('请填写结论', 'error'); return; }
-                  await fetch(`/api/platform/task-orders/${selected.id}/dispute-resolve`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ conclusion: statusReason }),
-                  });
-                  toast('争议已结案', 'success');
-                  void reloadSelected();
-                }}
-              >
-                争议结案
               </button>
             </div>
           )}
@@ -462,6 +548,47 @@ export default function PlatformOrdersView() {
             </div>
           )}
         </PlatformDetailDrawer>
+      )}
+
+      {releaseTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-xl border border-[var(--platform-border)] bg-white p-5 shadow-xl">
+            <h3 className="text-base font-bold text-[var(--platform-text-title)]">释放到任务大厅</h3>
+            <p className="mt-2 text-xs text-[var(--platform-text-secondary)] leading-relaxed">
+              将解除当前接单方「{releaseTarget.providerName ?? '—'}」的指派，订单恢复为待领取状态，接单端任务大厅可重新抢单。
+              已有交付记录将保留，请确认后再操作。
+            </p>
+            <label className="mt-4 block text-xs font-semibold text-[var(--platform-text-secondary)]">释放原因（必填）</label>
+            <textarea
+              value={releaseReason}
+              onChange={(e) => setReleaseReason(e.target.value)}
+              rows={3}
+              placeholder="如：接单方无法履约、商家要求换人、误派单撤回"
+              className="platform-filter-input mt-1.5 w-full resize-none"
+            />
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                className="geo-btn-secondary text-sm flex-1"
+                disabled={releaseSubmitting}
+                onClick={() => {
+                  setReleaseTarget(null);
+                  setReleaseReason('');
+                }}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="geo-btn-primary text-sm flex-1"
+                disabled={releaseSubmitting}
+                onClick={() => void releaseOrder(releaseTarget.id, releaseReason)}
+              >
+                {releaseSubmitting ? '释放中…' : '确认释放'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

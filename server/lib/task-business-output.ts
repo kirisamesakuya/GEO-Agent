@@ -1,3 +1,7 @@
+import {
+  markdownFromTaskArticles,
+  sanitizeDeliverableMarkdown,
+} from '../../lib/task-deliverable-markdown.js';
 import type { AgentTaskType } from '../agent/types.js';
 import type { KeywordGroup } from '../services/keyword.service.js';
 import type { GeoWebArtifact } from './geo-web-output-contract.js';
@@ -227,17 +231,26 @@ function markdownFromGeoOutput(output: Record<string, unknown>): string | undefi
   return lines.length > 2 ? lines.join('\n') : undefined;
 }
 
-function markdownFromArticles(output: Record<string, unknown>): string | undefined {
-  const articles = output.articles;
-  if (!Array.isArray(articles) || !articles.length) return undefined;
-  const parts: string[] = [];
-  for (const item of articles) {
-    const row = item as Record<string, unknown>;
-    const title = String(row.title ?? '未命名文章');
-    const body = String(row.fullContent ?? row.previewText ?? row.content ?? '');
-    parts.push(`# ${title}`, '', body, '', '---', '');
+function resolveMarkdownContent(output: Record<string, unknown>): string | undefined {
+  const fromArticles = markdownFromTaskArticles(output);
+  if (fromArticles) return sanitizeDeliverableMarkdown(fromArticles);
+
+  const mdArt = firstArtifact(output, ['markdown']);
+  if (mdArt?.preview || mdArt?.content) {
+    return sanitizeDeliverableMarkdown(String(mdArt.preview ?? mdArt.content));
   }
-  return parts.join('\n').trim();
+
+  const fromGeo = markdownFromGeoOutput(output);
+  if (fromGeo) return sanitizeDeliverableMarkdown(fromGeo);
+
+  for (const key of ['summary', 'rawText', 'reportMarkdown', 'markdown'] as const) {
+    const value = output[key];
+    if (typeof value !== 'string' || !value.trim()) continue;
+    const cleaned = sanitizeDeliverableMarkdown(value);
+    if (cleaned && !cleaned.startsWith('{')) return cleaned;
+  }
+
+  return undefined;
 }
 
 /** 将任务 output 归一化为业务可理解的 suggestions 等字段（写回 task.output 时使用）。 */
@@ -277,9 +290,9 @@ export function buildTaskDeliverableView(
   }
 
   if (taskType === 'article_generation' || taskType === 'article_rewrite') {
-    const md = markdownFromArticles(output);
+    const md = resolveMarkdownContent(output);
     if (md) {
-      return { format: 'markdown', title: '生成文章（Markdown）', content: md, hideRawJson: true };
+      return { format: 'markdown', title: '生成文章', content: md, hideRawJson: true };
     }
   }
 
@@ -312,7 +325,7 @@ export function buildTaskDeliverableView(
       };
     }
 
-    const md = markdownFromGeoOutput(output);
+    const md = resolveMarkdownContent(output);
     if (md) {
       return {
         format: 'markdown',
@@ -332,21 +345,13 @@ export function buildTaskDeliverableView(
     }
   }
 
-  if (typeof output.rawText === 'string' && output.rawText.trim()) {
+  const md = resolveMarkdownContent(output);
+  if (md) {
     return {
       format: 'markdown',
       title: '执行结果',
-      content: output.rawText,
+      content: md,
       hideRawJson: true,
-    };
-  }
-
-  if (typeof output.summary === 'string' && output.summary.trim() && !output.summary.trim().startsWith('{')) {
-    return {
-      format: 'markdown',
-      title: '执行结果',
-      content: output.summary,
-      hideRawJson: false,
     };
   }
 
@@ -354,6 +359,6 @@ export function buildTaskDeliverableView(
     format: 'text',
     title: '结构化结果',
     content: '该任务结果已写入业务模块，请查看上方确认面板或关联页面。',
-    hideRawJson: false,
+    hideRawJson: true,
   };
 }

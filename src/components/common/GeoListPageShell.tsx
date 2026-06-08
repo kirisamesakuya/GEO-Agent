@@ -91,27 +91,36 @@ export default function GeoListPageShell({
 
         {statusTabs && statusTabs.length > 0 && (
           <div
-            className="flex flex-wrap items-center gap-2 rounded-lg border bg-white px-3 py-2"
+            className="flex flex-col gap-2 rounded-lg border bg-white px-3 py-2"
             style={{ borderColor: 'var(--neutral-divider-02)' }}
           >
-            {statusTabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => onStatusChange?.(tab.id)}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                  activeStatus === tab.id
-                    ? 'bg-[var(--color-accent-light)] text-[var(--color-accent)]'
-                    : 'text-[var(--neutral-text-02)] hover:bg-[var(--neutral-bg-03)]'
-                }`}
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              {statusTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => onStatusChange?.(tab.id)}
+                  className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    activeStatus === tab.id
+                      ? 'bg-[var(--color-accent-light)] text-[var(--color-accent)]'
+                      : 'text-[var(--neutral-text-02)] hover:bg-[var(--neutral-bg-03)]'
+                  }`}
+                >
+                  {tab.label}
+                  {tab.count !== undefined && (
+                    <span className="tabular-nums ml-1">{tab.count}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+            {toolbar && (
+              <div
+                className="flex min-w-0 flex-wrap items-center gap-2 border-t pt-2"
+                style={{ borderColor: 'var(--neutral-divider-02)' }}
               >
-                {tab.label}
-                {tab.count !== undefined && (
-                  <span className="tabular-nums ml-1">{tab.count}</span>
-                )}
-              </button>
-            ))}
-            {toolbar && <div className="ml-auto flex flex-wrap items-center gap-2">{toolbar}</div>}
+                {toolbar}
+              </div>
+            )}
           </div>
         )}
       </div>

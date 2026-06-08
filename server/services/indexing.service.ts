@@ -1,6 +1,9 @@
+import { parseIndexCitationUrls, type IndexCitationLink } from '../../lib/index-result-payload.js';
 import { prisma } from '../db/client.js';
 import { findBrandRow } from './brand.service.js';
 import { createAndEnqueueTask } from '../agent/worker.js';
+
+export type { IndexCitationLink };
 
 export interface IndexPlanDto {
   id: string;
@@ -32,6 +35,8 @@ export interface IndexResultDto {
   hit: boolean;
   citedMerchant: boolean;
   citationSnippet?: string;
+  aiResponse?: string;
+  citationUrls: IndexCitationLink[];
   sampledAt: string;
 }
 
@@ -87,8 +92,11 @@ function mapResult(row: {
   hit: boolean;
   citedMerchant: boolean;
   citationSnippet: string | null;
+  aiResponse: string | null;
+  citationUrls: string | null;
   sampledAt: Date;
 }): IndexResultDto {
+  const citationUrls = parseIndexCitationUrls(row.citationUrls);
   return {
     id: row.id,
     planId: row.planId,
@@ -97,6 +105,8 @@ function mapResult(row: {
     hit: row.hit,
     citedMerchant: row.citedMerchant,
     citationSnippet: row.citationSnippet ?? undefined,
+    aiResponse: row.aiResponse ?? row.citationSnippet ?? undefined,
+    citationUrls,
     sampledAt: row.sampledAt.toISOString(),
   };
 }
@@ -293,6 +303,14 @@ export async function runIndexPlan(planId: string, brandName: string): Promise<I
   return mapPlan(updated, keywords);
 }
 
+function serializeCitationUrls(
+  urls?: IndexCitationLink[] | string
+): string | null {
+  if (!urls) return null;
+  if (typeof urls === 'string') return urls;
+  return urls.length ? JSON.stringify(urls) : null;
+}
+
 export async function saveIndexResults(
   planId: string,
   results: Array<{
@@ -301,6 +319,8 @@ export async function saveIndexResults(
     hit: boolean;
     citedMerchant?: boolean;
     citationSnippet?: string;
+    aiResponse?: string;
+    citationUrls?: IndexCitationLink[] | string;
   }>
 ): Promise<void> {
   await prisma.indexResult.deleteMany({ where: { planId } });
@@ -313,6 +333,8 @@ export async function saveIndexResults(
         hit: r.hit,
         citedMerchant: r.citedMerchant ?? false,
         citationSnippet: r.citationSnippet ?? null,
+        aiResponse: r.aiResponse ?? null,
+        citationUrls: serializeCitationUrls(r.citationUrls),
       })),
     });
   }

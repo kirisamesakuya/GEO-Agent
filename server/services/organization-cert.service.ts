@@ -1,6 +1,5 @@
 import { prisma } from '../db/client.js';
 import { appendAuditLog } from './audit.service.js';
-import { getDefaultOrganization } from './organization.service.js';
 
 export type OrgCertStatus = 'uncertified' | 'pending' | 'approved' | 'rejected';
 
@@ -43,22 +42,64 @@ function mapOrg(row: {
   };
 }
 
-export async function getOrganizationCertDetail(): Promise<OrganizationCertDto | null> {
-  const org = await getDefaultOrganization();
-  if (!org) return null;
-  const row = await prisma.organization.findUnique({ where: { id: org.id } });
-  if (!row) return null;
-  return mapOrg(row);
+async function findOrganizationForUser(userId: string) {
+  const member = await prisma.organizationMember.findFirst({
+    where: { userId },
+    orderBy: { createdAt: 'asc' },
+    include: { organization: true },
+  });
+  return member?.organization ?? null;
 }
 
-export async function submitOrganizationCertification(input: {
-  legalName: string;
-  uscc: string;
-  contactName: string;
-  contactPhone: string;
-}) {
-  const org = await getDefaultOrganization();
-  if (!org) throw new Error('组织不存在');
+export async function getOrganizationCertDetail(userId: string): Promise<OrganizationCertDto | null> {
+  const org = await findOrganizationForUser(userId);
+  if (!org) return null;
+  return mapOrg(org);
+}
+
+export async function getOrganizationCertContext(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { accountType: true },
+  });
+  const organization = await getOrganizationCertDetail(userId);
+  return {
+    accountType: user?.accountType ?? 'personal',
+    organization,
+  };
+}
+
+export async function submitOrganizationCertification(
+  userId: string,
+  input: {
+    legalName: string;
+    uscc?: string;
+    contactName?: string;
+    contactPhone?: string;
+  }
+) {
+  let org = await findOrganizationForUser(userId);
+
+  if (!org) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { displayName: true },
+    });
+    org = await prisma.organization.create({
+      data: {
+        name: input.legalName.trim(),
+        certStatus: 'uncertified',
+      },
+    });
+    await prisma.organizationMember.create({
+      data: {
+        organizationId: org.id,
+        userId,
+        displayName: user?.displayName ?? input.contactName.trim(),
+        role: 'owner',
+      },
+    });
+  }
 
   const current = await prisma.organization.findUnique({ where: { id: org.id } });
   if (!current) throw new Error('组织不存在');
@@ -70,24 +111,28 @@ export async function submitOrganizationCertification(input: {
     throw new Error('组织已完成认证，无需重复提交');
   }
 
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { displayName: true, phone: true },
+  });
+
   const legalName = input.legalName.trim();
-  const uscc = input.uscc.trim().toUpperCase();
-  const contactName = input.contactName.trim();
-  const contactPhone = input.contactPhone.trim();
+  const usccRaw = input.uscc?.trim().toUpperCase() ?? '';
+  const uscc = usccRaw ? usccRaw : null;
+  const contactName = (input.contactName?.trim() || user?.displayName || '').trim();
+  const contactPhone = (input.contactPhone?.trim() || user?.phone || '').trim();
 
   if (!legalName) throw new Error('请填写企业/主体名称');
-  if (!/^[0-9A-Z]{18}$/.test(uscc)) throw new Error('请填写 18 位统一社会信用代码');
-  if (!contactName) throw new Error('请填写联系人');
-  if (!/^1\d{10}$/.test(contactPhone)) throw new Error('请填写有效联系人手机号');
+  if (uscc && !/^[0-9A-Z]{18}$/.test(uscc)) throw new Error('统一社会信用代码格式不正确');
 
   const updated = await prisma.organization.update({
-    where: { id: org.id },
+    where: { id: current.id },
     data: {
       name: legalName,
       legalName,
       uscc,
-      contactName,
-      contactPhone,
+      contactName: contactName || null,
+      contactPhone: contactPhone || null,
       certStatus: 'pending',
       certSubmittedAt: new Date(),
       certRejectReason: null,
@@ -98,7 +143,7 @@ export async function submitOrganizationCertification(input: {
   await appendAuditLog({
     action: 'org_cert_submit',
     entity: 'Organization',
-    entityId: org.id,
+    entityId: current.id,
     detail: legalName,
   });
 
@@ -132,6 +177,18 @@ export async function reviewOrganizationCertification(
       certRejectReason: action === 'reject' ? (note?.trim() || '未通过平台审核') : null,
     },
   });
+
+  if (action === 'approve') {
+    const owner = await prisma.organizationMember.findFirst({
+      where: { organizationId, role: 'owner' },
+    });
+    if (owner) {
+      await prisma.user.updateMany({
+        where: { id: owner.userId },
+        data: { accountType: 'enterprise' },
+      });
+    }
+  }
 
   await appendAuditLog({
     action: `org_cert_${action}`,

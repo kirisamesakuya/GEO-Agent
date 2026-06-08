@@ -1,4 +1,5 @@
 /** direct_model 任务 Mock 输出生成器 */
+import { buildIndexSamplePayload } from '../../lib/index-result-payload.js';
 import { CAMPAIGN_PLAN_PLATFORM_LABELS } from '../../lib/media-platforms.js';
 
 export function asStringArray(value: unknown, fallback: string[] = []): string[] {
@@ -58,15 +59,29 @@ export function mockKnowledgeExtract(input: Record<string, unknown>) {
 export function mockIndexSampling(input: Record<string, unknown>) {
   const keywords = asStringArray(input.keywords, ['品牌推荐', '服务价格']);
   const platforms = asStringArray(input.platforms, ['豆包', '元宝']);
+  const brandName = String(input.brand ?? input.brandName ?? '目标品牌');
   return {
     results: keywords.flatMap((keyword, keywordIndex) =>
-      platforms.map((platform, platformIndex) => ({
-        keyword,
-        platform,
-        hit: (keywordIndex + platformIndex) % 2 === 0,
-        citedMerchant: keywordIndex % 2 === 0,
-        citationSnippet: `${platform} 对“${keyword}”的 mock 收录采样片段。`,
-      }))
+      platforms.map((platform, platformIndex) => {
+        const hit = (keywordIndex + platformIndex) % 2 === 0;
+        const citedMerchant = keywordIndex % 2 === 0;
+        const payload = buildIndexSamplePayload({
+          keyword,
+          platform,
+          hit,
+          citedMerchant,
+          brandName,
+        });
+        return {
+          keyword,
+          platform,
+          hit,
+          citedMerchant,
+          citationSnippet: payload.citationSnippet,
+          aiResponse: payload.aiResponse,
+          citationUrls: payload.citationUrls,
+        };
+      })
     ),
     samplingMethod: 'mock_ai',
   };

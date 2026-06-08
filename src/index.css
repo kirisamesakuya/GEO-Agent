@@ -233,35 +233,36 @@ body {
 }
 
 .geo-table thead tr {
-  background-color: var(--color-primary);
+  background-color: var(--neutral-bg-02);
 }
 
 table.geo-table > thead > tr > th {
-  background-color: var(--color-primary);
-  color: #fff;
+  background-color: var(--neutral-bg-02);
+  color: var(--neutral-text-01);
 }
 
 .geo-card .geo-table > thead > tr > th,
 .geo-list-table-panel .geo-table > thead > tr > th {
-  background-color: var(--color-primary);
-  color: #fff;
+  background-color: var(--neutral-bg-02);
+  color: var(--neutral-text-01);
 }
 
 .geo-table th {
-  background-color: var(--color-primary);
+  background-color: var(--neutral-bg-02);
   font-weight: 600;
   font-size: 13px;
   text-align: left;
   padding: 12px 16px;
   white-space: nowrap;
-  color: #fff;
-  border-bottom: 1px solid var(--color-primary-hover);
+  color: var(--neutral-text-01);
+  border-bottom: 1px solid var(--neutral-divider-02);
 }
 
 .geo-table th.geo-table__actions,
 .geo-table td.geo-table__actions {
   text-align: right;
   width: 1%;
+  min-width: 96px;
   white-space: nowrap;
 }
 
@@ -273,7 +274,7 @@ table.geo-table > thead > tr > th {
 }
 
 .geo-table tbody tr:hover {
-  background: var(--color-primary-light);
+  background: var(--neutral-bg-01);
 }
 
 .geo-table--compact th,
@@ -303,6 +304,30 @@ table.geo-table > thead > tr > th {
 .geo-page-content-section {
   padding-left: var(--geo-content-inline);
   padding-right: var(--geo-content-inline);
+}
+
+.geo-report-document-shell {
+  background: var(--neutral-bg-03);
+}
+
+.geo-report-print--preview {
+  box-shadow: 0 1px 3px rgb(15 23 42 / 8%), 0 8px 24px rgb(15 23 42 / 6%);
+  border-radius: 12px;
+  border: 1px solid var(--neutral-divider-02);
+}
+
+.geo-report-html-document {
+  padding: 32px 36px;
+  background: #fff;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #334155;
+}
+
+.geo-report-html-document h1,
+.geo-report-html-document h2,
+.geo-report-html-document h3 {
+  color: #0f172a;
 }
 
 .geo-page-shell {
@@ -559,6 +584,37 @@ table.geo-table > thead > tr > th {
   padding: 6px 10px;
   font-size: 12px;
   line-height: 16px;
+}
+
+/* 列表工具栏：select 勿用 width:100%，避免撑满导致文字不可见 */
+.geo-filter-select {
+  width: auto;
+  min-width: 6.5rem;
+  max-width: 10rem;
+  flex: 0 0 auto;
+  color: var(--color-text);
+  background-color: var(--color-bg-card);
+  cursor: pointer;
+  appearance: auto;
+}
+
+.geo-filter-select--wide {
+  min-width: 9rem;
+  max-width: 12rem;
+}
+
+.geo-filter-date {
+  width: 8.5rem;
+  min-width: 8.5rem;
+  max-width: 8.5rem;
+  flex: 0 0 auto;
+  color: var(--color-text);
+  color-scheme: light;
+}
+
+.geo-filter-select option {
+  color: #334155;
+  background: #fff;
 }
 
 .geo-input.geo-input-fixed {
@@ -1537,4 +1593,73 @@ table.geo-table > thead > tr > th {
   gap: var(--sp-sm);
   font-size: 10px;
   color: var(--neutral-text-03);
+}
+
+/* 文章交付详情 — Markdown 正文预览 */
+.geo-article-markdown {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--neutral-text-01);
+  max-width: 48rem;
+}
+
+.geo-article-markdown h1 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-title);
+  margin: 0 0 12px;
+}
+
+.geo-article-markdown h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-title);
+  margin: 20px 0 8px;
+}
+
+.geo-article-markdown h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-title);
+  margin: 16px 0 6px;
+}
+
+.geo-article-markdown p {
+  margin: 0 0 12px;
+}
+
+.geo-article-markdown blockquote {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--color-primary-soft);
+  background: var(--neutral-bg-03);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--neutral-text-02);
+}
+
+.geo-article-markdown blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+.geo-article-markdown ul {
+  margin: 0 0 12px;
+  padding-left: 1.25rem;
+  list-style: disc;
+}
+
+.geo-article-markdown li {
+  margin-bottom: 4px;
+}
+
+.geo-article-markdown strong {
+  font-weight: 600;
+  color: var(--color-title);
+}
+
+.geo-article-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--neutral-bg-03);
 }

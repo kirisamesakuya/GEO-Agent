@@ -1,11 +1,14 @@
+import { platformApiFetch } from '../../../lib/platform-api';
 /** 履约评级中心（本期前端隐藏，见 platform-feature-flags.ts） */
 import { useEffect, useState } from 'react';
 import PlatformCard from '../components/PlatformCard';
 import PlatformDataTable from '../components/PlatformDataTable';
 import PlatformDetailDrawer from '../components/PlatformDetailDrawer';
 import PlatformFilterBar from '../components/PlatformFilterBar';
+import PlatformFilterField from '../components/PlatformFilterField';
 import PlatformStatSummary from '../components/PlatformStatSummary';
 import PlatformStatusTag from '../components/PlatformStatusTag';
+import { PlatformTableAction, PlatformTableActions } from '../components/PlatformTableActions';
 
 interface RatingRow {
   id: string;
@@ -37,7 +40,7 @@ export default function PlatformFulfillmentRatingView() {
   useEffect(() => {
     const q = new URLSearchParams();
     if (providerName) q.set('providerName', providerName);
-    fetch(`/api/platform/fulfillment-ratings?${q}`)
+    platformApiFetch(`/api/platform/fulfillment-ratings?${q}`)
       .then((r) => r.json())
       .then((d) => {
         setStats(d.stats ?? { avgScore: 0, lowScore: 0, overdueTotal: 0, revisionTotal: 0 });
@@ -48,7 +51,7 @@ export default function PlatformFulfillmentRatingView() {
 
   useEffect(() => {
     if (!selected) { setDetail(null); return; }
-    fetch(`/api/platform/fulfillment-ratings/${selected.id}`)
+    platformApiFetch(`/api/platform/fulfillment-ratings/${selected.id}`)
       .then((r) => r.json())
       .then(setDetail);
   }, [selected]);
@@ -91,7 +94,9 @@ export default function PlatformFulfillmentRatingView() {
           </PlatformCard>
         </div>
         <PlatformFilterBar onReset={() => setProviderName('')}>
-          <input value={providerName} onChange={(e) => setProviderName(e.target.value)} placeholder="接单方名称" className="platform-filter-input" />
+          <PlatformFilterField label="接单方">
+            <input value={providerName} onChange={(e) => setProviderName(e.target.value)} placeholder="接单方名称" className="platform-filter-input" />
+          </PlatformFilterField>
         </PlatformFilterBar>
         <PlatformDataTable<RatingRow>
           rows={ratings}
@@ -104,6 +109,13 @@ export default function PlatformFulfillmentRatingView() {
             { key: 'revision', header: '返修', render: (r) => r.revisions },
             { key: 'score', header: '评分', render: (r) => <PlatformStatusTag label={String(r.score)} kind={scoreKind(r.score)} /> },
           ]}
+          renderActions={(r) => (
+            <PlatformTableActions>
+              <PlatformTableAction label="详情" variant="primary" onClick={() => setSelected(r)} />
+              <PlatformTableAction label="限流" variant="danger" onClick={() => setSelected(r)} />
+              <PlatformTableAction label="优先派单" variant="primary" onClick={() => setSelected(r)} />
+            </PlatformTableActions>
+          )}
         />
       </div>
       {selected && (

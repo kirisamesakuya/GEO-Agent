@@ -225,6 +225,8 @@ export async function handleTaskSuccess(
         hit: boolean;
         citedMerchant?: boolean;
         citationSnippet?: string;
+        aiResponse?: string;
+        citationUrls?: Array<{ title: string; url: string }> | string;
       }>;
       await saveIndexResults(planId, results);
       await updateAgentTask(task.id, { output: { ...output, planId } });

@@ -2,12 +2,15 @@ import { useCallback, useEffect, useState } from 'react';
 import PlatformDataTable from '../components/PlatformDataTable';
 import PlatformDetailDrawer from '../components/PlatformDetailDrawer';
 import PlatformFilterBar from '../components/PlatformFilterBar';
+import PlatformFilterField, { PlatformFilterDateRange } from '../components/PlatformFilterField';
+import { includesDigits, includesText, matchesDateRange } from '../lib/platform-filter-utils';
 import PlatformStatSummary from '../components/PlatformStatSummary';
 import PlatformStatusTag from '../components/PlatformStatusTag';
 import PlatformTabBar from '../components/PlatformTabBar';
 import { useToast } from '../../../context/ToastContext';
 import { usePlatformRole } from '../../../hooks/usePlatformRole';
-import { platformFetch } from '../../../lib/platform-api';
+import { platformFetch, platformApiFetch } from '../../../lib/platform-api';
+import { PlatformTableAction, PlatformTableActions } from '../components/PlatformTableActions';
 import type { PlatformStatusKind } from '../types';
 
 interface OrgRow {
@@ -47,10 +50,15 @@ export default function PlatformOrgCertsView() {
   const [orgs, setOrgs] = useState<OrgRow[]>([]);
   const [selected, setSelected] = useState<OrgRow | null>(null);
   const [rejectNote, setRejectNote] = useState('');
-  const [keyword, setKeyword] = useState('');
+  const [orgName, setOrgName] = useState('');
+  const [legalName, setLegalName] = useState('');
+  const [contactName, setContactName] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
+  const [dateSince, setDateSince] = useState('');
+  const [dateUntil, setDateUntil] = useState('');
 
   const load = useCallback(() => {
-    fetch(`/api/platform/organization-certifications?status=${tab}`)
+    platformApiFetch(`/api/platform/organization-certifications?status=${tab}`)
       .then((r) => r.json())
       .then((d) => setOrgs(d.organizations ?? []));
   }, [tab]);
@@ -61,22 +69,22 @@ export default function PlatformOrgCertsView() {
   }, [load]);
 
   const filtered = orgs.filter((o) => {
-    if (!keyword.trim()) return true;
-    const q = keyword.trim();
-    return (
-      o.name.includes(q)
-      || (o.legalName ?? '').includes(q)
-      || (o.uscc ?? '').includes(q)
-    );
+    if (!includesText(o.name, orgName)) return false;
+    if (!includesText(o.legalName, legalName)) return false;
+    if (!includesText(o.contactName, contactName)) return false;
+    if (!includesDigits(o.contactPhone, contactPhone)) return false;
+    return matchesDateRange(o.certSubmittedAt, dateSince, dateUntil);
   });
 
-  const review = async (action: 'approve' | 'reject') => {
-    if (!selected) return;
+  const review = async (action: 'approve' | 'reject', row?: OrgRow) => {
+    const target = row ?? selected;
+    if (!target) return;
     if (action === 'reject' && !rejectNote.trim()) {
       toast('驳回请填写原因', 'error');
+      setSelected(target);
       return;
     }
-    const res = await platformFetch(role, `/api/platform/organization-certifications/${selected.id}/review`, {
+    const res = await platformFetch(role, `/api/platform/organization-certifications/${target.id}/review`, {
       method: 'POST',
       body: JSON.stringify({ action, note: rejectNote, role }),
     });
@@ -102,23 +110,31 @@ export default function PlatformOrgCertsView() {
           ]}
         />
         <PlatformTabBar tabs={TABS} active={tab} onChange={setTab} />
-        <PlatformFilterBar onReset={() => setKeyword('')}>
-          <input
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="组织名 / 主体 / 信用代码"
-            className="platform-filter-input"
-          />
+        <PlatformFilterBar onReset={() => { setOrgName(''); setLegalName(''); setContactName(''); setContactPhone(''); setDateSince(''); setDateUntil(''); }}>
+          <PlatformFilterField label="组织名称">
+            <input value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder="组织名称" className="platform-filter-input" />
+          </PlatformFilterField>
+          <PlatformFilterField label="主体名称">
+            <input value={legalName} onChange={(e) => setLegalName(e.target.value)} placeholder="营业执照主体" className="platform-filter-input" />
+          </PlatformFilterField>
+          <PlatformFilterField label="联系人">
+            <input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="联系人姓名" className="platform-filter-input" />
+          </PlatformFilterField>
+          <PlatformFilterField label="联系人手机">
+            <input value={contactPhone} onChange={(e) => setContactPhone(e.target.value.replace(/\D/g, '').slice(0, 11))} placeholder="11 位手机号" inputMode="tel" maxLength={11} className="platform-filter-input" />
+          </PlatformFilterField>
+          <PlatformFilterDateRange since={dateSince} until={dateUntil} onSinceChange={setDateSince} onUntilChange={setDateUntil} />
         </PlatformFilterBar>
         <PlatformDataTable<OrgRow>
           rows={filtered}
           rowKey={(r) => r.id}
+          selectedKey={selected?.id}
           onRowClick={setSelected}
           emptyText="暂无组织认证记录"
           columns={[
             { key: 'name', header: '组织', render: (r) => <span className="font-medium">{r.legalName ?? r.name}</span> },
-            { key: 'uscc', header: '信用代码', render: (r) => <span className="font-mono text-xs">{r.uscc ?? '—'}</span> },
-            { key: 'contact', header: '联系人', render: (r) => `${r.contactName ?? '—'} · ${r.contactPhone ?? '—'}` },
+            { key: 'contactName', header: '联系人', render: (r) => r.contactName ?? '—' },
+            { key: 'contactPhone', header: '联系电话', render: (r) => r.contactPhone ?? '—' },
             {
               key: 'time',
               header: '提交时间',
@@ -132,6 +148,17 @@ export default function PlatformOrgCertsView() {
               ),
             },
           ]}
+          renderActions={(r) => (
+            <PlatformTableActions>
+              <PlatformTableAction label="详情" variant="primary" onClick={() => setSelected(r)} />
+              {tab === 'pending' && (
+                <>
+                  <PlatformTableAction label="通过" variant="primary" onClick={() => void review('approve', r)} />
+                  <PlatformTableAction label="驳回" variant="danger" onClick={() => setSelected(r)} />
+                </>
+              )}
+            </PlatformTableActions>
+          )}
         />
       </div>
 
@@ -162,7 +189,6 @@ export default function PlatformOrgCertsView() {
         >
           <div className="space-y-3 text-sm">
             <p><span className="text-[var(--platform-text-tertiary)]">组织简称：</span>{selected.name}</p>
-            <p><span className="text-[var(--platform-text-tertiary)]">统一社会信用代码：</span><code className="text-xs">{selected.uscc ?? '—'}</code></p>
             <p><span className="text-[var(--platform-text-tertiary)]">联系人：</span>{selected.contactName ?? '—'}</p>
             <p><span className="text-[var(--platform-text-tertiary)]">联系电话：</span>{selected.contactPhone ?? '—'}</p>
             <p><span className="text-[var(--platform-text-tertiary)]">提交时间：</span>

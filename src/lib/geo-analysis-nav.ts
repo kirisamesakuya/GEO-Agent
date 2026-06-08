@@ -1,17 +1,15 @@
-export type GeoAnalysisTab = 'smart_check' | 'assets' | 'history';
+export type GeoAnalysisTab = 'smart_check' | 'history';
 
 export const GEO_ANALYSIS_TABS: { id: GeoAnalysisTab; label: string }[] = [
-  { id: 'smart_check', label: '首次体检' },
-  { id: 'assets', label: '资产生成' },
+  { id: 'smart_check', label: 'GEO 检测' },
   { id: 'history', label: '报告历史' },
 ];
 
 export function parseGeoAnalysisTabFromUrl(): GeoAnalysisTab {
   const t = new URLSearchParams(window.location.search).get('geoTab');
   if (t === 'history') return 'history';
-  if (t === 'assets') return 'assets';
-  if (t === 'audit') return 'smart_check';
-  if (t === 'smart_check') return 'smart_check';
+  // 资产生成已并入深度分析，兼容旧链接
+  if (t === 'assets' || t === 'audit' || t === 'smart_check') return 'smart_check';
   return 'smart_check';
 }
 

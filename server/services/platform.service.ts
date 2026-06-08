@@ -240,7 +240,7 @@ async function buildPlatformCockpit(agent: Awaited<ReturnType<typeof getAgentTas
     agentHealth: { total: agentHealthTotal, segments: agentHealthSegments },
     riskHeatmap,
     highlights: [
-      { title: '高风险订单待处理', value: orderDisputed, view: 'risk_center', kind: 'danger' },
+      { title: '争议订单待处理', value: orderDisputed, view: 'orders', kind: 'danger' },
       { title: '发布失败待处理', value: publishFailedTotal, view: 'content_governance', kind: 'warning' },
       { title: '待验收订单', value: orderPendingReview, view: 'orders', kind: 'primary' },
     ],
@@ -261,6 +261,8 @@ export async function getPlatformDashboard() {
     pendingReviewOrders,
     revisionOrders,
     disputedOrders,
+    pendingOrgCerts,
+    pendingWithdrawals,
   ] = await Promise.all([
     getPlatformStats(),
     getAgentTaskStats(),
@@ -271,6 +273,10 @@ export async function getPlatformDashboard() {
     prisma.taskOrder.count({ where: { status: 'pending_review' } }),
     prisma.taskOrder.count({ where: { status: 'revision' } }),
     prisma.taskOrder.count({ where: { status: 'disputed' } }),
+    prisma.organization.count({ where: { certStatus: 'pending' } }),
+    prisma.providerWithdrawalRequest.count({
+      where: { status: { in: ['pending', 'approved'] } },
+    }),
   ]);
 
   const todos: Array<{ id: string; label: string; priority: string; type: string; count: number }> = [];
@@ -329,7 +335,24 @@ export async function getPlatformDashboard() {
       count: disputedOrders,
     });
   }
-
+  if (pendingOrgCerts > 0) {
+    todos.push({
+      id: 'org-cert',
+      label: '企业认证待审',
+      priority: 'P1',
+      type: 'org_certs',
+      count: pendingOrgCerts,
+    });
+  }
+  if (pendingWithdrawals > 0) {
+    todos.push({
+      id: 'withdrawal-review',
+      label: '提现待处理',
+      priority: 'P1',
+      type: 'funds',
+      count: pendingWithdrawals,
+    });
+  }
   const [riskOrders, cockpit] = await Promise.all([
     prisma.taskOrder.findMany({
       where: { status: { in: ['revision', 'pending_review', 'disputed'] } },
@@ -384,7 +407,7 @@ export async function getTaskOrderReassignPreview(orderId: string) {
     riskHints: [
       ...(order.deliveries.length > 0 ? ['已有交付记录，改派后新接单方需继续履约'] : []),
       ...(order.status === 'pending_review' ? ['订单待验收，改派可能影响商家验收'] : []),
-      ...(order.status === 'disputed' ? ['争议中订单，建议先结案再改派'] : []),
+      ...(order.status === 'disputed' ? ['争议订单：线下沟通后可通过改派或释放登记处理结果'] : []),
     ],
   };
 }
@@ -439,10 +462,6 @@ export async function reassignTaskOrder(
   if (!existing) throw new Error('订单不存在');
   if (!existing.providerId) throw new Error('订单尚未派单，请使用人工派单');
   if (existing.providerId === providerId) throw new Error('新接单方与当前相同');
-  if (existing.status === 'disputed') {
-    throw new Error('争议中订单请先处理争议再改派');
-  }
-
   const previousProviderId = existing.providerId;
   const previousProviderName = existing.providerName;
 
@@ -459,7 +478,10 @@ export async function reassignTaskOrder(
     data: {
       providerId,
       providerName,
-      status: existing.status === 'published' ? 'in_progress' : existing.status,
+      status:
+        existing.status === 'published' || existing.status === 'disputed'
+          ? 'in_progress'
+          : existing.status,
     },
   });
 
@@ -476,6 +498,61 @@ export async function reassignTaskOrder(
     type: 'assignment',
     title: '订单已改派给您',
     body: `${order.title}（${reason}）`,
+    refId: orderId,
+  });
+
+  return { order, previousProviderId, previousProviderName };
+}
+
+const RELEASE_BLOCKED_STATUSES = new Set(['completed', 'published']);
+
+/** 平台将已指派订单释放回任务大厅，供接单方重新领取 */
+export async function releaseTaskOrderToMarketplace(orderId: string, reason: string) {
+  if (!reason.trim()) throw new Error('释放必须填写原因');
+
+  const existing = await prisma.taskOrder.findUnique({ where: { id: orderId } });
+  if (!existing) throw new Error('订单不存在');
+  if (!existing.providerId) throw new Error('订单未指派接单方，已在任务大厅');
+  if (RELEASE_BLOCKED_STATUSES.has(existing.status)) {
+    if (existing.status === 'completed') throw new Error('已完成订单不可释放');
+    throw new Error('订单已在任务大厅');
+  }
+
+  const previousProviderId = existing.providerId;
+  const previousProviderName = existing.providerName;
+
+  await prisma.providerOrderAssignment.updateMany({
+    where: { orderId, active: true },
+    data: { active: false, reason: `释放回大厅: ${reason.trim()}` },
+  });
+
+  await prisma.taskOrderApplication.updateMany({
+    where: { orderId, status: { in: ['accepted', 'pending'] } },
+    data: { status: 'rejected' },
+  });
+
+  const order = await prisma.taskOrder.update({
+    where: { id: orderId },
+    data: {
+      status: 'published',
+      providerId: null,
+      providerName: null,
+    },
+  });
+
+  await appendAuditLog({
+    action: 'platform_order_release',
+    entity: 'TaskOrder',
+    entityId: orderId,
+    detail: `${previousProviderId}:${reason.trim()}`,
+    source: 'platform',
+  });
+
+  await createProviderNotification({
+    providerId: previousProviderId,
+    type: 'assignment',
+    title: '订单已释放回任务大厅',
+    body: `${existing.title}（${reason.trim()}）`,
     refId: orderId,
   });
 
@@ -1235,11 +1312,10 @@ const PLATFORM_PERMISSION_LABELS: Record<string, string> = {
   merchants: '商家/品牌管理',
   org_certs: '组织认证审核',
   content_governance: '内容与发布监管',
-  ranking_ops: '排名监控运营',
+  ranking_ops: 'GEO监控',
   agents: 'Agent 监控',
   hermes: 'Hermes 连调',
   orders: '订单监管',
-  applications: '接单申请确认',
   website: '网站需求与订单',
   providers: '接单方管理',
   resource_review: '可接单平台审核',
@@ -1253,7 +1329,10 @@ const PLATFORM_PERMISSION_LABELS: Record<string, string> = {
   audit: '审计日志',
   reports: '运营报表与导出',
   'funds.adjust': '资金调整',
-  'funds.deposit': '入账审核',
+  'funds.deposit': '入账/提现审核',
+  users: '用户与账户',
+  publisher_users: '发布端注册用户',
+  provider_users: '接单端注册用户',
   'merchant.disable': '商家停用',
   'config.write': '配置写入',
   'orders.assign': '订单派单',
@@ -1267,12 +1346,31 @@ function labelPermission(key: string) {
 }
 
 export async function listPlatformMembers() {
-  const members = [
-    { id: 'm1', name: '运营 A', role: 'ops' as PlatformRole, status: '启用', lastLogin: '2026-06-05' },
-    { id: 'm2', name: '审核 B', role: 'reviewer' as PlatformRole, status: '启用', lastLogin: '2026-06-04' },
-    { id: 'm3', name: '客服 C', role: 'support' as PlatformRole, status: '启用', lastLogin: '2026-06-03' },
-    { id: 'm4', name: '管理员', role: 'admin' as PlatformRole, status: '启用', lastLogin: '2026-06-05' },
-  ];
+  const platformUsers = await prisma.user.findMany({
+    where: { platformRoles: { some: {} } },
+    include: { platformRoles: { orderBy: { createdAt: 'asc' }, take: 1 } },
+    orderBy: { displayName: 'asc' },
+  });
+
+  const members = await Promise.all(
+    platformUsers.map(async (u) => {
+      const lastLog = await prisma.loginLog.findFirst({
+        where: { userId: u.id, result: 'success' },
+        orderBy: { createdAt: 'desc' },
+      });
+      const role = (u.platformRoles[0]?.role ?? 'support') as PlatformRole;
+      return {
+        id: u.id,
+        name: u.displayName ?? u.phone ?? u.id,
+        role,
+        status: u.status === 'active' ? '启用' : '已停用',
+        lastLogin: lastLog
+          ? lastLog.createdAt.toISOString().slice(0, 10)
+          : '—',
+        phone: u.phone,
+      };
+    })
+  );
 
   const roleMatrix = (Object.keys(ROLE_PERMISSIONS) as PlatformRole[]).map((role) => {
     const permissions = ROLE_PERMISSIONS[role];
@@ -1348,19 +1446,20 @@ export async function listPlatformRankingOps(filters?: {
 
     const samples = resultsByPlan.get(row.id) ?? [];
     const total = row._count.results;
+    const sampleCount = samples.length;
     const hits = samples.filter((s) => s.hit).length;
-    const missRate = samples.length ? 1 - hits / samples.length : total === 0 ? 1 : 0;
-    let anomalyLevel = '正常';
-    let rankChange = 0;
-    if (samples.length && samples.every((s) => !s.hit)) {
+    const citedHits = samples.filter((s) => s.hit && s.citedMerchant).length;
+    const hitRate = sampleCount ? Math.round((hits / sampleCount) * 100) : null;
+
+    let anomalyLevel = '收录正常';
+    if (sampleCount === 0) {
+      anomalyLevel = '无采样';
+    } else if (hits === 0) {
       anomalyLevel = '未收录';
-      rankChange = -5;
-    } else if (missRate >= 0.5) {
-      anomalyLevel = '品牌词下降';
-      rankChange = -3;
-    } else if (samples.some((s) => s.hit && !s.citedMerchant)) {
-      anomalyLevel = '竞品上升';
-      rankChange = -2;
+    } else if (hits < sampleCount) {
+      anomalyLevel = '部分未收录';
+    } else if (citedHits < hits) {
+      anomalyLevel = '未提及品牌';
     }
 
     if (filters?.anomaly && anomalyLevel !== filters.anomaly) continue;
@@ -1373,27 +1472,39 @@ export async function listPlatformRankingOps(filters?: {
       platforms,
       status: row.status,
       resultCount: total,
+      sampleCount,
       hitCount: hits,
+      citedHitCount: citedHits,
+      hitRate,
       anomalyLevel,
-      rankChange,
       queryAt: row.queryAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     });
   }
 
   const anomalyTop = items
-    .filter((i) => i.anomalyLevel !== '正常')
+    .filter((i) => i.anomalyLevel !== '收录正常')
     .slice(0, 8)
     .map((i) => ({
       label: `${i.brandName} · ${i.keywords[0] ?? i.name}`,
       level: i.anomalyLevel,
-      change: i.rankChange,
+      hitSummary:
+        i.sampleCount > 0
+          ? `命中 ${i.hitCount}/${i.sampleCount}${i.citedHitCount < i.hitCount ? ` · 提及品牌 ${i.citedHitCount}/${i.hitCount}` : ''}`
+          : '暂无采样',
     }));
 
   return {
     stats: {
       totalPlans: items.length,
-      anomaly: items.filter((i) => i.anomalyLevel !== '正常').length,
+      anomaly: items.filter((i) => i.anomalyLevel !== '收录正常').length,
+      avgHitRate:
+        items.filter((i) => i.hitRate != null).length > 0
+          ? Math.round(
+              items.reduce((sum, i) => sum + (i.hitRate ?? 0), 0) /
+                items.filter((i) => i.hitRate != null).length
+            )
+          : null,
       monitoring: items.filter((i) => i.status === 'active' || i.status === 'running').length,
       brands: new Set(items.map((i) => i.brandName)).size,
     },

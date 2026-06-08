@@ -23,7 +23,7 @@ export const QUICK_START_ENTRIES: QuickStartEntry[] = [
     id: 'geo_analysis',
     view: 'geo_analysis',
     title: 'GEO 分析',
-    desc: '快速与深度检测，报告与技术资产在报告历史中查看',
+    desc: '深度分析检测，报告与技术资产在报告历史中查看',
   },
   {
     id: 'generate_article',

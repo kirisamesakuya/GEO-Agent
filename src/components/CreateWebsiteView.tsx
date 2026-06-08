@@ -5,6 +5,7 @@ import WebsiteLeadIntakeForm from './delivery/WebsiteLeadIntakeForm';
 import WebsiteRequestsHistoryView, { type WebsiteRequest } from './WebsiteRequestsHistoryView';
 import { History, ChevronRight } from 'lucide-react';
 import type { ViewType } from '../types';
+import { resolveWebsiteLeadFields } from '../../lib/website-lead-intake';
 import { WEBSITE_PHASE1_DESCRIPTION, WEBSITE_PHASE1_TITLE } from '../../lib/website-order-flow';
 
 interface Props {
@@ -25,20 +26,6 @@ function syncWebsiteHistoryUrl(showHistory: boolean, embedded: boolean) {
   window.history.pushState({}, '', url);
 }
 
-function parseLeadFromRequest(req: WebsiteRequest) {
-  const lines = req.goal.split('\n').map((l) => l.trim()).filter(Boolean);
-  const keywords = lines[0] ?? '';
-  const notesLine = lines.find((l) => l.startsWith('参考说明：'));
-  const contactLine = lines.find((l) => l.startsWith('联系方式：'));
-  return {
-    pageType: req.pageType,
-    referenceUrl: req.referenceUrl ?? '',
-    keywords,
-    notes: notesLine ? notesLine.replace(/^参考说明：/, '') : '',
-    contact: contactLine ? contactLine.replace(/^联系方式：/, '') : '',
-  };
-}
-
 export default function CreateWebsiteView({
   brandName,
   onBrandChange,
@@ -49,7 +36,7 @@ export default function CreateWebsiteView({
     new URLSearchParams(window.location.search).get('websiteHistory') === '1' ? 'history' : 'create'
   );
   const [draftKey, setDraftKey] = useState(0);
-  const [prefill, setPrefill] = useState<ReturnType<typeof parseLeadFromRequest> | undefined>();
+  const [prefill, setPrefill] = useState<ReturnType<typeof resolveWebsiteLeadFields> | undefined>();
 
   const openHistory = () => {
     setPageMode('history');
@@ -62,7 +49,7 @@ export default function CreateWebsiteView({
   };
 
   const loadRequest = (req: WebsiteRequest) => {
-    setPrefill(parseLeadFromRequest(req));
+    setPrefill(resolveWebsiteLeadFields(req));
     setDraftKey((k) => k + 1);
     closeHistory();
   };

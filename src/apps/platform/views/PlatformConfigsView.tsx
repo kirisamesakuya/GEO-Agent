@@ -4,7 +4,7 @@ import PlatformDetailDrawer from '../components/PlatformDetailDrawer';
 import PlatformStatusTag from '../components/PlatformStatusTag';
 import { useToast } from '../../../context/ToastContext';
 import { usePlatformRole } from '../../../hooks/usePlatformRole';
-import { platformFetch } from '../../../lib/platform-api';
+import { platformFetch, platformApiFetch } from '../../../lib/platform-api';
 
 const CONFIG_GROUPS: { id: string; label: string; keys: string[] }[] = [
   { id: 'platform', label: '平台与任务', keys: ['platforms', 'task_types', 'acceptance_methods'] },
@@ -73,7 +73,7 @@ export default function PlatformConfigsView() {
   const [versions, setVersions] = useState<Array<Record<string, unknown>>>([]);
 
   const load = useCallback(() => {
-    fetch('/api/platform/configs').then((r) => r.json()).then((d) => setConfigs(d.configs ?? {}));
+    platformApiFetch('/api/platform/configs').then((r) => r.json()).then((d) => setConfigs(d.configs ?? {}));
   }, []);
 
   useEffect(() => {
@@ -98,7 +98,7 @@ export default function PlatformConfigsView() {
   };
 
   const loadVersions = async (key: string) => {
-    const res = await fetch(`/api/platform/configs/${key}/versions`);
+    const res = await platformApiFetch(`/api/platform/configs/${key}/versions`);
     const data = await res.json();
     setVersions(data.versions ?? []);
     setVersionKey(key);

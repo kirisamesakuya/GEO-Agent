@@ -26,3 +26,15 @@ export const ORG_CERT_STATUS_CLASS: Record<OrgCertStatus, string> = {
   approved: 'bg-green-50 text-teal-700 border-teal-200',
   rejected: 'bg-red-50 text-red-700 border-red-200',
 };
+
+export type AccountType = 'personal' | 'enterprise';
+
+export const ACCOUNT_TYPE_LABEL: Record<AccountType, string> = {
+  personal: '个人用户',
+  enterprise: '企业用户',
+};
+
+export const ACCOUNT_TYPE_CLASS: Record<AccountType, string> = {
+  personal: 'bg-slate-50 text-slate-600 border-slate-200',
+  enterprise: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+};

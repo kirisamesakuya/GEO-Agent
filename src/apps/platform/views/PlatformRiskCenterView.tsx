@@ -1,10 +1,14 @@
+import { platformApiFetch } from '../../../lib/platform-api';
 import { useEffect, useState } from 'react';
 import PlatformDataTable from '../components/PlatformDataTable';
 import PlatformDetailDrawer from '../components/PlatformDetailDrawer';
 import PlatformFilterBar from '../components/PlatformFilterBar';
+import PlatformFilterField, { PlatformFilterDateRange } from '../components/PlatformFilterField';
+import { matchesDateRange } from '../lib/platform-filter-utils';
 import PlatformStatSummary from '../components/PlatformStatSummary';
 import PlatformStatusTag from '../components/PlatformStatusTag';
 import type { PlatformStatusKind, PlatformView } from '../types';
+import { PlatformTableAction, PlatformTableActions } from '../components/PlatformTableActions';
 
 interface TicketRow {
   id: string;
@@ -36,13 +40,15 @@ export default function PlatformRiskCenterView({ onNavigate }: Props) {
   const [level, setLevel] = useState('');
   const [status, setStatus] = useState('');
   const [type, setType] = useState('');
+  const [dateSince, setDateSince] = useState('');
+  const [dateUntil, setDateUntil] = useState('');
 
   useEffect(() => {
     const q = new URLSearchParams();
     if (level) q.set('level', level);
     if (status) q.set('status', status);
     if (type) q.set('type', type);
-    fetch(`/api/platform/risk-tickets?${q}`)
+    platformApiFetch(`/api/platform/risk-tickets?${q}`)
       .then((r) => r.json())
       .then((d) => {
         setStats(d.stats ?? { highRisk: 0, overdue: 0, disputed: 0, manual: 0 });
@@ -50,11 +56,14 @@ export default function PlatformRiskCenterView({ onNavigate }: Props) {
       });
   }, [level, status, type]);
 
+  const visibleTickets = tickets.filter((t) => matchesDateRange(t.updatedAt, dateSince, dateUntil));
+
   const openRef = (ticket: TicketRow) => {
     if (!onNavigate) return;
     if (ticket.refType === 'order') onNavigate('orders');
     else if (ticket.refType === 'agent') onNavigate('agents');
-    else if (ticket.refType === 'funds' || ticket.refType === 'deposit') onNavigate('funds');
+    else if (ticket.refType === 'deposit') onNavigate('publisher_deposits');
+    else if (ticket.refType === 'funds') onNavigate('provider_withdrawals');
   };
 
   return (
@@ -68,30 +77,38 @@ export default function PlatformRiskCenterView({ onNavigate }: Props) {
             { label: '待人工', value: stats.manual },
           ]}
         />
-        <PlatformFilterBar onReset={() => { setLevel(''); setStatus(''); setType(''); }}>
-          <select value={type} onChange={(e) => setType(e.target.value)} className="platform-filter-input">
-            <option value="">全部来源</option>
-            <option value="订单">订单</option>
-            <option value="Agent">Agent</option>
-            <option value="资金">资金</option>
-            <option value="充值">充值</option>
-          </select>
-          <select value={level} onChange={(e) => setLevel(e.target.value)} className="platform-filter-input">
-            <option value="">全部等级</option>
-            <option value="P0">P0</option>
-            <option value="P1">P1</option>
-          </select>
-          <select value={status} onChange={(e) => setStatus(e.target.value)} className="platform-filter-input">
-            <option value="">全部状态</option>
-            <option value="争议中">争议中</option>
-            <option value="待处理">待处理</option>
-            <option value="失败">失败</option>
-            <option value="待审">待审</option>
-          </select>
+        <PlatformFilterBar onReset={() => { setLevel(''); setStatus(''); setType(''); setDateSince(''); setDateUntil(''); }}>
+          <PlatformFilterField label="来源类型">
+            <select value={type} onChange={(e) => setType(e.target.value)} className="platform-filter-input">
+              <option value="">全部</option>
+              <option value="订单">订单</option>
+              <option value="Agent">Agent</option>
+              <option value="资金">资金</option>
+              <option value="充值">充值</option>
+            </select>
+          </PlatformFilterField>
+          <PlatformFilterField label="风险等级">
+            <select value={level} onChange={(e) => setLevel(e.target.value)} className="platform-filter-input">
+              <option value="">全部</option>
+              <option value="P0">P0</option>
+              <option value="P1">P1</option>
+            </select>
+          </PlatformFilterField>
+          <PlatformFilterField label="处理状态">
+            <select value={status} onChange={(e) => setStatus(e.target.value)} className="platform-filter-input">
+              <option value="">全部</option>
+              <option value="争议中">争议中</option>
+              <option value="待处理">待处理</option>
+              <option value="失败">失败</option>
+              <option value="待审">待审</option>
+            </select>
+          </PlatformFilterField>
+          <PlatformFilterDateRange since={dateSince} until={dateUntil} onSinceChange={setDateSince} onUntilChange={setDateUntil} />
         </PlatformFilterBar>
         <PlatformDataTable<TicketRow>
-          rows={tickets}
+          rows={visibleTickets}
           rowKey={(r) => r.id}
+          selectedKey={selected?.id}
           onRowClick={setSelected}
           columns={[
             { key: 'source', header: '来源', render: (r) => r.source },
@@ -100,6 +117,13 @@ export default function PlatformRiskCenterView({ onNavigate }: Props) {
             { key: 'status', header: '状态', render: (r) => <PlatformStatusTag label={r.status} kind={r.status === '争议中' ? 'danger' : 'pending'} /> },
             { key: 'sla', header: 'SLA', render: (r) => r.sla },
           ]}
+          renderActions={(r) => (
+            <PlatformTableActions>
+              <PlatformTableAction label="详情" variant="primary" onClick={() => setSelected(r)} />
+              <PlatformTableAction label="打开关联" onClick={() => { setSelected(r); openRef(r); }} />
+              <PlatformTableAction label="分派" variant="primary" onClick={() => setSelected(r)} />
+            </PlatformTableActions>
+          )}
         />
       </div>
       {selected && (

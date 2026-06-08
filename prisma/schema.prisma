@@ -121,6 +121,8 @@ model IndexResult {
   hit             Boolean
   citedMerchant   Boolean        @default(false)
   citationSnippet String?
+  aiResponse      String?
+  citationUrls    String?
   sampledAt       DateTime       @default(now())
 }
 
@@ -412,16 +414,45 @@ model AiCreditSyncLog {
 
 model User {
   id           String             @id @default(uuid())
+  /// 运营可读的用户编号，便于工单与研发排查
+  userNo       Int                @unique @default(autoincrement())
   phone        String?            @unique
   email        String?            @unique
   passwordHash String?
   displayName  String?
+  /// personal = 个人用户；enterprise = 已通过企业认证
+  accountType  String             @default("personal")
   status       String             @default("active")
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
   sessions     Session[]
   providerLinks ProviderUser[]
   platformRoles PlatformUserRole[]
+}
+
+model VerificationCode {
+  id        String    @id @default(uuid())
+  phone     String
+  code      String
+  scene     String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([phone, scene, createdAt])
+}
+
+model LoginLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  phone     String?
+  ip        String?
+  userAgent String?
+  result    String
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model Session {
@@ -683,6 +714,16 @@ model Provider {
   budgetMax         Float?
   caseLinks         String?
   reviewNote        String?
+  /// 提现渠道：bank | alipay | wechat
+  payoutChannel       String?
+  /// 提现账户实名
+  payoutAccountName   String?
+  /// 提现账户展示标签，如「招商银行储蓄卡 ****8821」
+  payoutAccountLabel  String?
+  /// 身份证实名（提现前必填）
+  identityRealName      String?
+  identityIdNumberMask  String?
+  identityVerifiedAt    DateTime?
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @default(now()) @updatedAt
   applications      ProviderApplication[]
@@ -704,6 +745,8 @@ model ProviderWithdrawalRequest {
   channelLabel String?
   status       String    @default("pending")
   note         String?
+  paidNote     String?
+  paidVoucher  String?
   operatorId   String?
   createdAt    DateTime  @default(now())
   reviewedAt   DateTime?
@@ -841,6 +884,9 @@ model WebsiteRequest {
   pageType     String
   goal         String
   referenceUrl String?
+  keywords     String?
+  contact      String?
+  notes        String?
   modules      String
   attachments  String?
   status       String         @default("draft")

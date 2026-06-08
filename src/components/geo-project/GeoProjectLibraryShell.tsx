@@ -121,7 +121,7 @@ export default function GeoProjectLibraryShell({
 
   const syncUrl = (nextSection: ArticleResultSection, articleStatus?: ArticleResultStatusFilter) => {
     if (embeddedSection) {
-      syncContentDeliveryUrl(embeddedSection === 'publish_records' ? 'publish_records' : 'list');
+      syncContentDeliveryUrl('article');
       return;
     }
     const url = new URL(window.location.href);
@@ -148,7 +148,7 @@ export default function GeoProjectLibraryShell({
   const switchPublishStatus = (next: PublishRecordStatusFilter) => {
     setPublishStatusFilter(next);
     if (embeddedSection === 'publish_records') {
-      syncContentDeliveryUrl('publish_records');
+      syncContentDeliveryUrl('article');
       return;
     }
     const url = new URL(window.location.href);

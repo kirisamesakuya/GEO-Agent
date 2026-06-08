@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Play, Plus, X } from 'lucide-react';
+import { ExternalLink, Play, Plus, X } from 'lucide-react';
 import { formatPlanDateTime, toDatetimeLocalValue } from '../lib/datetime-local';
 import {
   defaultScheduleRunTime,
@@ -38,6 +38,11 @@ interface Plan {
   resultCount?: number;
 }
 
+interface IndexCitationLink {
+  title: string;
+  url: string;
+}
+
 interface Result {
   id: string;
   keyword: string;
@@ -45,6 +50,8 @@ interface Result {
   hit: boolean;
   citedMerchant: boolean;
   citationSnippet?: string;
+  aiResponse?: string;
+  citationUrls?: IndexCitationLink[];
   sampledAt: string;
 }
 
@@ -72,6 +79,7 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [results, setResults] = useState<Result[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [detailResult, setDetailResult] = useState<Result | null>(null);
   const [creating, setCreating] = useState(false);
   const [planBrand, setPlanBrand] = useState('');
   const [planName, setPlanName] = useState('');
@@ -290,7 +298,7 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
   return (
     <div className="geo-page-content overflow-y-auto h-full space-y-4">
       <PageHeaderWithBrand
-        title="排名监控"
+        title="GEO监控"
         brandName={brandName}
         onBrandChange={onBrandChange}
         actions={
@@ -403,7 +411,7 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
                 <th>平台</th>
                 <th>命中</th>
                 <th>引用商家文</th>
-                <th>引用内容</th>
+                <th>AI 返回</th>
                 <th>时间</th>
               </tr>
             </thead>
@@ -442,12 +450,133 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
                   <td>{r.platform}</td>
                   <td>{r.hit ? '是' : '否'}</td>
                   <td>{r.citedMerchant ? '是' : '否'}</td>
-                  <td className="text-xs max-w-[200px] truncate">{r.citationSnippet ?? '—'}</td>
+                  <td className="text-xs">
+                    <div className="flex items-center gap-2 min-w-0 max-w-[280px]">
+                      <span className="truncate text-[var(--neutral-text-03)]">
+                        {r.citationSnippet ?? (r.aiResponse ? '有完整回答' : '—')}
+                      </span>
+                      {(r.aiResponse || r.citationSnippet) && (
+                        <button
+                          type="button"
+                          className="geo-link shrink-0 text-[11px]"
+                          onClick={() => setDetailResult(r)}
+                        >
+                          查看
+                        </button>
+                      )}
+                    </div>
+                  </td>
                   <td className="text-xs">{r.sampledAt.slice(0, 16).replace('T', ' ')}</td>
                 </tr>
               ))}
             </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {detailResult && (
+        <div
+          className="geo-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="index-result-detail-title"
+          onClick={() => setDetailResult(null)}
+        >
+          <div
+            className="geo-modal max-w-2xl relative max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setDetailResult(null)}
+              className="absolute top-5 right-5 p-1 geo-nav-item rounded-lg z-10"
+              style={{ color: 'var(--neutral-text-03)' }}
+              aria-label="关闭"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="geo-modal-head shrink-0">
+              <h3
+                id="index-result-detail-title"
+                className="font-bold text-sm"
+                style={{ color: 'var(--neutral-text-01)' }}
+              >
+                AI 返回详情
+              </h3>
+              <p className="text-xs mt-1" style={{ color: 'var(--neutral-text-03)' }}>
+                {detailResult.platform} · {detailResult.keyword}
+              </p>
+            </div>
+
+            <div className="px-5 pb-5 space-y-4 overflow-y-auto min-h-0">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <div style={{ color: 'var(--neutral-text-03)' }}>命中</div>
+                  <div className="font-medium mt-0.5">{detailResult.hit ? '是' : '否'}</div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--neutral-text-03)' }}>引用商家文</div>
+                  <div className="font-medium mt-0.5">{detailResult.citedMerchant ? '是' : '否'}</div>
+                </div>
+                <div className="col-span-2">
+                  <div style={{ color: 'var(--neutral-text-03)' }}>采样时间</div>
+                  <div className="font-medium mt-0.5">
+                    {detailResult.sampledAt.slice(0, 16).replace('T', ' ')}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs font-medium mb-2" style={{ color: 'var(--neutral-text-02)' }}>
+                  完整 AI 回答
+                </div>
+                <pre
+                  className="text-xs leading-relaxed whitespace-pre-wrap rounded-lg p-3 border max-h-[320px] overflow-y-auto"
+                  style={{
+                    color: 'var(--neutral-text-01)',
+                    background: 'var(--neutral-bg-02)',
+                    borderColor: 'var(--neutral-border-01)',
+                  }}
+                >
+                  {detailResult.aiResponse ?? detailResult.citationSnippet ?? '暂无返回内容'}
+                </pre>
+              </div>
+
+              {detailResult.citationUrls && detailResult.citationUrls.length > 0 && (
+                <div>
+                  <div className="text-xs font-medium mb-2" style={{ color: 'var(--neutral-text-02)' }}>
+                    引用文章（{detailResult.citationUrls.length}）
+                  </div>
+                  <ul className="space-y-2">
+                    {detailResult.citationUrls.map((link) => (
+                      <li key={link.url}>
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="geo-link text-xs inline-flex items-center gap-1.5 max-w-full"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                          <span className="truncate">{link.title || link.url}</span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <div className="geo-modal-foot shrink-0 flex justify-end">
+              <button
+                type="button"
+                className="geo-btn-secondary text-sm"
+                onClick={() => setDetailResult(null)}
+              >
+                关闭
+              </button>
+            </div>
           </div>
         </div>
       )}

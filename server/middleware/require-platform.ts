@@ -38,7 +38,7 @@ export function requirePlatformRole(req: Request, res: Response): PlatformRole |
     return fromCtx;
   }
 
-  const role = fromCtx || fromClient;
+  const role = fromCtx || fromClient || (getAuthMode() === 'demo' ? 'admin' : null);
   if (!role) {
     res.status(403).json({ error: '缺少平台角色（请求头 X-Platform-Role）' });
     return null;

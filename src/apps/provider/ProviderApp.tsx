@@ -16,6 +16,7 @@ import {
   markAllNotificationsReadLocal,
   type ProviderNotificationItem,
 } from './lib/provider-mock-notifications';
+import { isProviderViewEnabled } from './provider-feature-flags';
 
 export default function ProviderApp() {
   const [currentTab, setCurrentTab] = useState<ProviderPageId>('home');
@@ -84,9 +85,10 @@ export default function ProviderApp() {
 
   const handleTabChange = (tab: ProviderPageId) => {
     closeSidebar();
-    setCurrentTab(tab);
-    if (tab !== 'tasks') setActiveTaskId(null);
-    if (tab !== 'orders') setActiveOrderId(null);
+    const nextTab = isProviderViewEnabled(tab) ? tab : 'profile';
+    setCurrentTab(nextTab);
+    if (nextTab !== 'tasks') setActiveTaskId(null);
+    if (nextTab !== 'orders') setActiveOrderId(null);
   };
 
   const approved = provider?.applicationStatus === 'approved';
@@ -170,7 +172,6 @@ export default function ProviderApp() {
           <ProviderProfileView
             provider={provider}
             providerId={provider.id}
-            onNavigate={handleTabChange}
             onProviderReady={(id) => {
               fetch(`/api/provider/profile?providerId=${id}`)
                 .then((r) => r.json())

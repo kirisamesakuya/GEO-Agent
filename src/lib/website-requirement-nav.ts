@@ -1,19 +1,19 @@
+// 本期网页需求以后台线下交付为主，前台仅记录是否已交付结果。
+// 复杂执行流、排期、线上验收暂不展示，后续恢复时从 website requirement 状态扩展。
+
 export type WebsiteRequirementStatusFilter =
   | 'all'
   | 'pending'
-  | 'in_progress'
-  | 'delivered'
-  | 'need_info';
+  | 'delivered';
 
+/** 精简版状态 Tab（本期前台：线下交付，无「需补充」） */
 export const WEBSITE_REQUIREMENT_STATUS_TABS: {
   id: WebsiteRequirementStatusFilter;
   label: string;
 }[] = [
   { id: 'all', label: '全部' },
-  { id: 'pending', label: '待处理' },
-  { id: 'in_progress', label: '处理中' },
+  { id: 'pending', label: '待交付' },
   { id: 'delivered', label: '已交付' },
-  { id: 'need_info', label: '需补充' },
 ];
 
 export interface WebsiteRequirementRow {
@@ -22,28 +22,46 @@ export interface WebsiteRequirementRow {
   pageType: string;
   goal: string;
   referenceUrl?: string | null;
+  keywords?: string | null;
+  contact?: string | null;
+  notes?: string | null;
   status: string;
   createdAt: string;
-  orders?: Array<{ id: string; status: string; previewUrl?: string | null; deliveryNote?: string | null }>;
+  orders?: Array<{
+    id: string;
+    status: string;
+    previewUrl?: string | null;
+    deliveryNote?: string | null;
+    revisionReason?: string | null;
+  }>;
 }
 
-export function deriveWebsiteRequirementStatus(
+function deriveRawWebsiteStatus(
   req: WebsiteRequirementRow
-): WebsiteRequirementStatusFilter {
+): 'pending' | 'in_progress' | 'delivered' {
   const order = req.orders?.[0];
   if (order?.status === 'completed') return 'delivered';
-  if (order?.status === 'revision') return 'need_info';
+  if (order?.status === 'revision') return 'in_progress';
   if (order || req.status === 'ordered') return 'in_progress';
   if (req.status === 'preview_ready') return 'in_progress';
   return 'pending';
 }
 
-export const WEBSITE_REQUIREMENT_STATUS_LABEL: Record<WebsiteRequirementStatusFilter, string> = {
-  all: '全部',
-  pending: '待处理',
-  in_progress: '处理中',
+/** 对外展示用的精简状态 */
+export function deriveWebsiteRequirementStatus(
+  req: WebsiteRequirementRow
+): Exclude<WebsiteRequirementStatusFilter, 'all'> {
+  const raw = deriveRawWebsiteStatus(req);
+  if (raw === 'in_progress') return 'pending';
+  return raw;
+}
+
+export const WEBSITE_REQUIREMENT_STATUS_LABEL: Record<
+  Exclude<WebsiteRequirementStatusFilter, 'all'>,
+  string
+> = {
+  pending: '待交付',
   delivered: '已交付',
-  need_info: '需补充',
 };
 
 export function websiteRequirementDetailHint(id: string) {

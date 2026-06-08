@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import type { ViewType } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import AgentInputCard from '../common/AgentInputCard';
-import AgentTaskBackgroundCard, { type TaskQueueHint } from '../common/AgentTaskBackgroundCard';
+import AgentTaskBackgroundCard, {
+  isAgentTaskBlocking,
+  type TaskQueueHint,
+} from '../common/AgentTaskBackgroundCard';
 import type { AgentTask, AgentTaskStatus } from '../../types';
 import { submitGeoAgentTask } from '../../lib/geo-audit-client';
 import { AUDIT_MODULE_SPECS, resolveAuditModuleTask } from '../../lib/geo-audit-modules';
@@ -121,7 +124,7 @@ export default function GeoAuditView({ brandName, onNavigate, onOpenHistory }: P
               <button
                 type="button"
                 className="geo-btn-primary text-sm"
-                disabled={loading || brandName === '__all__'}
+                disabled={loading || brandName === '__all__' || isAgentTaskBlocking(taskId, taskStatus)}
                 onClick={() => void submit('full')}
               >
                 {loading ? '等待本机 Hermes 执行…' : '提交完整专业审计'}
@@ -129,7 +132,12 @@ export default function GeoAuditView({ brandName, onNavigate, onOpenHistory }: P
               <button
                 type="button"
                 className="geo-btn-secondary text-sm"
-                disabled={loading || brandName === '__all__' || modules.length === 0}
+                disabled={
+                  loading ||
+                  brandName === '__all__' ||
+                  modules.length === 0 ||
+                  isAgentTaskBlocking(taskId, taskStatus)
+                }
                 onClick={() => void submit('modules')}
               >
                 {loading
@@ -195,6 +203,7 @@ export default function GeoAuditView({ brandName, onNavigate, onOpenHistory }: P
               queueHint={queueHint}
               onNavigate={onNavigate}
               onComplete={onComplete}
+              onStatusChange={setTaskStatus}
             />
           </div>
         )}

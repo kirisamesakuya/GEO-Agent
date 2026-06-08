@@ -1,7 +1,10 @@
 import { useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import type { AgentTask, AgentTaskStatus } from '../types';
 import AgentInputCard from './common/AgentInputCard';
-import AgentTaskBackgroundCard, { type TaskQueueHint } from './common/AgentTaskBackgroundCard';
+import AgentTaskBackgroundCard, {
+  isAgentTaskBlocking,
+  type TaskQueueHint,
+} from './common/AgentTaskBackgroundCard';
 import { useToast } from '../context/ToastContext';
 import { createLobbyOrder, isArticleOrderType } from '../lib/create-task-order';
 import {
@@ -500,7 +503,7 @@ export default function DeliveryPlanView({
                 type="button"
                 className="geo-btn-primary text-sm px-8"
                 onClick={() => void generatePlan()}
-                disabled={loading}
+                disabled={loading || isAgentTaskBlocking(taskId, taskStatus)}
               >
                 {loading ? '生成中…' : 'AI 生成投放方案'}
               </button>
@@ -620,6 +623,7 @@ export default function DeliveryPlanView({
               queueHint={queueHint}
               onNavigate={onNavigate}
               onComplete={onComplete}
+              onStatusChange={setTaskStatus}
             />
           )}
         </>

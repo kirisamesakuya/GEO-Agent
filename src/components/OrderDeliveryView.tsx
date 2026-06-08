@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { Plus } from 'lucide-react';
 import type { ViewType } from '../types';
 import GeoListPageShell from './common/GeoListPageShell';
 import OrderDeliveryEmptyState from './common/OrderDeliveryEmptyState';
@@ -21,6 +22,7 @@ import {
   taskOrderDetailHint,
 } from '../lib/website-requirement-nav';
 import { syncContentDeliveryUrl } from '../lib/content-delivery-nav';
+import { formatWebsiteLeadListLabel } from '../../lib/website-lead-intake';
 
 interface TaskOrder {
   id: string;
@@ -111,10 +113,16 @@ export default function OrderDeliveryView({
     return requirements.filter((r) => deriveWebsiteRequirementStatus(r) === websiteStatusFilter);
   }, [requirements, websiteStatusFilter]);
 
+  const displayWebsiteStatus = (req: WebsiteRequirementRow) => {
+    const st = deriveWebsiteRequirementStatus(req);
+    if (st === 'all') return '—';
+    return WEBSITE_REQUIREMENT_STATUS_LABEL[st];
+  };
+
   const switchTab = (next: MainTab) => {
     setTab(next);
     if (embeddedTab) {
-      syncContentDeliveryUrl(next === 'website' ? 'website' : 'manual');
+      syncContentDeliveryUrl(next === 'website' ? 'website' : 'article');
       return;
     }
     const url = new URL(window.location.href);
@@ -148,9 +156,14 @@ export default function OrderDeliveryView({
         hidePageHeader={Boolean(embeddedTab)}
         title={pageTitle}
         primaryAction={
-          tab === 'website' && brandName !== '__all__' ? (
-            <button type="button" className="geo-btn-primary geo-btn-sm" onClick={() => setShowSubmitModal(true)}>
-              提交网页需求
+          tab === 'website' && brandName !== '__all__' && !embeddedTab ? (
+            <button
+              type="button"
+              className="geo-btn-primary geo-btn-sm flex items-center gap-1.5"
+              onClick={() => setShowSubmitModal(true)}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              新建网页需求
             </button>
           ) : undefined
         }
@@ -174,6 +187,18 @@ export default function OrderDeliveryView({
           if (tab === 'website') switchWebsiteStatus(id as WebsiteRequirementStatusFilter);
           else setTypeFilter(id as OrderTypeFilter);
         }}
+        toolbar={
+          tab === 'website' && brandName !== '__all__' && embeddedTab ? (
+            <button
+              type="button"
+              className="geo-btn-primary geo-btn-sm flex shrink-0 items-center gap-1.5 whitespace-nowrap"
+              onClick={() => setShowSubmitModal(true)}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              新建网页需求
+            </button>
+          ) : undefined
+        }
       >
         <div className="geo-list-table-panel">
           {tab === 'task' ? (
@@ -244,20 +269,18 @@ export default function OrderDeliveryView({
                 <thead>
                   <tr>
                     <th>页面类型</th>
-                    <th>目标说明</th>
+                    <th>目标关键词</th>
                     <th>状态</th>
                     <th>提交时间</th>
                     <th className="geo-table__actions">操作</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRequirements.map((r) => {
-                    const st = deriveWebsiteRequirementStatus(r);
-                    return (
+                  {filteredRequirements.map((r) => (
                       <tr key={r.id}>
                         <td className="font-medium text-sm">{r.pageType}</td>
-                        <td className="text-xs max-w-xs truncate">{r.goal}</td>
-                        <td className="text-xs">{WEBSITE_REQUIREMENT_STATUS_LABEL[st]}</td>
+                        <td className="text-xs max-w-xs truncate">{formatWebsiteLeadListLabel(r)}</td>
+                        <td className="text-xs">{displayWebsiteStatus(r)}</td>
                         <td className="text-xs tabular-nums">
                           {new Date(r.createdAt).toLocaleString('zh-CN', {
                             month: '2-digit',
@@ -282,8 +305,7 @@ export default function OrderDeliveryView({
                           </button>
                         </td>
                       </tr>
-                    );
-                  })}
+                  ))}
                 </tbody>
               </table>
             </div>

@@ -14,7 +14,6 @@ import {
   Radar,
   ClipboardList,
   Inbox,
-  Cpu,
   Package,
   X,
 } from 'lucide-react';
@@ -34,14 +33,13 @@ const MAIN_NAV_ITEMS: { view: ViewType; label: string; icon: typeof LayoutDashbo
   { view: 'workbench', label: '工作台', icon: LayoutDashboard },
   { view: 'brand_list', label: '品牌管理', icon: Building },
   { view: 'geo_analysis', label: 'GEO 分析', icon: BarChart2 },
-  { view: 'indexing_rank', label: '排名监控', icon: Radar },
+  { view: 'indexing_rank', label: 'GEO监控', icon: Radar },
   { view: 'create_order', label: '发布任务', icon: ClipboardList },
   { view: 'content_delivery', label: '内容交付', icon: Package },
   { view: 'agent_task_results', label: '结果中心', icon: Inbox },
 ];
 
 const ACCOUNT_NAV_ITEMS = [
-  { view: 'hermes_console' as ViewType, label: '本机 Hermes', icon: Cpu },
   { view: 'account_binding' as ViewType, label: '发布账号', icon: UserCheck },
   { view: 'account_funds' as ViewType, label: '账户余额', icon: Wallet },
 ] as const;

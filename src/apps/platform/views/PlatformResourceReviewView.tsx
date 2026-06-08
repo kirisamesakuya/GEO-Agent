@@ -2,13 +2,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useToast } from '../../../context/ToastContext';
 import { usePlatformRole } from '../../../hooks/usePlatformRole';
-import { platformFetch } from '../../../lib/platform-api';
+import { platformFetch, platformApiFetch } from '../../../lib/platform-api';
 import PlatformDataTable from '../components/PlatformDataTable';
 import PlatformDetailDrawer from '../components/PlatformDetailDrawer';
 import PlatformFilterBar from '../components/PlatformFilterBar';
+import PlatformFilterField from '../components/PlatformFilterField';
 import PlatformStatSummary from '../components/PlatformStatSummary';
 import PlatformStatusTag from '../components/PlatformStatusTag';
 import PlatformTabBar from '../components/PlatformTabBar';
+import { PlatformTableAction, PlatformTableActions } from '../components/PlatformTableActions';
 import type { PlatformStatusKind } from '../types';
 
 interface ResourceRow {
@@ -58,7 +60,7 @@ export default function PlatformResourceReviewView() {
     if (tab) q.set('status', tab);
     if (platform) q.set('platform', platform);
     if (providerName) q.set('providerName', providerName);
-    fetch(`/api/platform/provider-resources?${q}`)
+    platformApiFetch(`/api/platform/provider-resources?${q}`)
       .then((r) => r.json())
       .then((d) => {
         setStats(d.stats ?? { pending: 0, approved: 0, rejected: 0 });
@@ -70,16 +72,17 @@ export default function PlatformResourceReviewView() {
     load();
   }, [load]);
 
-  const submitReview = async (action: 'approve' | 'reject' | 'reset') => {
-    if (!selected) return;
+  const submitReview = async (action: 'approve' | 'reject' | 'reset', row?: ResourceRow) => {
+    const target = row ?? selected;
+    if (!target) return;
     setSubmitting(true);
     try {
       const res = await platformFetch(role, '/api/platform/provider-resources/review', {
         method: 'POST',
         body: JSON.stringify({
           role,
-          providerId: selected.providerId,
-          platform: selected.platform,
+          providerId: target.providerId,
+          platform: target.platform,
           action,
           note: action === 'reset' ? undefined : reviewNote.trim() || undefined,
         }),
@@ -117,20 +120,19 @@ export default function PlatformResourceReviewView() {
         />
 
         <PlatformFilterBar onReset={() => { setPlatform(''); setProviderName(''); setTab(''); }}>
-          <input
-            value={providerName}
-            onChange={(e) => setProviderName(e.target.value)}
-            placeholder="接单方名称"
-            className="platform-filter-input"
-          />
-          <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="platform-filter-input">
-            <option value="">全部平台</option>
-            <option value="小红书">小红书</option>
-            <option value="知乎">知乎</option>
-            <option value="公众号">公众号</option>
-            <option value="抖音">抖音</option>
-            <option value="网站">网站</option>
-          </select>
+          <PlatformFilterField label="接单方">
+            <input value={providerName} onChange={(e) => setProviderName(e.target.value)} placeholder="接单方名称" className="platform-filter-input" />
+          </PlatformFilterField>
+          <PlatformFilterField label="可接单平台">
+            <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="platform-filter-input">
+              <option value="">全部</option>
+              <option value="小红书">小红书</option>
+              <option value="知乎">知乎</option>
+              <option value="公众号">公众号</option>
+              <option value="抖音">抖音</option>
+              <option value="网站">网站</option>
+            </select>
+          </PlatformFilterField>
         </PlatformFilterBar>
 
         <PlatformTabBar tabs={TABS} active={tab} onChange={setTab} />
@@ -138,6 +140,7 @@ export default function PlatformResourceReviewView() {
         <PlatformDataTable<ResourceRow>
           rows={resources}
           rowKey={(r) => r.id}
+          selectedKey={selected?.id}
           onRowClick={(row) => {
             setSelected(row);
             setReviewNote(row.reviewNote ?? '');
@@ -158,6 +161,17 @@ export default function PlatformResourceReviewView() {
               ),
             },
           ]}
+          renderActions={(r) => (
+            <PlatformTableActions>
+              <PlatformTableAction label="详情" variant="primary" onClick={() => { setSelected(r); setReviewNote(r.reviewNote ?? ''); }} />
+              {r.reviewStatus === 'pending' && (
+                <>
+                  <PlatformTableAction label="通过" variant="primary" onClick={() => void submitReview('approve', r)} />
+                  <PlatformTableAction label="驳回" variant="danger" onClick={() => { setSelected(r); setReviewNote(r.reviewNote ?? ''); }} />
+                </>
+              )}
+            </PlatformTableActions>
+          )}
         />
       </div>
 

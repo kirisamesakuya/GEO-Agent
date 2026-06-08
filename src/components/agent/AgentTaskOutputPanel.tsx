@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { AgentTask } from '../../types';
 import { KEYWORD_GROUP_OPTIONS } from '../../lib/agent-result-confirmation';
+import { sanitizeDeliverableMarkdown } from '../../../lib/task-deliverable-markdown';
+import ArticleMarkdownBody from '../delivery/ArticleMarkdownBody';
 
 export type TaskDeliverableView = {
   format: 'markdown' | 'html' | 'pdf' | 'structured' | 'text';
@@ -68,7 +70,12 @@ function KeywordGroupsPreview({ groups }: { groups: Record<string, string[]> }) 
 
 export default function AgentTaskOutputPanel({ task, deliverable }: Props) {
   const [showTechnical, setShowTechnical] = useState(false);
-  const hideRaw = deliverable?.hideRawJson ?? false;
+  const hideRaw = deliverable?.hideRawJson ?? Boolean(deliverable?.content);
+
+  const markdownContent = useMemo(() => {
+    if (deliverable?.format !== 'markdown' || !deliverable.content) return '';
+    return sanitizeDeliverableMarkdown(deliverable.content);
+  }, [deliverable?.content, deliverable?.format]);
 
   if (!task.output && !deliverable) return null;
 
@@ -91,10 +98,13 @@ export default function AgentTaskOutputPanel({ task, deliverable }: Props) {
         <p className="text-xs text-[var(--neutral-text-03)]">暂无结构化交付物预览。</p>
       )}
 
-      {deliverable?.format === 'markdown' && deliverable.content && (
-        <pre className="text-xs whitespace-pre-wrap leading-relaxed overflow-auto max-h-[420px] bg-[var(--color-bg)] p-3 rounded-lg">
-          {deliverable.content}
-        </pre>
+      {deliverable?.format === 'markdown' && markdownContent && (
+        <div
+          className="rounded-lg border p-4 overflow-auto max-h-[min(70vh,640px)]"
+          style={{ borderColor: 'var(--neutral-divider-02)', background: 'var(--color-bg-card)' }}
+        >
+          <ArticleMarkdownBody content={markdownContent} />
+        </div>
       )}
 
       {deliverable?.format === 'html' && deliverable.content && (

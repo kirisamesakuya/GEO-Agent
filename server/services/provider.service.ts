@@ -1,3 +1,8 @@
+import {
+  isProviderIdentityVerified,
+  maskIdCardNumber,
+  validateProviderIdentityInput,
+} from '../../lib/provider-identity.js';
 import { prisma } from '../db/client.js';
 import { appendAuditLog } from './audit.service.js';
 import { createProviderNotification } from './notification.service.js';
@@ -34,8 +39,12 @@ export async function getProviderDashboard(providerId: string) {
         orderBy: { updatedAt: 'desc' },
         take: 5,
       }),
+      // 网页客资订单由平台线下交付，仅统计已指派给本接单方且待处理的单
       prisma.websiteOrder.count({
-        where: { OR: [{ assigneeId: null, status: 'pending' }, { assigneeId: providerId, status: 'revision' }] },
+        where: {
+          assigneeId: providerId,
+          status: { in: ['pending', 'in_progress', 'revision'] },
+        },
       }),
       prisma.websiteOrder.count({ where: { assigneeId: providerId } }),
     ]);
@@ -614,7 +623,8 @@ export async function listAllProvidersForPlatform(status?: string) {
   return prisma.provider.findMany({
     where: status ? { applicationStatus: status } : {},
     include: {
-      reviewLogs: { orderBy: { createdAt: 'desc' }, take: 3 },
+      applications: { orderBy: { createdAt: 'desc' }, take: 1 },
+      reviewLogs: { orderBy: { createdAt: 'desc' }, take: 5 },
       _count: { select: { orderApplications: true, assets: true } },
     },
     orderBy: { updatedAt: 'desc' },
@@ -704,4 +714,64 @@ export async function deleteProviderPricingRule(providerId: string, ruleId: stri
 export async function getProviderEarnings(providerId: string) {
   const { buildProviderEarningsTransactions } = await import('./withdrawal.service.js');
   return buildProviderEarningsTransactions(providerId);
+}
+
+export async function verifyProviderIdentity(
+  providerId: string,
+  input: { realName: string; idNumber: string }
+) {
+  const provider = await prisma.provider.findUnique({ where: { id: providerId } });
+  if (!provider) throw new Error('接单方不存在');
+  if (isProviderIdentityVerified(provider)) {
+    throw new Error('已完成实名认证，如需修改请联系平台运营');
+  }
+
+  const parsed = validateProviderIdentityInput(input);
+  if (!parsed.ok) throw new Error(parsed.error);
+
+  return prisma.provider.update({
+    where: { id: providerId },
+    data: {
+      identityRealName: parsed.realName,
+      identityIdNumberMask: maskIdCardNumber(parsed.idNumber),
+      identityVerifiedAt: new Date(),
+    },
+  });
+}
+
+export async function updateProviderPayoutAccount(
+  providerId: string,
+  input: {
+    payoutChannel: string;
+    payoutAccountName: string;
+    payoutAccountLabel: string;
+  }
+) {
+  const provider = await prisma.provider.findUnique({ where: { id: providerId } });
+  if (!provider) throw new Error('接单方不存在');
+  if (!isProviderIdentityVerified(provider)) {
+    throw new Error('请先完成身份证实名认证');
+  }
+
+  const channel = input.payoutChannel.trim();
+  const accountName = input.payoutAccountName.trim();
+  const accountLabel = input.payoutAccountLabel.trim();
+
+  if (!['bank', 'alipay', 'wechat'].includes(channel)) {
+    throw new Error('请选择有效的提现渠道');
+  }
+  if (!accountName) throw new Error('请填写账户实名');
+  if (!accountLabel) throw new Error('请填写账户信息');
+  if (provider.identityRealName && accountName !== provider.identityRealName) {
+    throw new Error('提现账户实名须与身份证实名一致');
+  }
+
+  return prisma.provider.update({
+    where: { id: providerId },
+    data: {
+      payoutChannel: channel,
+      payoutAccountName: accountName,
+      payoutAccountLabel: accountLabel,
+    },
+  });
 }

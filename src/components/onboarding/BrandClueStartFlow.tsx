@@ -1,6 +1,6 @@
-import { useRef, useState, type ReactNode } from 'react';
-import { Upload, Sparkles } from 'lucide-react';
-import type { BrandClueInputType } from '../../types';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { AlertTriangle, Cpu, Upload, Sparkles } from 'lucide-react';
+import type { AgentTaskStatus, BrandClueInputType } from '../../types';
 import type { ViewType } from '../../types';
 import {
   CLUE_TYPE_CHIPS,
@@ -8,7 +8,7 @@ import {
   buildBrandCluePayload,
   type OnboardingGoal,
 } from '../../lib/brand-clue';
-import { startOnboarding, uploadBrandFile } from '../../lib/onboarding-client';
+import { fetchOnboardingStatus, startOnboarding, uploadBrandFile } from '../../lib/onboarding-client';
 import AgentTaskBackgroundCard, { type TaskQueueHint } from '../common/AgentTaskBackgroundCard';
 
 type Step = 'clue' | 'goal' | 'submitted';
@@ -18,7 +18,8 @@ interface Props {
   headline?: string;
   variant?: 'page' | 'modal';
   onNavigate?: (view: ViewType, hint?: string) => void;
-  onComplete: (result: {
+  onComplete: (
+    result: {
     brandName: string;
     extractTaskId: string;
     goal: OnboardingGoal;
@@ -29,7 +30,9 @@ interface Props {
       socialLink?: string;
       description?: string;
     };
-  }) => void;
+  },
+    options?: { preferBrandConfirm?: boolean }
+  ) => void;
   onCancel?: () => void;
 }
 
@@ -52,9 +55,26 @@ export default function BrandClueStartFlow({
   const [error, setError] = useState('');
   const [submittedTaskId, setSubmittedTaskId] = useState<string | null>(null);
   const [submittedTaskTitle, setSubmittedTaskTitle] = useState('');
+  const [submittedTaskStatus, setSubmittedTaskStatus] = useState<AgentTaskStatus | null>(null);
   const [queueHint, setQueueHint] = useState<TaskQueueHint | null>(null);
   const [pendingComplete, setPendingComplete] = useState<Parameters<Props['onComplete']>[0] | null>(null);
+  const [hermesReady, setHermesReady] = useState<boolean | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (step !== 'submitted' || !pendingComplete?.brandName) return;
+    let cancelled = false;
+    void fetchOnboardingStatus(pendingComplete.brandName)
+      .then((status) => {
+        if (!cancelled) setHermesReady(status.hermesReady);
+      })
+      .catch(() => {
+        if (!cancelled) setHermesReady(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [step, pendingComplete?.brandName]);
 
   const resolvedBrandName = brandNameInput.trim();
   const hasWebsite = Boolean(websiteUrl.trim());
@@ -122,8 +142,10 @@ export default function BrandClueStartFlow({
       };
       setSubmittedTaskId(result.extractTask.id);
       setSubmittedTaskTitle(`${result.brand.name} · 品牌资料整理`);
+      setSubmittedTaskStatus((result.extractTask.status as AgentTaskStatus | undefined) ?? 'pending');
       setQueueHint(result.queueHint ?? null);
       setPendingComplete(completePayload);
+      setHermesReady(null);
       setStep('submitted');
     } catch (e) {
       setError(e instanceof Error ? e.message : '启动失败');
@@ -133,6 +155,8 @@ export default function BrandClueStartFlow({
   };
 
   const isModal = variant === 'modal';
+  /** 快速发起项目固定为新建品牌 GEO 分析，不再展示起步目标二次选择 */
+  const skipGoalStep = isModal;
 
   const fieldPanel: Record<BrandClueInputType, ReactNode> = {
     brand_name: (
@@ -259,13 +283,13 @@ export default function BrandClueStartFlow({
               type="button"
               className="geo-btn-primary"
               disabled={!canProceed || loading}
-              onClick={() => setStep('goal')}
+              onClick={() => (skipGoalStep ? void handleStart() : setStep('goal'))}
             >
-              下一步
+              {skipGoalStep ? (loading ? '创建中…' : '开始整理品牌资料') : '下一步'}
             </button>
           </div>
         </div>
-      ) : step === 'goal' ? (
+      ) : !skipGoalStep && step === 'goal' ? (
         <div className="space-y-4">
           <p className="text-sm text-[var(--neutral-text-02)]">选择起步目标（默认首次体检）：</p>
           <div className="space-y-2">
@@ -304,12 +328,26 @@ export default function BrandClueStartFlow({
         </div>
       ) : (
         <div className="space-y-4">
+          {hermesReady === false && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 space-y-2 text-xs text-amber-950">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold">本机 Hermes 尚未绑定</p>
+                  <p className="leading-relaxed opacity-90">
+                    GEO 检测与发布任务需在本机 Hermes 环境执行。请先前往「本机 Hermes」完成安装、登录与设备绑定，绑定后已创建的任务会自动继续。
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           {submittedTaskId && (
             <AgentTaskBackgroundCard
               taskId={submittedTaskId}
               taskTitle={submittedTaskTitle}
-              initialStatus="waiting_local_device"
+              initialStatus={submittedTaskStatus ?? 'pending'}
               queueHint={queueHint}
+              hermesSetupRequired={hermesReady === false}
               onNavigate={onNavigate}
             />
           )}
@@ -323,16 +361,42 @@ export default function BrandClueStartFlow({
                 查看通知
               </button>
             )}
-            <button
-              type="button"
-              className="geo-btn-primary"
-              disabled={!pendingComplete}
-              onClick={() => {
-                if (pendingComplete) onComplete(pendingComplete);
-              }}
-            >
-              继续确认品牌资料
-            </button>
+            {hermesReady === false && onNavigate ? (
+              <>
+                <button
+                  type="button"
+                  className="geo-btn-secondary"
+                  disabled={!pendingComplete}
+                  onClick={() => {
+                    if (pendingComplete) onComplete(pendingComplete, { preferBrandConfirm: true });
+                  }}
+                >
+                  稍后绑定，先确认品牌
+                </button>
+                <button
+                  type="button"
+                  className="geo-btn-primary inline-flex items-center gap-1.5"
+                  disabled={!pendingComplete}
+                  onClick={() => {
+                    if (pendingComplete) onComplete(pendingComplete);
+                  }}
+                >
+                  <Cpu className="w-3.5 h-3.5" />
+                  前往绑定 Hermes
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="geo-btn-primary"
+                disabled={!pendingComplete || hermesReady === null}
+                onClick={() => {
+                  if (pendingComplete) onComplete(pendingComplete);
+                }}
+              >
+                {hermesReady === null ? '检测环境中…' : '继续确认品牌资料'}
+              </button>
+            )}
           </div>
         </div>
       )}

@@ -15,6 +15,7 @@ import type { AgentTask, AgentTaskStatus } from '../agent/types.js';
 import { isTerminalStatus } from '../lib/agent-status.js';
 import { GEO_WEB_OUTPUT_CONTRACT } from '../lib/geo-web-output-contract.js';
 import { canStartHermesTask, getPullCapacityAdvice, saveDeviceCapacityReport } from './hermes-concurrency.service.js';
+import { isHermesMockSyncReady } from './hermes-sync.service.js';
 
 const DEVICE_KEY = 'hermes:device';
 const BIND_TOKEN_KEY = 'hermes:bind_token';
@@ -290,14 +291,18 @@ export async function resolveHermesSetupReason(): Promise<string | null> {
   const { device, tokenCapacity } = await getHermesLocalDevice();
 
   if (health.apiGatewayOk) {
-    if (
-      tokenCapacity &&
-      (tokenCapacity.tokenCapacityStatus !== 'available' ||
-        tokenCapacity.modelRuntimeStatus !== 'available')
-    ) {
-      return 'token_capacity_unavailable';
-    }
     return null;
+  }
+
+  if (await isHermesMockSyncReady()) {
+    if (
+      device &&
+      (!tokenCapacity ||
+        (tokenCapacity.tokenCapacityStatus === 'available' &&
+          tokenCapacity.modelRuntimeStatus === 'available'))
+    ) {
+      return null;
+    }
   }
 
   if (!health.desktopRunning) {

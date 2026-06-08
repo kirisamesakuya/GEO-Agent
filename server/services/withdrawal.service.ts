@@ -74,14 +74,18 @@ export async function getProviderWalletSummary(providerId: string) {
 
 export async function listWithdrawalRequests(options?: {
   providerId?: string;
+  providerName?: string;
   status?: string;
   limit?: number;
 }) {
-  const { providerId, status, limit = 50 } = options ?? {};
+  const { providerId, providerName, status, limit = 50 } = options ?? {};
   return prisma.providerWithdrawalRequest.findMany({
     where: {
       ...(providerId ? { providerId } : {}),
       ...(status ? { status } : {}),
+      ...(providerName
+        ? { provider: { name: { contains: providerName, mode: 'insensitive' } } }
+        : {}),
     },
     orderBy: { createdAt: 'desc' },
     take: limit,
@@ -89,6 +93,97 @@ export async function listWithdrawalRequests(options?: {
       provider: { select: { id: true, name: true } },
     },
   });
+}
+
+export async function listPlatformProviderAccounts(options?: {
+  providerName?: string;
+  payoutBound?: 'yes' | 'no';
+}) {
+  const providers = await prisma.provider.findMany({
+    where: {
+      applicationStatus: 'approved',
+      ...(options?.providerName
+        ? { name: { contains: options.providerName, mode: 'insensitive' } }
+        : {}),
+    },
+    orderBy: { name: 'asc' },
+    select: {
+      id: true,
+      name: true,
+      contactName: true,
+      phone: true,
+      payoutChannel: true,
+      payoutAccountName: true,
+      payoutAccountLabel: true,
+    },
+  });
+
+  let rows = await Promise.all(
+    providers.map(async (p) => {
+      const wallet = await getProviderWalletSummary(p.id);
+      const pendingWithdrawal = await prisma.providerWithdrawalRequest.count({
+        where: { providerId: p.id, status: { in: ['pending', 'approved'] } },
+      });
+      const hasPayoutAccount = Boolean(p.payoutAccountLabel?.trim());
+      return {
+        providerId: p.id,
+        providerName: p.name,
+        contactName: p.contactName,
+        phone: p.phone,
+        payoutChannel: p.payoutChannel,
+        payoutAccountName: p.payoutAccountName,
+        payoutAccountLabel: p.payoutAccountLabel,
+        hasPayoutAccount,
+        pendingWithdrawal,
+        ...wallet,
+      };
+    })
+  );
+
+  if (options?.payoutBound === 'yes') rows = rows.filter((r) => r.hasPayoutAccount);
+  if (options?.payoutBound === 'no') rows = rows.filter((r) => !r.hasPayoutAccount);
+  return rows;
+}
+
+export async function getWithdrawalRequestStats() {
+  const [pending, approved, paid, rejected, agg] = await Promise.all([
+    prisma.providerWithdrawalRequest.count({ where: { status: 'pending' } }),
+    prisma.providerWithdrawalRequest.count({ where: { status: 'approved' } }),
+    prisma.providerWithdrawalRequest.count({ where: { status: 'paid' } }),
+    prisma.providerWithdrawalRequest.count({ where: { status: 'rejected' } }),
+    prisma.providerWithdrawalRequest.aggregate({
+      where: { status: { in: ['pending', 'approved'] } },
+      _sum: { amount: true },
+    }),
+  ]);
+  return {
+    pending,
+    approved,
+    paid,
+    rejected,
+    pendingAmount: Math.round((agg._sum.amount ?? 0) * 100) / 100,
+  };
+}
+
+export async function listWithdrawalRequestsWithWallet(options?: {
+  providerName?: string;
+  status?: string;
+  limit?: number;
+}) {
+  const requests = await listWithdrawalRequests(options);
+  const walletByProvider = new Map<string, Awaited<ReturnType<typeof getProviderWalletSummary>>>();
+  const enriched = await Promise.all(
+    requests.map(async (r) => {
+      if (!walletByProvider.has(r.providerId)) {
+        walletByProvider.set(r.providerId, await getProviderWalletSummary(r.providerId));
+      }
+      return {
+        ...r,
+        walletSnapshot: walletByProvider.get(r.providerId),
+      };
+    })
+  );
+  return enriched;
 }
 
 function startOfToday() {
@@ -124,6 +219,12 @@ export async function createWithdrawalRequest(input: {
   if (!provider) throw new Error('接单方不存在');
   if (provider.applicationStatus !== 'approved') {
     throw new Error('入驻审核通过后方可提现');
+  }
+  if (!provider.identityVerifiedAt) {
+    throw new Error('请先完成身份证实名认证');
+  }
+  if (!provider.payoutAccountLabel?.trim()) {
+    throw new Error('请先在个人中心维护提现账户');
   }
 
   const wallet = await getProviderWalletSummary(providerId);
@@ -226,14 +327,24 @@ export async function rejectWithdrawalRequest(
   return updated;
 }
 
-export async function markWithdrawalPaid(requestId: string, operatorId?: string) {
+export async function markWithdrawalPaid(
+  requestId: string,
+  operatorId?: string,
+  options?: { paidNote?: string; paidVoucher?: string }
+) {
   const request = await prisma.providerWithdrawalRequest.findUnique({ where: { id: requestId } });
   if (!request) throw new Error('提现申请不存在');
   if (request.status !== 'approved') throw new Error('仅已审核通过的申请可标记打款');
 
   const updated = await prisma.providerWithdrawalRequest.update({
     where: { id: requestId },
-    data: { status: 'paid', paidAt: new Date(), operatorId },
+    data: {
+      status: 'paid',
+      paidAt: new Date(),
+      operatorId,
+      paidNote: options?.paidNote?.trim() || null,
+      paidVoucher: options?.paidVoucher?.trim() || null,
+    },
   });
 
   await appendAuditLog({

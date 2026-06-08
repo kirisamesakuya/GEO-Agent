@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { resolveWebsiteLeadFields } from '../../../lib/website-lead-intake';
 import type { ViewType } from '../../types';
 import TaskStatusPill from '../common/TaskStatusPill';
 import {
@@ -18,7 +19,6 @@ const STATUS_PILL: Record<string, 'queued' | 'running' | 'succeeded' | 'failed' 
   pending: 'queued',
   in_progress: 'running',
   delivered: 'succeeded',
-  need_info: 'pending',
 };
 
 export default function WebPageRequirementDetailView({
@@ -37,6 +37,7 @@ export default function WebPageRequirementDetailView({
 
   const displayStatus = req ? deriveWebsiteRequirementStatus(req) : 'pending';
   const order = req?.orders?.[0];
+  const fields = req ? resolveWebsiteLeadFields(req) : null;
 
   return (
     <div className="geo-page-content h-full overflow-y-auto space-y-4">
@@ -49,13 +50,13 @@ export default function WebPageRequirementDetailView({
         返回网页需求
       </button>
 
-      {!req ? (
+      {!req || !fields ? (
         <p className="text-sm text-[var(--neutral-text-03)]">加载需求…</p>
       ) : (
         <>
           <div className="geo-card p-4 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h1 className="text-lg font-bold text-[var(--color-title)]">{req.pageType}</h1>
+              <h1 className="text-lg font-bold text-[var(--color-title)]">{fields.pageType}</h1>
               <p className="text-xs text-[var(--neutral-text-03)] mt-1">
                 提交于 {new Date(req.createdAt).toLocaleString('zh-CN')}
               </p>
@@ -66,19 +67,33 @@ export default function WebPageRequirementDetailView({
           <div className="geo-card p-4 space-y-3 text-sm">
             <div>
               <p className="text-xs text-[var(--neutral-text-03)]">处理进度</p>
-              <p className="font-medium">{WEBSITE_REQUIREMENT_STATUS_LABEL[displayStatus]}</p>
+              <p className="font-medium">
+                {displayStatus !== 'all'
+                  ? WEBSITE_REQUIREMENT_STATUS_LABEL[displayStatus]
+                  : '—'}
+              </p>
             </div>
-            {req.referenceUrl && (
+            {fields.referenceUrl && (
               <div>
                 <p className="text-xs text-[var(--neutral-text-03)]">官网/落地页链接</p>
-                <a href={req.referenceUrl} target="_blank" rel="noreferrer" className="geo-link">
-                  {req.referenceUrl}
+                <a href={fields.referenceUrl} target="_blank" rel="noreferrer" className="geo-link">
+                  {fields.referenceUrl}
                 </a>
               </div>
             )}
             <div>
-              <p className="text-xs text-[var(--neutral-text-03)]">目标与说明</p>
-              <pre className="text-sm whitespace-pre-wrap mt-1">{req.goal}</pre>
+              <p className="text-xs text-[var(--neutral-text-03)]">目标关键词</p>
+              <p className="mt-1">{fields.keywords || '—'}</p>
+            </div>
+            {fields.notes && (
+              <div>
+                <p className="text-xs text-[var(--neutral-text-03)]">参考说明</p>
+                <p className="mt-1 whitespace-pre-wrap">{fields.notes}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-xs text-[var(--neutral-text-03)]">联系方式</p>
+              <p className="mt-1">{fields.contact || '—'}</p>
             </div>
             {(req as { attachments?: Array<{ name: string; url: string }> }).attachments?.length ? (
               <div>
@@ -104,11 +119,6 @@ export default function WebPageRequirementDetailView({
             </div>
           )}
 
-          {displayStatus === 'need_info' && (
-            <p className="geo-card p-3 text-xs geo-callout-warning">
-              后台需要您补充信息，请通过原联系方式回复或重新提交需求说明。
-            </p>
-          )}
         </>
       )}
     </div>

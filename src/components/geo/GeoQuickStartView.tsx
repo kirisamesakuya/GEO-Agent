@@ -2,7 +2,10 @@ import { useMemo, useRef, useState } from 'react';
 import type { ViewType } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import AgentInputCard from '../common/AgentInputCard';
-import AgentTaskBackgroundCard, { type TaskQueueHint } from '../common/AgentTaskBackgroundCard';
+import AgentTaskBackgroundCard, {
+  isAgentTaskBlocking,
+  type TaskQueueHint,
+} from '../common/AgentTaskBackgroundCard';
 import { navigateToAgentTasks } from '../common/AgentTaskProgressLink';
 import type { AgentTask, AgentTaskStatus } from '../../types';
 import { submitGeoAgentTask } from '../../lib/geo-audit-client';
@@ -18,7 +21,6 @@ import {
   Link as LinkIcon,
   Plus,
   Search,
-  Sparkles,
   Trash2,
   Wand2,
 } from 'lucide-react';
@@ -30,8 +32,64 @@ interface Props {
 }
 
 type MaterialKind = 'link' | 'image' | 'document' | 'text';
-type AnalysisDepth = 'quick' | 'deep';
 type OutputType = 'visibility' | 'technical' | 'content' | 'assets';
+type AnalysisDepth = 'quick' | 'deep';
+
+const ANALYSIS_DEPTH_OPTIONS: {
+  id: AnalysisDepth;
+  label: string;
+  hint: string;
+}[] = [
+  { id: 'quick', label: '快速检测', hint: '平台提及与内容缺口，适合首次体检' },
+  { id: 'deep', label: '深度分析', hint: '全模块检测 + 技术资产草稿' },
+];
+
+const QUICK_OUTPUTS: OutputType[] = ['visibility', 'content'];
+const QUICK_MODULES = ['平台提及速检', '内容可引用性快检'];
+
+/** 深度分析覆盖全部检测模块 */
+const DEEP_OUTPUTS: OutputType[] = ['visibility', 'technical', 'content', 'assets'];
+const DEEP_MODULES = ['平台提及矩阵', '内容可引用性', '官网技术基础', '技术资产草稿'];
+
+const DEPTH_CONFIG: Record<
+  AnalysisDepth,
+  {
+    taskType: string;
+    skill: string;
+    titleSuffix: string;
+    cardTitle: string;
+    cardDescription: string;
+    submitLabel: string;
+    completeToast: string;
+    outputs: OutputType[];
+    modules: string[];
+  }
+> = {
+  quick: {
+    taskType: 'geo_quick_start',
+    skill: 'geo-quick-start',
+    titleSuffix: 'GEO 快速检测',
+    cardTitle: 'GEO 快速检测',
+    cardDescription:
+      '上传或粘贴材料后，AI 自动拆解轻量检测方案（平台提及、内容缺口）；确认后提交 Hermes 执行。',
+    submitLabel: '提交 Hermes 快速检测',
+    completeToast: 'GEO 快速检测完成',
+    outputs: QUICK_OUTPUTS,
+    modules: QUICK_MODULES,
+  },
+  deep: {
+    taskType: 'geo_audit',
+    skill: 'geo-audit',
+    titleSuffix: 'GEO 深度分析',
+    cardTitle: 'GEO 深度分析',
+    cardDescription:
+      '上传或粘贴材料后，AI 自动拆解完整检测方案（平台提及、官网技术、内容引用、技术资产）；确认后提交 Hermes 执行。',
+    submitLabel: '提交 Hermes 深度分析',
+    completeToast: 'GEO 深度分析完成',
+    outputs: DEEP_OUTPUTS,
+    modules: DEEP_MODULES,
+  },
+};
 
 interface MaterialInput {
   id: string;
@@ -39,13 +97,6 @@ interface MaterialInput {
   name: string;
   value: string;
 }
-
-const OUTPUT_OPTIONS: { id: OutputType; label: string; desc: string }[] = [
-  { id: 'visibility', label: 'AI 平台提及检测', desc: '看品牌是否被豆包、DeepSeek、Kimi 等平台提到' },
-  { id: 'technical', label: '官网可抓取检查', desc: '检查官网、页面、Schema、llms.txt 等基础项' },
-  { id: 'content', label: '内容可引用性分析', desc: '判断材料是否容易被 AI 摘录、推荐和引用' },
-  { id: 'assets', label: '生成技术资产草稿', desc: '输出 Schema、llms.txt 或内容改写建议' },
-];
 
 function splitList(value: string): string[] {
   return value.split(/[,，\n]/).map((s) => s.trim()).filter(Boolean);
@@ -71,7 +122,6 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
   const [materials, setMaterials] = useState<MaterialInput[]>([]);
   const [platforms, setPlatforms] = useState<string[]>([...DEFAULT_GEO_AI_PLATFORMS, 'Kimi']);
   const [analysisDepth, setAnalysisDepth] = useState<AnalysisDepth>('quick');
-  const [outputs, setOutputs] = useState<OutputType[]>(['visibility', 'content']);
   const [planConfirmed, setPlanConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -92,59 +142,57 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
     [name, city, serviceList.length, evidenceCount]
   );
 
+  const depthConfig = DEPTH_CONFIG[analysisDepth];
+
   const aiPlan = useMemo(() => {
     const missing = readinessChecklist.filter((item) => !item.done).map((item) => item.label);
     const doneCount = readinessChecklist.filter((item) => item.done).length;
+    const modeLabel = analysisDepth === 'quick' ? '快速检测' : '深度分析';
 
-    const recommendedDepth: AnalysisDepth =
-      evidenceCount >= 2 || outputs.includes('technical') || outputs.includes('assets') ? 'deep' : 'quick';
-    const questions = Math.max(8, Math.min(24, platforms.length * 3 + serviceList.length * 2 + evidenceCount * 2));
-    const modules = [
-      outputs.includes('visibility') ? '平台提及矩阵' : null,
-      outputs.includes('content') ? '内容可引用性' : null,
-      outputs.includes('technical') ? '官网技术基础' : null,
-      outputs.includes('assets') ? '技术资产草稿' : null,
-    ].filter(Boolean);
+    const questions =
+      analysisDepth === 'quick'
+        ? Math.max(6, Math.min(12, platforms.length * 2 + serviceList.length + evidenceCount + 3))
+        : Math.max(12, Math.min(24, platforms.length * 3 + serviceList.length * 2 + evidenceCount * 2 + 4));
 
     let summary: string;
     if (missing.length === 0) {
-      summary = `关键信息已补齐。AI 将把 ${evidenceCount} 组材料拆成 ${questions} 条检测问题，并检查 ${platforms.length} 个 AI 平台。`;
+      summary =
+        analysisDepth === 'quick'
+          ? `关键信息已补齐。快速检测将覆盖 ${platforms.length} 个 AI 平台的提及与内容缺口，约 ${questions} 条问题。`
+          : `关键信息已补齐。深度分析将把 ${evidenceCount} 组材料拆成 ${questions} 条检测问题，并检查 ${platforms.length} 个 AI 平台及官网技术资产。`;
     } else if (doneCount === 0) {
-      summary = '请逐步补齐以下信息，材料越完整，检测结论越稳。';
+      summary = `请逐步补齐以下信息，材料越完整，${modeLabel}结论越稳。`;
     } else {
-      summary = `已填写 ${doneCount}/${readinessChecklist.length} 项，继续补充剩余项可提升检测质量。`;
+      summary = `已填写 ${doneCount}/${readinessChecklist.length} 项，继续补充剩余项可提升分析质量。`;
     }
 
     return {
       missing,
       doneCount,
       readinessChecklist,
-      recommendedDepth,
       questions,
-      modules,
+      modules: depthConfig.modules,
       summary,
     };
-  }, [evidenceCount, outputs, platforms.length, readinessChecklist, serviceList.length]);
+  }, [analysisDepth, depthConfig.modules, evidenceCount, platforms.length, readinessChecklist, serviceList.length]);
 
   const onComplete = (task: AgentTask) => {
     setLoading(false);
     setTaskStatus('succeeded');
     const reportId = task.output?.geoReportId as string | undefined;
-    toast('GEO 智能检测完成', 'success');
+    const depth: AnalysisDepth = task.type === 'geo_audit' ? 'deep' : 'quick';
+    toast(DEPTH_CONFIG[depth].completeToast, 'success');
     if (reportId) onOpenHistory?.(reportId);
+  };
+
+  const switchAnalysisDepth = (depth: AnalysisDepth) => {
+    setAnalysisDepth(depth);
+    setPlanConfirmed(false);
   };
 
   const togglePlatform = (p: string) => {
     setPlanConfirmed(false);
     setPlatforms((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
-  };
-
-  const toggleOutput = (id: OutputType) => {
-    setPlanConfirmed(false);
-    setOutputs((prev) => {
-      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
-      return next.length ? next : prev;
-    });
   };
 
   const addLinkMaterial = () => {
@@ -187,10 +235,6 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
       toast('请填写品牌名称', 'error');
       return;
     }
-    if (!outputs.length) {
-      toast('请至少选择一个检测目标', 'error');
-      return;
-    }
     if (!planConfirmed) {
       toast('请先确认 AI 拆解方案，再提交 Hermes', 'error');
       return;
@@ -199,17 +243,13 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
 
     setLoading(true);
     setTaskStatus('queued');
-    const taskType =
-      analysisDepth === 'deep' || outputs.includes('technical') || outputs.includes('assets')
-        ? 'geo_audit'
-        : 'geo_quick_start';
-    const title = `${name.trim()} · GEO 智能检测`;
+    const title = `${name.trim()} · ${depthConfig.titleSuffix}`;
     const { task, error, queueHint: hint } = await submitGeoAgentTask({
-      type: taskType,
+      type: depthConfig.taskType,
       title,
       brandName: name.trim(),
       payload: {
-        skill: taskType === 'geo_audit' ? 'geo-audit' : 'geo-quick-start',
+        skill: depthConfig.skill,
         brandName: name.trim(),
         brandCity: city.trim() || undefined,
         productNames: serviceList.length ? serviceList : undefined,
@@ -217,7 +257,7 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
         brandDesc: freeText.trim() || undefined,
         platforms,
         analysisDepth,
-        requestedOutputs: outputs,
+        requestedOutputs: depthConfig.outputs,
         sourceMaterials: [
           ...(websiteUrl.trim()
             ? [{ kind: 'link', name: '官网 URL', value: websiteUrl.trim() }]
@@ -226,15 +266,11 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
         ],
         plannedQuestions: aiPlan.questions,
         plannedModules: aiPlan.modules,
-        ...(taskType === 'geo_audit'
-          ? {
-              outputContract: {
-                format: 'json',
-                version: 'geoWebOutput.v1',
-                artifacts: ['markdown', 'pdf', 'screenshots', 'json'],
-              },
-            }
-          : {}),
+        outputContract: {
+          format: 'json',
+          version: 'geoWebOutput.v1',
+          artifacts: ['markdown', 'pdf', 'screenshots', 'json'],
+        },
       },
     });
     if (error || !task) {
@@ -255,16 +291,31 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
     <div className="flex flex-1 min-h-0 overflow-hidden">
       <div className="flex-1 min-h-0 overflow-y-auto geo-page-content space-y-4 max-w-4xl">
         <AgentInputCard
-          title="GEO 智能检测"
-          description="先上传或粘贴材料，AI 自动拆解检测范围；确认后再提交 Hermes。"
+          title={depthConfig.cardTitle}
+          description={depthConfig.cardDescription}
           footer={
             <div className="flex flex-col gap-2 w-full">
+              <div className="flex flex-wrap gap-2 p-1 rounded-lg bg-[var(--neutral-bg-03)] w-full sm:w-auto">
+                {ANALYSIS_DEPTH_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => switchAnalysisDepth(opt.id)}
+                    className={`flex-1 sm:flex-none text-xs px-3 py-2 rounded-md font-medium transition ${
+                      analysisDepth === opt.id
+                        ? 'bg-white text-[var(--color-primary)] shadow-sm'
+                        : 'text-[var(--neutral-text-02)] hover:text-[var(--color-title)]'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   className="geo-btn-secondary text-sm"
                   onClick={() => {
-                    setAnalysisDepth(aiPlan.recommendedDepth);
                     setPlanConfirmed(true);
                     toast('已确认检测方案', 'success');
                   }}
@@ -272,8 +323,13 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
                   <CheckCircle2 className="w-4 h-4" />
                   确认 AI 拆解方案
                 </button>
-                <button type="button" className="geo-btn-primary text-sm" disabled={loading} onClick={() => void submit()}>
-                  {loading ? '检测中…' : '提交 Hermes 检测'}
+                <button
+                  type="button"
+                  className="geo-btn-primary text-sm"
+                  disabled={loading || isAgentTaskBlocking(taskId, taskStatus)}
+                  onClick={() => void submit()}
+                >
+                  {loading ? '分析中…' : depthConfig.submitLabel}
                 </button>
               </div>
               {!taskId && loading && (
@@ -445,39 +501,6 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
                 })}
               </div>
             </div>
-
-            <div>
-              <label className="geo-label">希望 AI 检查什么</label>
-              <div className="grid sm:grid-cols-2 gap-2 mt-2">
-                {OUTPUT_OPTIONS.map((option) => {
-                  const selected = outputs.includes(option.id);
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => toggleOutput(option.id)}
-                      className={`relative text-left rounded-lg border px-3 py-2.5 pr-9 transition-colors ${
-                        selected
-                          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 ring-1 ring-[var(--color-primary)]/15'
-                          : 'border-[var(--neutral-divider-02)] bg-white hover:border-[var(--color-primary)]/40 hover:bg-[var(--neutral-bg-03)]'
-                      }`}
-                    >
-                      {selected && (
-                        <CheckCircle2 className="absolute top-2.5 right-2.5 w-4 h-4 text-[var(--color-primary)]" />
-                      )}
-                      <span
-                        className={`text-xs font-semibold block ${
-                          selected ? 'text-[var(--color-primary)]' : 'text-[var(--color-title)]'
-                        }`}
-                      >
-                        {option.label}
-                      </span>
-                      <span className="text-[11px] text-[var(--neutral-text-03)]">{option.desc}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
           </div>
         </AgentInputCard>
 
@@ -490,6 +513,7 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
               queueHint={queueHint}
               onNavigate={onNavigate}
               onComplete={onComplete}
+              onStatusChange={setTaskStatus}
             />
           </div>
         )}
@@ -529,36 +553,37 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
               </li>
             ))}
           </ul>
+          <div>
+            <p className="font-medium text-[var(--neutral-text-02)] mb-2">分析模式</p>
+            <div className="grid grid-cols-2 gap-2">
+              {ANALYSIS_DEPTH_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => switchAnalysisDepth(opt.id)}
+                  className={`rounded-lg p-3 text-left border transition ${
+                    analysisDepth === opt.id
+                      ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
+                      : 'border-transparent bg-[var(--neutral-bg-03)] hover:border-[var(--neutral-divider-02)]'
+                  }`}
+                >
+                  <p className="font-semibold text-[var(--color-title)]">{opt.label}</p>
+                  <p className="text-[10px] text-[var(--neutral-text-03)] mt-1 leading-relaxed">{opt.hint}</p>
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-lg bg-[var(--neutral-bg-03)] p-3">
-              <span className="text-[var(--neutral-text-03)]">检测深度</span>
+              <span className="text-[var(--neutral-text-03)]">当前模式</span>
               <p className="font-semibold text-[var(--color-title)]">
-                {analysisDepth === 'deep' ? '深度检测' : '快速检测'}
+                {ANALYSIS_DEPTH_OPTIONS.find((o) => o.id === analysisDepth)?.label}
               </p>
             </div>
             <div className="rounded-lg bg-[var(--neutral-bg-03)] p-3">
-              <span className="text-[var(--neutral-text-03)]">AI 问题数</span>
+              <span className="text-[var(--neutral-text-03)]">AI 分析数</span>
               <p className="font-semibold text-[var(--color-title)]">{aiPlan.questions} 条</p>
             </div>
-          </div>
-          <div className="flex rounded-lg bg-[var(--neutral-bg-03)] p-1">
-            {(['quick', 'deep'] as const).map((depth) => (
-              <button
-                key={depth}
-                type="button"
-                onClick={() => {
-                  setPlanConfirmed(false);
-                  setAnalysisDepth(depth);
-                }}
-                className={`flex-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition ${
-                  analysisDepth === depth
-                    ? 'bg-white text-[var(--color-primary)] shadow-sm'
-                    : 'text-[var(--neutral-text-03)] hover:text-[var(--neutral-text-02)]'
-                }`}
-              >
-                {depth === 'quick' ? '快速' : '深度'}
-              </button>
-            ))}
           </div>
           <div>
             <p className="font-medium text-[var(--neutral-text-02)] mb-2">将执行</p>
@@ -576,10 +601,19 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
         <div className="geo-card p-4 space-y-2">
           <p className="font-semibold text-[var(--color-title)]">预计产物</p>
           <ul className="space-y-1 text-[var(--neutral-text-03)] list-disc pl-4">
-            <li>AI 平台提及矩阵与风险等级</li>
-            <li>可引用内容缺口和修复建议</li>
-            {analysisDepth === 'deep' && <li>官网技术基础与抓取建议</li>}
-            {outputs.includes('assets') && <li>Schema / llms.txt / 改写草稿</li>}
+            {analysisDepth === 'quick' ? (
+              <>
+                <li>AI 平台提及速检摘要</li>
+                <li>内容缺口与优先修复建议</li>
+              </>
+            ) : (
+              <>
+                <li>AI 平台提及矩阵与风险等级</li>
+                <li>可引用内容缺口和修复建议</li>
+                <li>官网技术基础与抓取建议</li>
+                <li>Schema / llms.txt / 改写草稿</li>
+              </>
+            )}
           </ul>
           {onNavigate && (
             <button type="button" className="geo-link text-[11px]" onClick={() => navigateToAgentTasks(onNavigate, taskId)}>

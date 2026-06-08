@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { AppMode, ViewType, AgentTaskStatus } from './types';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -63,6 +63,8 @@ import {
   parseContentDeliveryTabFromUrl,
 } from './lib/content-delivery-nav';
 import ArticleResultDetailView from './components/article/ArticleResultDetailView';
+import ArticleDeliveryDetailView from './components/delivery/ArticleDeliveryDetailView';
+import ArticleDeliveryOrderDetailView from './components/delivery/ArticleDeliveryOrderDetailView';
 import PublishRecordDetailView from './components/article/PublishRecordDetailView';
 import TaskOrderDetailView from './components/delivery/TaskOrderDetailView';
 import WebPageRequirementDetailView from './components/delivery/WebPageRequirementDetailView';
@@ -71,6 +73,10 @@ import {
   parseContentItemIdFromHint,
   parsePublishRecordIdFromHint,
 } from './lib/article-result-nav';
+import {
+  parseArticleDeliveryDetailHint,
+  parseArticleDeliveryOrderHint,
+} from './lib/article-delivery-unified';
 import {
   parseTaskOrderIdFromHint,
   parseWebsiteRequirementIdFromHint,
@@ -91,6 +97,7 @@ import QuickStartModal from './components/common/QuickStartModal';
 import BrandConfirmView from './components/onboarding/BrandConfirmView';
 import OnboardingConsoleView from './components/onboarding/OnboardingConsoleView';
 import type { OnboardingGoal } from './lib/brand-clue';
+import { fetchOnboardingStatus } from './lib/onboarding-client';
 
 /**
  * DEMO_ONLY:
@@ -158,7 +165,10 @@ function resolveInitialRoute(): { view: ViewType; hint?: string } {
     'brand_profile', 'account_binding', 'account_funds', 'user_center', 'team_settings',
     'notifications', 'brand_confirm', 'onboarding_console',
   ];
-  if (v && allowed.includes(v as ViewType)) return { view: v as ViewType };
+  if (v && allowed.includes(v as ViewType)) {
+    const hint = params.get('hint') ?? undefined;
+    return { view: v as ViewType, hint };
+  }
   return { view: 'workbench' };
 }
 
@@ -181,6 +191,8 @@ export default function App() {
   const [headerTaskStatus, setHeaderTaskStatus] = useState<AgentTaskStatus | null>(null);
   const [brandOptions, setBrandOptions] = useState<{ id: string; name: string }[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const navStackRef = useRef<Array<{ view: ViewType; hint?: string }>>([]);
+  const skipNavRecordRef = useRef(false);
 
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
@@ -216,6 +228,12 @@ export default function App() {
     brandName === '__all__' || isProspectBrandScope(brandName) ? '云杉口腔' : brandName;
 
   const navigate = (view: ViewType, hint?: string) => {
+    if (!skipNavRecordRef.current) {
+      navStackRef.current.push({ view: activeView, hint: viewHint });
+      if (navStackRef.current.length > 50) navStackRef.current.shift();
+    } else {
+      skipNavRecordRef.current = false;
+    }
     closeSidebar();
     let targetView = view;
     let targetHint = hint;
@@ -271,13 +289,7 @@ export default function App() {
       if (targetHint === 'history' || targetHint?.startsWith('report:')) {
         url.searchParams.set('geoTab', 'history');
         if (targetHint?.startsWith('report:')) url.searchParams.set('reportId', targetHint.slice(7));
-      } else if (targetHint === 'audit') {
-        url.searchParams.set('geoTab', 'smart_check');
-        url.searchParams.delete('reportId');
-      } else if (targetHint === 'assets') {
-        url.searchParams.set('geoTab', 'assets');
-        url.searchParams.delete('reportId');
-      } else if (targetHint === 'quick_start' || targetHint === 'smart_check') {
+      } else if (targetHint === 'audit' || targetHint === 'assets' || targetHint === 'quick_start' || targetHint === 'smart_check') {
         url.searchParams.set('geoTab', 'smart_check');
         url.searchParams.delete('reportId');
       } else {
@@ -365,6 +377,17 @@ export default function App() {
     window.history.pushState({}, '', url);
   };
 
+  const goBack = () => {
+    const prev = navStackRef.current.pop();
+    if (prev) {
+      skipNavRecordRef.current = true;
+      navigate(prev.view, prev.hint);
+      return;
+    }
+    skipNavRecordRef.current = true;
+    navigate('agent_task_results');
+  };
+
   const openBrandWorkspace = (name: string, tab: BrandCenterTab) => {
     handleBrandChange(name);
     setActiveView(brandCenterTabToView(tab));
@@ -375,7 +398,8 @@ export default function App() {
     window.history.pushState({}, '', url);
   };
 
-  const handleOnboardingStart = (result: {
+  const handleOnboardingStart = (
+    result: {
     brandName: string;
     extractTaskId: string;
     goal: string;
@@ -386,7 +410,9 @@ export default function App() {
       description?: string;
     };
     brand?: { website?: string; description?: string };
-  }) => {
+  },
+    options?: { preferBrandConfirm?: boolean }
+  ) => {
     handleBrandChange(result.brandName);
     setOnboardingBrand(result.brandName);
     setOnboardingGoal((result.goal as OnboardingGoal) ?? 'geo_quick_start');
@@ -405,8 +431,24 @@ export default function App() {
         undefined,
     });
     setShowNewTaskModal(false);
-    setActiveView('brand_confirm');
-    setViewHint(result.extractTaskId);
+    if (options?.preferBrandConfirm) {
+      setActiveView('brand_confirm');
+      setViewHint(result.extractTaskId);
+      return;
+    }
+    void fetchOnboardingStatus(result.brandName)
+      .then((ob) => {
+        if (!ob.hermesReady) {
+          navigate('hermes_console', 'setup');
+        } else {
+          setActiveView('brand_confirm');
+          setViewHint(result.extractTaskId);
+        }
+      })
+      .catch(() => {
+        setActiveView('brand_confirm');
+        setViewHint(result.extractTaskId);
+      });
   };
 
   const renderActiveView = () => {
@@ -434,7 +476,15 @@ export default function App() {
             onConfirmed={({ brandName: confirmedBrand, taskId }) => {
               handleBrandChange(confirmedBrand);
               setOnboardingBrand(confirmedBrand);
-              navigate('onboarding_console', taskId);
+              void fetchOnboardingStatus(confirmedBrand)
+                .then((ob) => {
+                  if (!ob.hermesReady) {
+                    navigate('hermes_console', `return:onboarding:${taskId}`);
+                  } else {
+                    navigate('onboarding_console', taskId);
+                  }
+                })
+                .catch(() => navigate('onboarding_console', taskId));
             }}
           />
         );
@@ -481,7 +531,7 @@ export default function App() {
             brandName={brandName}
             onBrandChange={handleBrandChange}
             onNavigate={navigate}
-            initialTab="publish_records"
+            initialTab="article"
           />
         );
       case 'generate_article':
@@ -515,14 +565,42 @@ export default function App() {
       case 'order_delivery':
       case 'content_delivery': {
         const hintFromUrl = new URLSearchParams(window.location.search).get('hint') ?? viewHint;
-        const contentItemId = parseContentItemIdFromHint(hintFromUrl ?? undefined);
+        const deliveryDetail = parseArticleDeliveryDetailHint(hintFromUrl ?? undefined);
+        const contentItemId =
+          parseContentItemIdFromHint(hintFromUrl ?? undefined) ??
+          (deliveryDetail?.kind === 'content' ? deliveryDetail.id : undefined);
         const publishRecordId = parsePublishRecordIdFromHint(hintFromUrl ?? undefined);
-        const taskOrderId = parseTaskOrderIdFromHint(hintFromUrl ?? undefined);
+        const deliveryOrderId = parseArticleDeliveryOrderHint(hintFromUrl ?? undefined);
+        const taskOrderId =
+          deliveryOrderId ?? parseTaskOrderIdFromHint(hintFromUrl ?? undefined);
         const websiteReqId = parseWebsiteRequirementIdFromHint(hintFromUrl ?? undefined);
         const projectId = hintFromUrl?.startsWith('project:')
           ? hintFromUrl.slice('project:'.length)
           : undefined;
 
+        if (deliveryDetail?.kind === 'order' && taskOrderId && activeView === 'content_delivery') {
+          return (
+            <ArticleDeliveryOrderDetailView orderId={taskOrderId} onNavigate={navigate} />
+          );
+        }
+        if (deliveryDetail?.kind === 'content' && contentItemId) {
+          return (
+            <ArticleDeliveryDetailView
+              brandName={brandName}
+              contentItemId={contentItemId}
+              onNavigate={navigate}
+            />
+          );
+        }
+        if (contentItemId && activeView === 'content_delivery') {
+          return (
+            <ArticleDeliveryDetailView
+              brandName={brandName}
+              contentItemId={contentItemId}
+              onNavigate={navigate}
+            />
+          );
+        }
         if (contentItemId) {
           return (
             <ArticleResultDetailView
@@ -541,12 +619,17 @@ export default function App() {
             />
           );
         }
+        if (taskOrderId && activeView === 'content_delivery') {
+          return (
+            <ArticleDeliveryOrderDetailView orderId={taskOrderId} onNavigate={navigate} />
+          );
+        }
         if (taskOrderId) {
           return (
             <TaskOrderDetailView
               orderId={taskOrderId}
               onNavigate={navigate}
-              onBack={() => navigate('content_delivery', 'manual')}
+              onBack={() => navigate('content_delivery')}
             />
           );
         }
@@ -565,7 +648,7 @@ export default function App() {
             ? contentDeliveryTabFromHint(hintFromUrl ?? viewHint) || parseContentDeliveryTabFromUrl()
             : resolveOrderDeliveryProps(viewHint).mainTab === 'website'
               ? 'website'
-              : 'manual';
+              : 'article';
 
         if (activeView === 'order_delivery') {
           return (
@@ -602,7 +685,7 @@ export default function App() {
           <AgentTaskResultView
             taskId={taskId}
             onNavigate={navigate}
-            onBack={() => navigate('notifications')}
+            onBack={goBack}
           />
         );
       }
@@ -623,6 +706,7 @@ export default function App() {
             brandName={brandName}
             onBrandChange={handleBrandChange}
             onNavigate={navigate}
+            onGoBack={goBack}
             selectedTaskId={viewHint && !['quick', 'mine'].includes(viewHint) ? viewHint : undefined}
           />
         );
@@ -664,16 +748,12 @@ export default function App() {
             />
           );
         }
-        const tab =
-          viewHint === 'publish_records' || parseArticleResultSectionFromUrl() === 'publish_records'
-            ? 'publish_records'
-            : 'list';
         return (
           <ContentDeliveryView
             brandName={brandName}
             onBrandChange={handleBrandChange}
             onNavigate={navigate}
-            initialTab={tab}
+            initialTab="article"
             initialProjectId={projectId}
           />
         );

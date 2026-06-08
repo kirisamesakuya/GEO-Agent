@@ -8,6 +8,9 @@ export interface PublisherBrandOption {
 
 export interface PublisherMeResponse {
   userId: string;
+  displayName?: string;
+  phone?: string;
+  accountType?: 'personal' | 'enterprise';
   organizationId: string | null;
   brandName: string | null;
   brands: PublisherBrandOption[];

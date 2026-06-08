@@ -1,6 +1,7 @@
 /**
  * DEMO_ONLY: 为工作台、排名监控补全演示用结构化数据（计划、采样结果、内容、GEO 报告）
  */
+import { buildIndexSamplePayload } from '../../lib/index-result-payload.js';
 import { prisma } from './client.js';
 import { findBrandRow } from '../services/brand.service.js';
 
@@ -47,6 +48,9 @@ async function seedDemoIndexPlan(brandId: string, keywordIds: string[]) {
     },
   });
 
+  const brand = await prisma.brand.findUnique({ where: { id: brandId }, select: { name: true } });
+  const brandName = brand?.name;
+
   const results: Array<{
     planId: string;
     keyword: string;
@@ -54,6 +58,8 @@ async function seedDemoIndexPlan(brandId: string, keywordIds: string[]) {
     hit: boolean;
     citedMerchant: boolean;
     citationSnippet: string | null;
+    aiResponse: string | null;
+    citationUrls: string | null;
     sampledAt: Date;
   }> = [];
 
@@ -61,15 +67,22 @@ async function seedDemoIndexPlan(brandId: string, keywordIds: string[]) {
     DEMO_PLATFORMS.forEach((platform, pi) => {
       const hit = (ki + pi) % 3 !== 0;
       const cited = hit && (ki + pi) % 2 === 0;
+      const payload = buildIndexSamplePayload({
+        keyword,
+        platform,
+        hit,
+        citedMerchant: cited,
+        brandName,
+      });
       results.push({
         planId: plan.id,
         keyword,
         platform,
         hit,
         citedMerchant: cited,
-        citationSnippet: hit
-          ? `${platform} 对「${keyword}」的演示采样：${cited ? '已提及品牌' : '有相关结果但未明确提及品牌'}。`
-          : null,
+        citationSnippet: hit ? payload.citationSnippet : null,
+        aiResponse: hit ? payload.aiResponse : payload.aiResponse,
+        citationUrls: hit && payload.citationUrls.length ? JSON.stringify(payload.citationUrls) : null,
         sampledAt: daysAgo(14 - ((ki * DEMO_PLATFORMS.length + pi) % 12), 8 + (pi % 5)),
       });
     });
@@ -119,7 +132,7 @@ async function seedDemoContent(brandName: string) {
   ];
 
   for (let i = 0; i < titles.length; i++) {
-    const published = i < 2;
+    const published = i === 0;
     const created = daysAgo(18 - i * 3);
     await prisma.contentItem.create({
       data: {
@@ -138,6 +151,33 @@ async function seedDemoContent(brandName: string) {
   }
 }
 
+async function backfillIndexResultDetails(brandId: string, brandName: string): Promise<void> {
+  const stale = await prisma.indexResult.findMany({
+    where: { plan: { brandId }, aiResponse: null },
+    take: 200,
+  });
+  if (!stale.length) return;
+
+  for (const row of stale) {
+    const payload = buildIndexSamplePayload({
+      keyword: row.keyword,
+      platform: row.platform,
+      hit: row.hit,
+      citedMerchant: row.citedMerchant,
+      brandName,
+    });
+    await prisma.indexResult.update({
+      where: { id: row.id },
+      data: {
+        aiResponse: payload.aiResponse,
+        citationUrls:
+          row.hit && payload.citationUrls.length ? JSON.stringify(payload.citationUrls) : null,
+        citationSnippet: row.citationSnippet ?? (row.hit ? payload.citationSnippet : null),
+      },
+    });
+  }
+}
+
 /** 若品牌缺少排名/看板数据，写入一套可复现的演示快照 */
 export async function ensureDemoPublisherSnapshot(brandName: string): Promise<void> {
   if (!isDemoPublisherSnapshotEnabled()) return;
@@ -150,6 +190,8 @@ export async function ensureDemoPublisherSnapshot(brandName: string): Promise<vo
   const planCount = await prisma.indexQueryPlan.count({ where: { brandId: brand.id } });
   if (planCount === 0) {
     await seedDemoIndexPlan(brand.id, keywordIds);
+  } else if (isDemoPublisherSnapshotEnabled()) {
+    await backfillIndexResultDetails(brand.id, brand.name);
   }
 
   const reportCount = await prisma.geoReport.count({ where: { brandName: brand.name } });

@@ -103,8 +103,11 @@ export default function AgentTaskResultView({ taskId, onBack, onNavigate }: Prop
   };
 
   const handleBack = () => {
-    if (onBack) onBack();
-    else onNavigate?.('notifications');
+    if (onBack) {
+      onBack();
+      return;
+    }
+    onNavigate?.('agent_task_results');
   };
 
   if (loading && !task) {
@@ -152,11 +155,11 @@ export default function AgentTaskResultView({ taskId, onBack, onNavigate }: Prop
   const inProgress = IN_PROGRESS.has(task.status);
 
   return (
-    <div className="geo-page-content h-full overflow-y-auto space-y-4 pb-8 max-w-4xl">
+    <div className="geo-page-content h-full overflow-y-auto space-y-4 pb-8 max-w-7xl">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <button type="button" className="geo-btn-secondary text-sm flex items-center gap-2" onClick={handleBack}>
           <ArrowLeft className="w-4 h-4" />
-          返回通知
+          返回
         </button>
         <div className="flex gap-2 flex-wrap">
           <button type="button" className="geo-btn-secondary text-sm flex items-center gap-2" onClick={() => void load()}>
@@ -274,9 +277,9 @@ export default function AgentTaskResultView({ taskId, onBack, onNavigate }: Prop
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {task.output && <AgentTaskOutputPanel task={task} deliverable={meta?.deliverable} />}
-      </div>
+      {task.output && (
+        <AgentTaskOutputPanel task={task} deliverable={meta?.deliverable} />
+      )}
 
       {(meta?.artifacts?.length ?? 0) > 0 && (
         <div className="geo-card p-4 grid lg:grid-cols-2 gap-4">

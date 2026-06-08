@@ -1,8 +1,8 @@
 import { X } from 'lucide-react';
 import AppModeLinks from '../../../components/common/AppModeLinks';
 import { usePlatformRole, type PlatformRole } from '../../../hooks/usePlatformRole';
-import { isPlatformViewEnabled } from '../platform-feature-flags';
-import { PLATFORM_NAV_GROUPS, PLATFORM_NAV_ICONS } from '../nav';
+import { isPlatformViewVisibleForRole } from '../platform-feature-flags';
+import { PLATFORM_NAV_GROUPS, PLATFORM_NAV_ICONS, platformNavPermission } from '../nav';
 import type { PlatformView } from '../types';
 import PlatformLogo from './PlatformLogo';
 
@@ -44,7 +44,9 @@ export default function PlatformSidebar({ view, onNavigate, open = false, onClos
       </div>
       <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-5">
         {PLATFORM_NAV_GROUPS.map((group) => {
-          const items = group.items.filter((item) => can(item.id) && isPlatformViewEnabled(item.id));
+          const items = group.items.filter(
+            (item) => can(platformNavPermission(item.id)) && isPlatformViewVisibleForRole(item.id, role)
+          );
           if (items.length === 0) return null;
           return (
             <div key={group.id}>

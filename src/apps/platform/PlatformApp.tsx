@@ -3,6 +3,7 @@ import { Bot } from 'lucide-react';
 import type { AgentTask, AgentTaskLog } from '../../types';
 import TaskStatusPill from '../../components/common/TaskStatusPill';
 import { useToast } from '../../context/ToastContext';
+import { usePlatformFetch } from '../../hooks/usePlatformFetch';
 import { usePlatformRole, type PlatformRole } from '../../hooks/usePlatformRole';
 import { platformFetch } from '../../lib/platform-api';
 import HermesStatusBadge from '../../components/common/HermesStatusBadge';
@@ -11,20 +12,25 @@ import type { PlatformView } from './types';
 import './platform-theme.css';
 import PlatformDashboardView from './views/PlatformDashboardView';
 import PlatformContentGovernanceView from './views/PlatformContentGovernanceView';
-import PlatformRiskCenterView from './views/PlatformRiskCenterView';
 import PlatformResourceReviewView from './views/PlatformResourceReviewView';
 import PlatformRolesView from './views/PlatformRolesView';
 import PlatformRankingOpsView from './views/PlatformRankingOpsView';
 import PlatformFulfillmentRatingView from './views/PlatformFulfillmentRatingView';
-import PlatformNotificationsView from './views/PlatformNotificationsView';
-import PlatformSettlementView from './views/PlatformSettlementView';
 import PlatformReportsView from './views/PlatformReportsView';
 import PlatformMerchantsView from './views/PlatformMerchantsView';
 import PlatformOrdersView from './views/PlatformOrdersView';
-import PlatformApplicationsView from './views/PlatformApplicationsView';
+import PlatformWebsiteOpsView from './views/PlatformWebsiteOpsView';
 import PlatformOrgCertsView from './views/PlatformOrgCertsView';
 import PlatformConfigsView from './views/PlatformConfigsView';
-import { isPlatformViewEnabled } from './platform-feature-flags';
+import PlatformFundsView from './views/PlatformFundsView';
+import PlatformPublisherAccountsView from './views/PlatformPublisherAccountsView';
+import PlatformProviderAccountsView from './views/PlatformProviderAccountsView';
+import PlatformUsersView from './views/PlatformUsersView';
+import PlatformProvidersView from './views/PlatformProvidersView';
+import PlatformMenuAdminView from './views/PlatformMenuAdminView';
+import PlatformFilterBar from './components/PlatformFilterBar';
+import PlatformFilterField, { PlatformFilterDateRange } from './components/PlatformFilterField';
+import { isPlatformViewEnabled, isPlatformViewVisibleForRole } from './platform-feature-flags';
 
 const REVIEW_CATEGORY_LABELS: Record<string, string> = {
   need_reauth: '需商家重新授权',
@@ -42,49 +48,23 @@ const ROLE_LABELS: Record<PlatformRole, string> = {
 export default function PlatformApp() {
   const { toast } = useToast();
   const { role, setRole, can } = usePlatformRole();
+  const pf = usePlatformFetch();
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [confirmText, setConfirmText] = useState('');
-  const [providerFilter, setProviderFilter] = useState('');
-  const [allProviders, setAllProviders] = useState<Array<Record<string, unknown>>>([]);
   const [view, setView] = useState<PlatformView>('dashboard');
   const [dashboard, setDashboard] = useState<Record<string, unknown> | null>(null);
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [selectedTask, setSelectedTask] = useState<AgentTask | null>(null);
   const [taskLogs, setTaskLogs] = useState<AgentTaskLog[]>([]);
-  const [providers, setProviders] = useState<Array<Record<string, unknown>>>([]);
-  const [websiteOrders, setWebsiteOrders] = useState<Array<Record<string, unknown>>>([]);
-  const [websiteRequests, setWebsiteRequests] = useState<Array<Record<string, unknown>>>([]);
-  const [websiteTab, setWebsiteTab] = useState<'requests' | 'orders'>('requests');
-  const [websiteReqFilter, setWebsiteReqFilter] = useState('');
-  const [selectedWebsiteRequest, setSelectedWebsiteRequest] = useState<Record<string, unknown> | null>(null);
-  const [selectedWebsiteOrder, setSelectedWebsiteOrder] = useState<Record<string, unknown> | null>(null);
-  const [websiteAssignId, setWebsiteAssignId] = useState('');
-  const [websiteAssignName, setWebsiteAssignName] = useState('');
-  const [websitePreviewUrl, setWebsitePreviewUrl] = useState('');
-  const [deposits, setDeposits] = useState<Array<{ id: string; brandName: string; amount: number; note: string | null; createdAt: string }>>([]);
-  const [withdrawals, setWithdrawals] = useState<Array<{
-    id: string;
-    providerId: string;
-    amount: number;
-    channel: string;
-    channelLabel: string | null;
-    status: string;
-    createdAt: string;
-    provider?: { id: string; name: string };
-  }>>([]);
   const [logs, setLogs] = useState<Array<Record<string, unknown>>>([]);
   const [skillRuns, setSkillRuns] = useState<Array<Record<string, unknown>>>([]);
   const [automationRuns, setAutomationRuns] = useState<Array<Record<string, unknown>>>([]);
-  const [budgetLedger, setBudgetLedger] = useState<Array<Record<string, unknown>>>([]);
-  const [ledgerTab, setLedgerTab] = useState<'all' | 'freeze' | 'release' | 'anomaly'>('all');
-  const [aiCredits, setAiCredits] = useState<Array<Record<string, unknown>>>([]);
   const [manualFlagReason, setManualFlagReason] = useState('');
   const [manualReviewCategory, setManualReviewCategory] = useState('');
   const [agentFilterNeedsReview, setAgentFilterNeedsReview] = useState(false);
   const [agentFilterCategory, setAgentFilterCategory] = useState('');
   const [taskSkillRuns, setTaskSkillRuns] = useState<Array<Record<string, unknown>>>([]);
   const [taskAutomationRuns, setTaskAutomationRuns] = useState<Array<Record<string, unknown>>>([]);
-  const [statusReason, setStatusReason] = useState('');
   const [auditAction, setAuditAction] = useState('');
   const [auditEntity, setAuditEntity] = useState('');
   const [auditSince, setAuditSince] = useState('');
@@ -92,23 +72,17 @@ export default function PlatformApp() {
   const [auditHasMore, setAuditHasMore] = useState(false);
   const [agentPage, setAgentPage] = useState(1);
   const [agentHasMore, setAgentHasMore] = useState(false);
-  const [adjustBrand, setAdjustBrand] = useState('云杉口腔');
-  const [adjustAmount, setAdjustAmount] = useState('');
-  const [adjustReason, setAdjustReason] = useState('');
-  const [creditsAmount, setCreditsAmount] = useState('');
   const navigate = (next: PlatformView) => {
-    if (!isPlatformViewEnabled(next)) return;
+    if (!isPlatformViewVisibleForRole(next, role)) return;
     setView(next);
     setSelectedTask(null);
-    setSelectedWebsiteOrder(null);
-    setSelectedWebsiteRequest(null);
   };
 
   const loadAgents = (page: number, append: boolean) => {
     const q = new URLSearchParams({ page: String(page), pageSize: '30' });
     if (agentFilterNeedsReview) q.set('needsReview', 'true');
     if (agentFilterCategory) q.set('reviewCategory', agentFilterCategory);
-    fetch(`/api/platform/agent-tasks?${q}`).then((r) => r.json()).then((d) => {
+    pf(`/api/platform/agent-tasks?${q}`).then((r) => r.json()).then((d) => {
       setTasks(append ? (prev) => [...prev, ...(d.tasks ?? [])] : (d.tasks ?? []));
       setAgentHasMore(Boolean(d.hasMore));
     });
@@ -116,37 +90,26 @@ export default function PlatformApp() {
 
   const load = () => {
     if (view === 'dashboard') {
-      fetch('/api/platform/dashboard').then((r) => r.json()).then(setDashboard);
+      pf('/api/platform/dashboard').then(async (r) => {
+        const d = await r.json();
+        if (!r.ok || d.error) {
+          setDashboard({ error: typeof d.error === 'string' ? d.error : `请求失败 (${r.status})` });
+          return;
+        }
+        setDashboard(d);
+      });
     } else if (view === 'agents') {
       loadAgents(agentPage, agentPage > 1);
     } else if (view === 'hermes') {
-      fetch('/api/platform/agent-skill-runs').then((r) => r.json()).then((d) => setSkillRuns(d.runs ?? []));
-      fetch('/api/platform/local-automation-runs').then((r) => r.json()).then((d) => setAutomationRuns(d.runs ?? []));
-    } else if (view === 'funds') {
-      fetch('/api/platform/deposit-requests').then((r) => r.json()).then((d) => setDeposits(d.requests ?? []));
-      fetch('/api/platform/withdrawal-requests').then((r) => r.json()).then((d) => setWithdrawals(d.requests ?? []));
-      const lq = new URLSearchParams();
-      if (ledgerTab === 'freeze') lq.set('type', 'freeze');
-      else if (ledgerTab === 'release') lq.set('type', 'release');
-      else if (ledgerTab === 'anomaly') lq.set('anomaly', 'true');
-      fetch(`/api/platform/budget-ledgers?${lq}`).then((r) => r.json()).then((d) => setBudgetLedger(d.ledger ?? []));
-      fetch('/api/platform/ai-credits').then((r) => r.json()).then((d) => setAiCredits(d.credits ?? []));
-    } else if (view === 'providers') {
-      fetch('/api/platform/provider-applications').then((r) => r.json()).then((d) => setProviders(d.providers ?? []));
-      const q = providerFilter ? `?status=${encodeURIComponent(providerFilter)}` : '';
-      fetch(`/api/platform/providers${q}`).then((r) => r.json()).then((d) => setAllProviders(d.providers ?? []));
-    } else if (view === 'website') {
-      const rq = new URLSearchParams();
-      if (websiteReqFilter) rq.set('status', websiteReqFilter);
-      fetch(`/api/platform/website-requests?${rq}`).then((r) => r.json()).then((d) => setWebsiteRequests(d.requests ?? []));
-      fetch('/api/platform/website-orders').then((r) => r.json()).then((d) => setWebsiteOrders(d.orders ?? []));
+      pf('/api/platform/agent-skill-runs').then((r) => r.json()).then((d) => setSkillRuns(d.runs ?? []));
+      pf('/api/platform/local-automation-runs').then((r) => r.json()).then((d) => setAutomationRuns(d.runs ?? []));
     } else if (view === 'audit') {
       const q = new URLSearchParams({ page: '1', pageSize: '50' });
       if (auditAction.trim()) q.set('action', auditAction.trim());
       if (auditEntity.trim()) q.set('entity', auditEntity.trim());
       if (auditSince) q.set('since', auditSince);
       if (auditUntil) q.set('until', auditUntil);
-      fetch(`/api/platform/audit-logs?${q}`).then((r) => r.json()).then((d) => {
+      pf(`/api/platform/audit-logs?${q}`).then((r) => r.json()).then((d) => {
         setLogs(d.logs ?? []);
         setAuditHasMore(Boolean(d.hasMore));
       });
@@ -159,7 +122,7 @@ export default function PlatformApp() {
     if (auditEntity.trim()) q.set('entity', auditEntity.trim());
     if (auditSince) q.set('since', auditSince);
     if (auditUntil) q.set('until', auditUntil);
-    fetch(`/api/platform/audit-logs?${q}`).then((r) => r.json()).then((d) => {
+    pf(`/api/platform/audit-logs?${q}`).then((r) => r.json()).then((d) => {
       setLogs((prev) => [...prev, ...(d.logs ?? [])]);
       setAuditHasMore(Boolean(d.hasMore));
     });
@@ -173,7 +136,7 @@ export default function PlatformApp() {
       return;
     }
     load();
-  }, [view, auditAction, auditEntity, auditSince, auditUntil, providerFilter, agentFilterNeedsReview, agentFilterCategory, ledgerTab, websiteReqFilter, websiteTab]);
+  }, [view, auditAction, auditEntity, auditSince, auditUntil, agentFilterNeedsReview, agentFilterCategory, pf]);
 
   useEffect(() => {
     if (view === 'agents' && agentPage > 1) loadAgents(agentPage, true);
@@ -191,58 +154,12 @@ export default function PlatformApp() {
   };
 
   const selectTask = async (id: string) => {
-    const res = await fetch(`/api/platform/agent-tasks/${id}`);
+    const res = await pf(`/api/platform/agent-tasks/${id}`);
     const data = await res.json();
     setSelectedTask(data.task);
     setTaskLogs(data.logs ?? []);
     setTaskSkillRuns(data.skillRuns ?? []);
     setTaskAutomationRuns(data.automationRuns ?? []);
-  };
-
-  const selectWebsiteOrder = async (id: string) => {
-    const res = await fetch(`/api/platform/website-orders/${id}`);
-    const data = await res.json();
-    setSelectedWebsiteOrder(data.order ?? null);
-    if (data.order) {
-      setWebsiteAssignId(String(data.order.assigneeId ?? ''));
-      setWebsiteAssignName(String(data.order.assigneeName ?? ''));
-      setWebsitePreviewUrl(String(data.order.previewUrl ?? ''));
-    }
-  };
-
-  const reviewProvider = async (id: string, action: 'approve' | 'reject') => {
-    await fetch(`/api/platform/provider-applications/${id}/review`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, note: action === 'reject' ? '资料不符合要求' : '' }),
-    });
-    toast(action === 'approve' ? '已通过入驻' : '已驳回', 'success');
-    load();
-  };
-
-  const adjustBudget = async () => {
-    const res = await platformFetch(role, '/api/platform/budget-adjust', {
-      method: 'POST',
-      body: JSON.stringify({ brandName: adjustBrand, amount: Number(adjustAmount), reason: adjustReason, role }),
-    });
-    const data = await res.json();
-    if (data.error) { toast(data.error, 'error'); return; }
-    toast('投放余额已调整', 'success');
-    setAdjustAmount('');
-    setAdjustReason('');
-    load();
-  };
-
-  const adjustCredits = async () => {
-    const res = await platformFetch(role, '/api/platform/ai-credits/adjust', {
-      method: 'POST',
-      body: JSON.stringify({ brandName: adjustBrand, amount: Number(creditsAmount), reason: adjustReason, role }),
-    });
-    const data = await res.json();
-    if (data.error) { toast(data.error, 'error'); return; }
-    toast('AI 算力已调整', 'success');
-    setCreditsAmount('');
-    load();
   };
 
   const flagManual = async () => {
@@ -263,9 +180,7 @@ export default function PlatformApp() {
     load();
   };
 
-  const legacyDrawerOpen = Boolean(
-    selectedTask || selectedWebsiteOrder || selectedWebsiteRequest
-  );
+  const legacyDrawerOpen = Boolean(selectedTask);
 
   return (
     <>
@@ -358,53 +273,6 @@ export default function PlatformApp() {
             </div>
           </aside>
         )}
-        {selectedWebsiteRequest && view === 'website' && websiteTab === 'requests' && (
-          <aside className="w-full lg:w-[420px] border-t lg:border-t-0 border-l overflow-y-auto p-4 space-y-4 shrink-0 max-h-[50vh] lg:max-h-none" style={{ borderColor: 'var(--neutral-divider-02)' }}>
-            <button type="button" className="text-xs geo-nav-item" onClick={() => setSelectedWebsiteRequest(null)}>关闭</button>
-            <h3 className="font-semibold">{String(selectedWebsiteRequest.pageType)}</h3>
-            <p className="text-xs" style={{ color: 'var(--neutral-text-03)' }}>{String(selectedWebsiteRequest.brandName)} · {String(selectedWebsiteRequest.status)}</p>
-            <p className="text-sm">{String(selectedWebsiteRequest.goal)}</p>
-            {selectedWebsiteRequest.previewHtml && (
-              <div className="border rounded-lg overflow-hidden max-h-40" style={{ borderColor: 'var(--neutral-divider-02)' }}>
-                <iframe title="预览" className="w-full h-40 bg-white" sandbox="" srcDoc={String(selectedWebsiteRequest.previewHtml)} />
-              </div>
-            )}
-            {String(selectedWebsiteRequest.status) !== 'ordered' && (
-              <button type="button" className="geo-btn-primary text-sm w-full" onClick={async () => {
-                const res = await fetch(`/api/platform/website-requests/${String(selectedWebsiteRequest.id)}/create-order`, { method: 'POST' });
-                const data = await res.json();
-                if (data.error) { toast(data.error, 'error'); return; }
-                toast('已创建网站订单', 'success');
-                setWebsiteTab('orders');
-                setSelectedWebsiteRequest(null);
-                load();
-              }}>从需求创建订单</button>
-            )}
-          </aside>
-        )}
-        {selectedWebsiteOrder && view === 'website' && websiteTab === 'orders' && (
-          <aside className="w-full lg:w-[420px] border-t lg:border-t-0 border-l overflow-y-auto p-4 space-y-4 shrink-0 max-h-[50vh] lg:max-h-none" style={{ borderColor: 'var(--neutral-divider-02)' }}>
-            <h3 className="font-semibold text-sm">{String((selectedWebsiteOrder.request as Record<string, unknown>)?.pageType ?? '网站订单')}</h3>
-            <p className="text-xs" style={{ color: 'var(--neutral-text-03)' }}>{String(selectedWebsiteOrder.brandName)} · {String(selectedWebsiteOrder.status)}</p>
-            <input value={websiteAssignId} onChange={(e) => setWebsiteAssignId(e.target.value)} placeholder="指派 ID（接单方/设计师）"
-              className="w-full px-3 py-2 border rounded-lg text-xs" style={{ borderColor: 'var(--neutral-divider-02)' }} />
-            <input value={websiteAssignName} onChange={(e) => setWebsiteAssignName(e.target.value)} placeholder="指派姓名"
-              className="w-full px-3 py-2 border rounded-lg text-xs" style={{ borderColor: 'var(--neutral-divider-02)' }} />
-            <input value={statusReason} onChange={(e) => setStatusReason(e.target.value)} placeholder="操作原因"
-              className="w-full px-3 py-2 border rounded-lg text-xs" style={{ borderColor: 'var(--neutral-divider-02)' }} />
-            <button type="button" className="geo-btn-primary text-sm w-full" onClick={async () => {
-              if (!websiteAssignId || !websiteAssignName) { toast('请填写指派信息', 'error'); return; }
-              await fetch(`/api/platform/website-orders/${String(selectedWebsiteOrder.id)}/assign`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ assigneeId: websiteAssignId, assigneeName: websiteAssignName, reason: statusReason }),
-              });
-              toast('已指派', 'success');
-              load();
-              void selectWebsiteOrder(String(selectedWebsiteOrder.id));
-            }}>指派设计师</button>
-          </aside>
-        )}
         </>
       )}
     >
@@ -413,22 +281,29 @@ export default function PlatformApp() {
           )}
 
           {view === 'content_governance' && <PlatformContentGovernanceView />}
-          {view === 'risk_center' && <PlatformRiskCenterView onNavigate={navigate} />}
           {/* 本期隐藏：resource_review / fulfillment_rating，见 platform-feature-flags.ts */}
           {view === 'resource_review' && isPlatformViewEnabled('resource_review') && (
             <PlatformResourceReviewView />
           )}
-          {view === 'roles' && <PlatformRolesView />}
+          {view === 'publisher_users' && <PlatformUsersView scope="publisher" />}
+          {view === 'provider_users' && <PlatformUsersView scope="provider" />}
+          {(view === 'roles' || view === 'platform_members') && <PlatformRolesView section="members" />}
+          {view === 'role_permissions' && <PlatformRolesView section="permissions" />}
+          {view === 'menu_admin' && <PlatformMenuAdminView />}
+          {view === 'publisher_accounts' && <PlatformPublisherAccountsView section="balances" />}
+          {view === 'publisher_deposits' && <PlatformPublisherAccountsView section="deposits" />}
+          {view === 'provider_accounts' && <PlatformProviderAccountsView />}
+          {view === 'provider_settlement' && <PlatformFundsView section="settlement" />}
+          {view === 'provider_withdrawals' && <PlatformFundsView section="withdrawals" />}
+          {view === 'funds' && <PlatformFundsView section="settlement" />}
           {view === 'ranking_ops' && <PlatformRankingOpsView />}
           {view === 'fulfillment_rating' && isPlatformViewEnabled('fulfillment_rating') && (
             <PlatformFulfillmentRatingView />
           )}
-          {view === 'notifications' && <PlatformNotificationsView />}
-          {view === 'settlement' && <PlatformSettlementView />}
-          {view === 'reports' && <PlatformReportsView />}
+          {view === 'reports' && isPlatformViewEnabled('reports') && <PlatformReportsView />}
           {view === 'merchants' && <PlatformMerchantsView />}
           {view === 'orders' && <PlatformOrdersView />}
-          {view === 'applications' && <PlatformApplicationsView />}
+          {view === 'website' && <PlatformWebsiteOpsView />}
           {view === 'org_certs' && <PlatformOrgCertsView />}
           {view === 'configs' && <PlatformConfigsView />}
 
@@ -529,316 +404,20 @@ export default function PlatformApp() {
             </div>
           )}
 
-          {view === 'funds' && (
-            <div className="space-y-4">
-              <h2 className="text-lg font-bold">资金与算力监管</h2>
-              <div className="platform-card p-4">
-                <h3 className="font-semibold text-sm mb-3">待审核入账</h3>
-                {deposits.length === 0 ? <p className="text-xs" style={{ color: 'var(--neutral-text-03)' }}>无</p> : deposits.map((d) => (
-                  <div key={d.id} className="flex justify-between items-center py-2 border-b text-sm" style={{ borderColor: 'var(--neutral-divider-02)' }}>
-                    <span>{d.brandName} · ¥{d.amount}</span>
-                    <div className="flex gap-2">
-                      <button type="button" className="geo-btn-primary geo-btn-xs" onClick={async () => {
-                        const res = await platformFetch(role, `/api/platform/deposit-requests/${d.id}/approve`, {
-                          method: 'POST',
-                          body: JSON.stringify({ role }),
-                        });
-                        const data = await res.json();
-                        if (data.error) { toast(data.error, 'error'); return; }
-                        toast('已通过', 'success'); load();
-                      }}>通过</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="platform-card p-4">
-                <h3 className="font-semibold text-sm mb-3">接单方提现审核</h3>
-                {withdrawals.filter((w) => w.status === 'pending' || w.status === 'approved').length === 0 ? (
-                  <p className="text-xs" style={{ color: 'var(--neutral-text-03)' }}>无待处理提现</p>
-                ) : (
-                  withdrawals
-                    .filter((w) => w.status === 'pending' || w.status === 'approved')
-                    .map((w) => (
-                      <div key={w.id} className="flex justify-between items-center py-2 border-b text-sm gap-3" style={{ borderColor: 'var(--neutral-divider-02)' }}>
-                        <div className="min-w-0">
-                          <p className="font-medium truncate">{w.provider?.name ?? w.providerId}</p>
-                          <p className="text-xs" style={{ color: 'var(--neutral-text-03)' }}>
-                            ¥{w.amount.toLocaleString('zh-CN')} · {w.channelLabel ?? w.channel} ·{' '}
-                            {w.status === 'pending' ? '待审核' : '待打款'}
-                          </p>
-                        </div>
-                        <div className="flex gap-2 shrink-0">
-                          {w.status === 'pending' && (
-                            <>
-                              <button
-                                type="button"
-                                className="geo-btn-primary geo-btn-xs"
-                                disabled={!can('funds.deposit')}
-                                onClick={async () => {
-                                  const res = await platformFetch(role, `/api/platform/withdrawal-requests/${w.id}/approve`, {
-                                    method: 'POST',
-                                    body: JSON.stringify({ role }),
-                                  });
-                                  const data = await res.json();
-                                  if (data.error) { toast(data.error, 'error'); return; }
-                                  toast('提现已通过', 'success');
-                                  load();
-                                }}
-                              >
-                                通过
-                              </button>
-                              <button
-                                type="button"
-                                className="geo-btn-secondary geo-btn-xs"
-                                disabled={!can('funds.deposit')}
-                                onClick={async () => {
-                                  const res = await platformFetch(role, `/api/platform/withdrawal-requests/${w.id}/reject`, {
-                                    method: 'POST',
-                                    body: JSON.stringify({ role, reason: '平台驳回' }),
-                                  });
-                                  const data = await res.json();
-                                  if (data.error) { toast(data.error, 'error'); return; }
-                                  toast('已驳回', 'success');
-                                  load();
-                                }}
-                              >
-                                驳回
-                              </button>
-                            </>
-                          )}
-                          {w.status === 'approved' && (
-                            <button
-                              type="button"
-                              className="geo-btn-primary geo-btn-xs"
-                              disabled={!can('funds.deposit')}
-                              onClick={async () => {
-                                const res = await platformFetch(role, `/api/platform/withdrawal-requests/${w.id}/mark-paid`, {
-                                  method: 'POST',
-                                  body: JSON.stringify({ role }),
-                                });
-                                const data = await res.json();
-                                if (data.error) { toast(data.error, 'error'); return; }
-                                toast('已标记打款', 'success');
-                                load();
-                              }}
-                            >
-                              标记已打款
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                )}
-              </div>
-              <div className="platform-card p-4 space-y-3">
-                <h3 className="font-semibold text-sm">人工调整（须填写原因，写入审计）</h3>
-                <input value={adjustBrand} onChange={(e) => setAdjustBrand(e.target.value)} placeholder="品牌名"
-                  className="w-full px-3 py-2 border rounded-lg text-sm" style={{ borderColor: 'var(--neutral-divider-02)' }} />
-                <input value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} placeholder="调整原因（必填）"
-                  className="w-full px-3 py-2 border rounded-lg text-sm" style={{ borderColor: 'var(--neutral-divider-02)' }} />
-                <div className="flex gap-2 flex-wrap">
-                  <input value={adjustAmount} onChange={(e) => setAdjustAmount(e.target.value)} placeholder="投放余额 ±金额"
-                    className="flex-1 min-w-[120px] px-3 py-2 border rounded-lg text-sm" style={{ borderColor: 'var(--neutral-divider-02)' }} />
-                  <button type="button" className="geo-btn-primary text-sm" disabled={!can('funds.adjust')}
-                    onClick={() => requestSensitiveConfirm('确认调整投放余额？', () => void adjustBudget())}>调整余额</button>
-                  <input value={creditsAmount} onChange={(e) => setCreditsAmount(e.target.value)} placeholder="AI 算力 ±点数"
-                    className="flex-1 min-w-[120px] px-3 py-2 border rounded-lg text-sm" style={{ borderColor: 'var(--neutral-divider-02)' }} />
-                  <button type="button" className="geo-btn-secondary text-sm" onClick={() => void adjustCredits()}>调整算力</button>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className="platform-card overflow-hidden">
-                  <div className="platform-card-header flex flex-wrap gap-2 items-center justify-between">
-                    <span>投放余额流水</span>
-                    <div className="flex gap-1">
-                      {(['all', 'freeze', 'release', 'anomaly'] as const).map((tab) => (
-                        <button key={tab} type="button" onClick={() => setLedgerTab(tab)}
-                          className={`text-[10px] px-2 py-0.5 rounded ${ledgerTab === tab ? 'geo-nav-active' : 'geo-nav-item'}`}>
-                          {tab === 'all' ? '全部' : tab === 'freeze' ? '冻结' : tab === 'release' ? '释放' : '异常'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <table className="platform-table platform-table--compact">
-                    <thead><tr><th>品牌</th><th>类型</th><th>金额</th></tr></thead>
-                    <tbody>
-                      {budgetLedger.length === 0 ? (
-                        <tr><td colSpan={3} className="platform-table-empty">无记录</td></tr>
-                      ) : budgetLedger.slice(0, 20).map((row, i) => (
-                        <tr key={i} style={row.anomaly ? { background: '#fef2f2' } : undefined}>
-                          <td>{String(row.brandName)}</td>
-                          <td>{String(row.type)}{row.anomaly ? ' ⚠' : ''}</td>
-                          <td>¥{Number(row.amount)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="platform-card overflow-hidden">
-                  <div className="platform-card-header">AI 算力余额</div>
-                  <table className="platform-table platform-table--compact">
-                    <thead><tr><th>品牌</th><th>余额</th></tr></thead>
-                    <tbody>
-                      {aiCredits.map((c) => (
-                        <tr key={String(c.brandName)}>
-                          <td>{String(c.brandName)}</td>
-                          <td>{Number(c.balance)} 点</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {view === 'providers' && (
-            <div className="space-y-4">
-              <h2 className="text-lg font-bold">接单方管理</h2>
-              <div className="platform-card overflow-hidden">
-                <div className="platform-card-header flex gap-2 flex-wrap">
-                  <span>全部接单方</span>
-                  {['', 'submitted', 'approved', 'rejected'].map((s) => (
-                    <button key={s || 'all'} type="button" className={`text-xs px-2 py-0.5 rounded ${providerFilter === s ? 'geo-nav-active' : 'geo-nav-item'}`}
-                      onClick={() => setProviderFilter(s)}>
-                      {s === '' ? '全部' : s === 'submitted' ? '待审核' : s === 'approved' ? '已通过' : '已驳回'}
-                    </button>
-                  ))}
-                </div>
-                <table className="platform-table platform-table--compact">
-                  <thead><tr><th>名称</th><th>类型</th><th>状态</th><th>申请</th></tr></thead>
-                  <tbody>
-                    {allProviders.map((p) => (
-                      <tr key={String(p.id)}>
-                        <td>{String(p.name)}</td>
-                        <td>{String(p.type)}</td>
-                        <td>{String(p.applicationStatus)}</td>
-                        <td>{Number((p._count as Record<string, number>)?.orderApplications ?? 0)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <h3 className="font-semibold text-sm">待审核入驻</h3>
-              {providers.length === 0 ? (
-                <p className="text-sm" style={{ color: 'var(--neutral-text-03)' }}>暂无待审核申请</p>
-              ) : providers.map((p) => {
-                const logs = (p.reviewLogs as Array<Record<string, unknown>>) ?? [];
-                const apps = (p.applications as Array<Record<string, unknown>>) ?? [];
-                return (
-                  <div key={String(p.id)} className="platform-card p-4 space-y-3">
-                    <div className="flex justify-between items-start gap-4">
-                      <div>
-                        <h3 className="font-semibold">{String(p.name)}</h3>
-                        <p className="text-xs mt-1" style={{ color: 'var(--neutral-text-03)' }}>
-                          {String(p.type)} · {String(p.contactName ?? '')} · {String(p.phone ?? '')} · {String(p.city ?? '')}
-                        </p>
-                        {apps[0] && (
-                          <p className="text-xs mt-2" style={{ color: 'var(--neutral-text-03)' }}>
-                            能力：{String(p.platforms ?? '—')} · 行业：{String(p.industryTags ?? '—')}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex gap-2 shrink-0">
-                        <button type="button" className="geo-btn-primary geo-btn-xs" onClick={() => void reviewProvider(String(p.id), 'approve')}>通过</button>
-                        <button type="button" className="geo-btn-secondary geo-btn-xs" onClick={() => void reviewProvider(String(p.id), 'reject')}>驳回</button>
-                      </div>
-                    </div>
-                    {logs.length > 0 && (
-                      <div className="text-xs border-t pt-2" style={{ borderColor: 'var(--neutral-divider-02)', color: 'var(--neutral-text-03)' }}>
-                        审核记录：{logs.map((l) => `${String(l.action)} (${new Date(String(l.createdAt)).toLocaleDateString('zh-CN')})`).join(' · ')}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {view === 'website' && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center flex-wrap gap-2">
-                <h2 className="text-lg font-bold">网站需求与订单</h2>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setWebsiteTab('requests')}
-                    className={`text-xs px-3 py-1.5 rounded-lg ${websiteTab === 'requests' ? 'geo-nav-active' : 'geo-nav-item'}`}>
-                    需求列表
-                  </button>
-                  <button type="button" onClick={() => setWebsiteTab('orders')}
-                    className={`text-xs px-3 py-1.5 rounded-lg ${websiteTab === 'orders' ? 'geo-nav-active' : 'geo-nav-item'}`}>
-                    执行订单
-                  </button>
-                </div>
-              </div>
-
-              {websiteTab === 'requests' ? (
-                <>
-                  <div className="flex gap-2 flex-wrap">
-                    {['', 'draft', 'preview_ready', 'ordered'].map((s) => (
-                      <button key={s || 'all'} type="button" onClick={() => setWebsiteReqFilter(s)}
-                        className={`text-xs px-2 py-1 rounded ${websiteReqFilter === s ? 'geo-nav-active' : 'geo-nav-item'}`}>
-                        {s === '' ? '全部' : s === 'preview_ready' ? '待确认' : s === 'ordered' ? '已下单' : '草稿'}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="platform-card overflow-hidden">
-                    <table className="platform-table">
-                      <thead><tr><th>品牌</th><th>页面</th><th>状态</th><th>附件</th><th>订单</th></tr></thead>
-                      <tbody>
-                        {websiteRequests.length === 0 ? (
-                          <tr><td colSpan={5} className="platform-table-empty">暂无网站需求</td></tr>
-                        ) : websiteRequests.map((r) => {
-                          const atts = (r.attachments as unknown[]) ?? [];
-                          const orders = (r.orders as unknown[]) ?? [];
-                          return (
-                            <tr key={String(r.id)} className="cursor-pointer" onClick={() => setSelectedWebsiteRequest(r)}>
-                              <td>{String(r.brandName)}</td>
-                              <td>{String(r.pageType)}</td>
-                              <td>{String(r.status)}</td>
-                              <td>{atts.length}</td>
-                              <td>{orders.length}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              ) : (
-                <div className="platform-card overflow-hidden">
-                  <table className="platform-table">
-                    <thead><tr><th>品牌</th><th>页面</th><th>指派</th><th>状态</th></tr></thead>
-                    <tbody>
-                      {websiteOrders.length === 0 ? (
-                        <tr><td colSpan={4} className="platform-table-empty">暂无网站订单</td></tr>
-                      ) : websiteOrders.map((o) => (
-                        <tr key={String(o.id)} className="cursor-pointer" onClick={() => { setSelectedWebsiteRequest(null); void selectWebsiteOrder(String(o.id)); }}>
-                          <td>{String(o.brandName)}</td>
-                          <td>{String((o.request as Record<string, unknown>)?.pageType ?? '—')}</td>
-                          <td>{String(o.assigneeName ?? '—')}</td>
-                          <td>{String(o.status)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
+          {view === 'providers' && <PlatformProvidersView />}
 
           {view === 'audit' && (
             <div className="space-y-3">
               <h2 className="text-lg font-bold">审计日志</h2>
-              <div className="flex gap-2 flex-wrap items-center">
-                <input value={auditAction} onChange={(e) => setAuditAction(e.target.value)} placeholder="筛选动作（如 settlement）"
-                  className="px-3 py-2 border rounded-lg text-sm" style={{ borderColor: 'var(--neutral-divider-02)' }} />
-                <input value={auditEntity} onChange={(e) => setAuditEntity(e.target.value)} placeholder="筛选实体（如 TaskOrder）"
-                  className="px-3 py-2 border rounded-lg text-sm" style={{ borderColor: 'var(--neutral-divider-02)' }} />
-                <input type="date" value={auditSince} onChange={(e) => setAuditSince(e.target.value)}
-                  className="px-3 py-2 border rounded-lg text-sm" style={{ borderColor: 'var(--neutral-divider-02)' }} />
-                <input type="date" value={auditUntil} onChange={(e) => setAuditUntil(e.target.value)}
-                  className="px-3 py-2 border rounded-lg text-sm" style={{ borderColor: 'var(--neutral-divider-02)' }} />
-              </div>
+              <PlatformFilterBar onReset={() => { setAuditAction(''); setAuditEntity(''); setAuditSince(''); setAuditUntil(''); }}>
+                <PlatformFilterField label="动作">
+                  <input value={auditAction} onChange={(e) => setAuditAction(e.target.value)} placeholder="如 settlement" className="platform-filter-input" />
+                </PlatformFilterField>
+                <PlatformFilterField label="实体">
+                  <input value={auditEntity} onChange={(e) => setAuditEntity(e.target.value)} placeholder="如 TaskOrder" className="platform-filter-input" />
+                </PlatformFilterField>
+                <PlatformFilterDateRange since={auditSince} until={auditUntil} onSinceChange={setAuditSince} onUntilChange={setAuditUntil} />
+              </PlatformFilterBar>
               <div className="platform-card overflow-hidden">
                 <table className="platform-table">
                   <thead><tr><th>动作</th><th>实体</th><th>详情</th><th>时间</th></tr></thead>

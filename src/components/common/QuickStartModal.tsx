@@ -19,6 +19,11 @@ interface Props {
 }
 
 export default function QuickStartModal({ onClose, onNavigate, onFlowComplete }: Props) {
+  const handleNavigate = (view: ViewType, hint?: string) => {
+    onClose();
+    onNavigate?.(view, hint);
+  };
+
   return (
     <div className="geo-modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="geo-modal max-w-lg relative" onClick={(e) => e.stopPropagation()}>
@@ -34,7 +39,7 @@ export default function QuickStartModal({ onClose, onNavigate, onFlowComplete }:
           <BrandClueStartFlow
             headline="快速发起项目"
             variant="modal"
-            onNavigate={onNavigate}
+            onNavigate={handleNavigate}
             onCancel={onClose}
             onComplete={(result) => onFlowComplete(result)}
           />

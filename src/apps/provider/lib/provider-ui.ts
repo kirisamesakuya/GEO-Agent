@@ -106,3 +106,23 @@ export function formatTaskPublishedAt(iso?: string | null): string {
 
 export const DEFAULT_AVATAR =
   'https://api.dicebear.com/7.x/avataaars/svg?seed=geo-provider';
+
+export const PAYOUT_CHANNEL_OPTIONS = [
+  { value: 'bank', label: '银行卡' },
+  { value: 'alipay', label: '支付宝' },
+  { value: 'wechat', label: '微信' },
+] as const;
+
+export type PayoutChannel = (typeof PAYOUT_CHANNEL_OPTIONS)[number]['value'];
+
+export function payoutChannelLabel(channel: string | null | undefined): string {
+  return PAYOUT_CHANNEL_OPTIONS.find((o) => o.value === channel)?.label ?? '未设置';
+}
+
+export function payoutLabelFromChannel(channel: string, detail: string): string {
+  const name = payoutChannelLabel(channel);
+  if (channel === 'bank') return `${name} ${detail}`;
+  if (channel === 'alipay') return `支付宝 ${detail}`;
+  if (channel === 'wechat') return `微信 ${detail}`;
+  return detail;
+}

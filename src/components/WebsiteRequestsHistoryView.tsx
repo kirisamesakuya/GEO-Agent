@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, ChevronRight, FileText } from 'lucide-react';
+import { formatWebsiteLeadListLabel } from '../../lib/website-lead-intake';
 
 export interface WebsiteAttachment {
   name: string;
@@ -11,6 +12,10 @@ export interface WebsiteRequest {
   id: string;
   pageType: string;
   goal: string;
+  referenceUrl?: string | null;
+  keywords?: string | null;
+  contact?: string | null;
+  notes?: string | null;
   status: string;
   previewHtml?: string;
   modules?: string[];
@@ -69,7 +74,7 @@ export default function WebsiteRequestsHistoryView({ brandName, onBack, onSelect
                   {req.pageType}
                 </div>
                 <p className="text-xs mt-1 truncate" style={{ color: 'var(--neutral-text-03)' }}>
-                  {req.goal}
+                  {formatWebsiteLeadListLabel(req)}
                 </p>
                 <p className="text-xs mt-2" style={{ color: 'var(--neutral-text-03)' }}>
                   {req.status} · {new Date(req.createdAt).toLocaleString('zh-CN')}

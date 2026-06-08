@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import { formatWebsiteLeadGoal } from '../../lib/website-lead-intake.js';
 import {
   listAgentTasksPaginated,
   getAgentTaskPlatformDetail,
@@ -6,16 +7,22 @@ import {
 import { listAuditLogs } from '../services/audit.service.js';
 import { listAllOrders, listAllOrdersPaginated, getOrder } from '../services/order.service.js';
 import {
+  createWebsiteRequest,
   listWebsiteOrders,
   getWebsiteOrder,
   assignWebsiteOrder,
+  updateWebsiteOrder,
+  deleteWebsiteOrder,
   updateWebsiteOrderStatus,
   submitWebsiteDelivery,
   requestWebsiteRevision,
   completeWebsiteOrder,
   listWebsiteRequests,
   getWebsiteRequest,
+  updateWebsiteRequest,
+  deleteWebsiteRequest,
   confirmWebsiteOrder,
+  platformDeliverWebsiteOrder,
 } from '../services/website.service.js';
 import { reviewProviderApplication, confirmApplication } from '../services/provider.service.js';
 import {
@@ -23,6 +30,7 @@ import {
   listPendingProviderApplications,
   assignTaskOrder,
   reassignTaskOrder,
+  releaseTaskOrderToMarketplace,
   getTaskOrderReassignPreview,
   updateOrderStatus,
   resolveDispute,
@@ -71,14 +79,23 @@ import {
   approveDepositRequest,
   rejectDepositRequest,
   platformAdjustBudget,
+  listPlatformPublisherAccounts,
+  getPlatformPublisherAccountDetail,
 } from '../services/budget.service.js';
 import { addAiCredits } from '../services/ai-credits.service.js';
 import {
-  listWithdrawalRequests,
+  listWithdrawalRequestsWithWallet,
+  listPlatformProviderAccounts,
+  getWithdrawalRequestStats,
   approveWithdrawalRequest,
   rejectWithdrawalRequest,
   markWithdrawalPaid,
 } from '../services/withdrawal.service.js';
+import {
+  listPlatformUsers,
+  getPlatformUserDetail,
+  updateUserStatus,
+} from '../services/user-admin.service.js';
 import { cancelAgentTask, retryAgentTask } from '../agent/worker.js';
 import { enqueueAgentTask } from '../agent/worker.js';
 
@@ -201,6 +218,37 @@ export function registerPlatformRoutes(app: Express) {
     res.json({ ledger: await listPlatformBudgetLedgers({ type, anomaly }) });
   });
 
+  app.get('/api/platform/publisher-accounts', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'funds')) return;
+    const str = (key: string) => (typeof req.query[key] === 'string' ? String(req.query[key]) : undefined);
+    const accounts = await listPlatformPublisherAccounts({
+      q: str('q'),
+      brandName: str('brandName'),
+      organizationName: str('organizationName'),
+      ownerName: str('ownerName'),
+      ownerPhone: str('ownerPhone'),
+      ownerUserNo: str('ownerUserNo'),
+      brandStatus: str('brandStatus'),
+      anomalyOnly: req.query.anomaly === 'true',
+    });
+    const stats = {
+      total: accounts.length,
+      totalBalance: accounts.reduce((s, a) => s + a.balance, 0),
+      totalFrozen: accounts.reduce((s, a) => s + a.frozen, 0),
+      anomaly: accounts.filter((a) => a.anomaly).length,
+    };
+    res.json({ accounts, stats });
+  });
+
+  app.get('/api/platform/publisher-accounts/:brandName', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'funds')) return;
+    try {
+      res.json(await getPlatformPublisherAccountDetail(decodeURIComponent(req.params.brandName)));
+    } catch (err) {
+      res.status(404).json({ error: err instanceof Error ? err.message : '账户不存在' });
+    }
+  });
+
   app.get('/api/platform/ai-credits', async (req, res) => {
     if (!requirePlatformPermission(req, res, 'funds')) return;
     res.json({ credits: await listAllAiCredits() });
@@ -244,6 +292,19 @@ export function registerPlatformRoutes(app: Express) {
       res.json(await reassignTaskOrder(req.params.id, providerId, providerName, reason));
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : '改派失败' });
+    }
+  });
+
+  app.post('/api/platform/task-orders/:id/release', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'orders.reassign')) return;
+    const { reason } = req.body ?? {};
+    if (!reason || !String(reason).trim()) {
+      return res.status(400).json({ error: '请填写释放原因' });
+    }
+    try {
+      res.json(await releaseTaskOrderToMarketplace(req.params.id, String(reason)));
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '释放失败' });
     }
   });
 
@@ -298,13 +359,65 @@ export function registerPlatformRoutes(app: Express) {
     res.json({ requests: await listWebsiteRequests({ brandName, status }) });
   });
 
+  app.post('/api/platform/website-requests', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'website')) return;
+    const { brandName, pageType, referenceUrl, keywords, contact, notes, modules } = req.body ?? {};
+    if (!brandName || !pageType || !keywords || !contact) {
+      return res.status(400).json({ error: '请填写品牌、页面类型、目标关键词与联系方式' });
+    }
+    try {
+      const trimmedKeywords = String(keywords).trim();
+      const trimmedContact = String(contact).trim();
+      const trimmedNotes = notes ? String(notes).trim() : '';
+      const request = await createWebsiteRequest({
+        brandName: String(brandName).trim(),
+        pageType: String(pageType).trim(),
+        goal: formatWebsiteLeadGoal({
+          keywords: trimmedKeywords,
+          notes: trimmedNotes,
+          contact: trimmedContact,
+        }),
+        referenceUrl: referenceUrl ? String(referenceUrl).trim() : undefined,
+        keywords: trimmedKeywords,
+        contact: trimmedContact,
+        notes: trimmedNotes || undefined,
+        modules: Array.isArray(modules) ? modules.map(String) : ['平台录入'],
+      });
+      res.status(201).json({ request });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '创建失败' });
+    }
+  });
+
   app.get('/api/platform/website-requests/:id', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'website')) return;
     const request = await getWebsiteRequest(req.params.id);
     if (!request) return res.status(404).json({ error: '需求不存在' });
     res.json({ request });
   });
 
+  app.patch('/api/platform/website-requests/:id', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'website')) return;
+    try {
+      const request = await updateWebsiteRequest(req.params.id, req.body ?? {});
+      res.json({ request });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '更新失败' });
+    }
+  });
+
+  app.delete('/api/platform/website-requests/:id', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'website')) return;
+    try {
+      await deleteWebsiteRequest(req.params.id);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '删除失败' });
+    }
+  });
+
   app.post('/api/platform/website-requests/:id/create-order', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'website')) return;
     try {
       res.json({ order: await confirmWebsiteOrder(req.params.id) });
     } catch (err) {
@@ -312,29 +425,53 @@ export function registerPlatformRoutes(app: Express) {
     }
   });
 
-  app.get('/api/platform/website-orders', async (_req, res) => {
+  app.get('/api/platform/website-orders', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'website')) return;
     res.json({ orders: await listWebsiteOrders() });
   });
 
   app.get('/api/platform/website-orders/:id', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'website')) return;
     const order = await getWebsiteOrder(req.params.id);
     if (!order) return res.status(404).json({ error: '订单不存在' });
     res.json({ order });
   });
 
+  app.patch('/api/platform/website-orders/:id', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'website')) return;
+    try {
+      res.json({ order: await updateWebsiteOrder(req.params.id, req.body ?? {}) });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '更新失败' });
+    }
+  });
+
+  app.delete('/api/platform/website-orders/:id', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'website')) return;
+    try {
+      await deleteWebsiteOrder(req.params.id);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '删除失败' });
+    }
+  });
+
   app.post('/api/platform/website-orders/:id/assign', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'website')) return;
     const { assigneeId, assigneeName, reason } = req.body ?? {};
     if (!assigneeId || !assigneeName) return res.status(400).json({ error: '缺少指派人员' });
     res.json({ order: await assignWebsiteOrder(req.params.id, assigneeId, assigneeName, reason) });
   });
 
   app.post('/api/platform/website-orders/:id/status', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'website')) return;
     const { status, reason } = req.body ?? {};
     if (!status || !reason) return res.status(400).json({ error: '缺少状态或原因' });
     res.json({ order: await updateWebsiteOrderStatus(req.params.id, status, reason) });
   });
 
   app.post('/api/platform/website-orders/:id/delivery', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'website')) return;
     const { previewUrl, deliveryNote } = req.body ?? {};
     try {
       res.json({ order: await submitWebsiteDelivery(req.params.id, previewUrl, deliveryNote) });
@@ -343,7 +480,23 @@ export function registerPlatformRoutes(app: Express) {
     }
   });
 
+  app.post('/api/platform/website-orders/:id/offline-deliver', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'website')) return;
+    const { previewUrl, deliveryNote } = req.body ?? {};
+    try {
+      res.json({
+        order: await platformDeliverWebsiteOrder(req.params.id, {
+          previewUrl: String(previewUrl ?? ''),
+          deliveryNote: deliveryNote ? String(deliveryNote) : undefined,
+        }),
+      });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '交付失败' });
+    }
+  });
+
   app.post('/api/platform/website-orders/:id/revision', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'website')) return;
     const { reason } = req.body ?? {};
     try {
       res.json({ order: await requestWebsiteRevision(req.params.id, reason ?? '') });
@@ -353,6 +506,7 @@ export function registerPlatformRoutes(app: Express) {
   });
 
   app.post('/api/platform/website-orders/:id/complete', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'website')) return;
     const { reason } = req.body ?? {};
     res.json({ order: await completeWebsiteOrder(req.params.id, reason) });
   });
@@ -481,7 +635,14 @@ export function registerPlatformRoutes(app: Express) {
 
   app.get('/api/platform/deposit-requests', async (req, res) => {
     if (!requirePlatformPermission(req, res, 'funds.deposit')) return;
-    res.json({ requests: await listDepositRequests(undefined, 'pending') });
+    const status = typeof req.query.status === 'string' ? req.query.status : 'pending';
+    const brandName = typeof req.query.brandName === 'string' ? req.query.brandName : undefined;
+    res.json({
+      requests: await listDepositRequests(
+        brandName,
+        status === 'all' ? undefined : status || undefined
+      ),
+    });
   });
 
   app.post('/api/platform/deposit-requests/:id/approve', async (req, res) => {
@@ -499,10 +660,37 @@ export function registerPlatformRoutes(app: Express) {
     res.json({ request: await rejectDepositRequest(req.params.id, reason) });
   });
 
+  app.get('/api/platform/provider-accounts', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'funds')) return;
+    const providerName = typeof req.query.providerName === 'string' ? req.query.providerName : undefined;
+    const payoutBound =
+      req.query.payoutBound === 'yes' || req.query.payoutBound === 'no'
+        ? req.query.payoutBound
+        : undefined;
+    const accounts = await listPlatformProviderAccounts({ providerName, payoutBound });
+    const stats = {
+      total: accounts.length,
+      totalExtractable: accounts.reduce((s, a) => s + a.extractable, 0),
+      totalFrozen: accounts.reduce((s, a) => s + a.frozen, 0),
+      totalWithdrawn: accounts.reduce((s, a) => s + a.withdrawn, 0),
+      missingPayout: accounts.filter((a) => !a.hasPayoutAccount).length,
+      pendingWithdrawal: accounts.reduce((s, a) => s + a.pendingWithdrawal, 0),
+    };
+    res.json({ accounts, stats });
+  });
+
+  app.get('/api/platform/withdrawal-requests/stats', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'funds.deposit')) return;
+    res.json({ stats: await getWithdrawalRequestStats() });
+  });
+
   app.get('/api/platform/withdrawal-requests', async (req, res) => {
-    if (!requirePlatformPermission(req, res, 'settlement')) return;
+    if (!requirePlatformPermission(req, res, 'funds.deposit')) return;
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
-    res.json({ requests: await listWithdrawalRequests({ status, limit: 100 }) });
+    const providerName = typeof req.query.providerName === 'string' ? req.query.providerName : undefined;
+    res.json({
+      requests: await listWithdrawalRequestsWithWallet({ status, providerName, limit: 100 }),
+    });
   });
 
   app.post('/api/platform/withdrawal-requests/:id/approve', async (req, res) => {
@@ -533,12 +721,63 @@ export function registerPlatformRoutes(app: Express) {
   app.post('/api/platform/withdrawal-requests/:id/mark-paid', async (req, res) => {
     if (!requirePlatformPermission(req, res, 'funds.deposit')) return;
     const role = getPlatformRoleFromRequest(req);
+    const { paidNote, paidVoucher } = req.body ?? {};
     try {
       res.json({
-        request: await markWithdrawalPaid(req.params.id, role ?? undefined),
+        request: await markWithdrawalPaid(req.params.id, role ?? undefined, {
+          paidNote: paidNote ? String(paidNote) : undefined,
+          paidVoucher: paidVoucher ? String(paidVoucher) : undefined,
+        }),
       });
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : '标记打款失败' });
+    }
+  });
+
+  app.get('/api/platform/users', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'users')) return;
+    const str = (key: string) => (typeof req.query[key] === 'string' ? String(req.query[key]) : undefined);
+    const userType = str('userType');
+    const page = Number(req.query.page) || 1;
+    const pageSize = Number(req.query.pageSize) || 30;
+    res.json(
+      await listPlatformUsers({
+        q: str('q'),
+        userNo: str('userNo'),
+        phone: str('phone'),
+        displayName: str('displayName'),
+        organizationName: str('organizationName'),
+        certStatus: str('certStatus'),
+        userType: userType as 'publisher' | 'provider' | 'platform' | undefined,
+        accountType: str('accountType') as 'personal' | 'enterprise' | undefined,
+        status: str('status'),
+        page,
+        pageSize,
+      })
+    );
+  });
+
+  app.get('/api/platform/users/:id', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'users')) return;
+    try {
+      res.json(await getPlatformUserDetail(req.params.id));
+    } catch (err) {
+      res.status(404).json({ error: err instanceof Error ? err.message : '用户不存在' });
+    }
+  });
+
+  app.post('/api/platform/users/:id/status', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'users')) return;
+    const { status, reason } = req.body ?? {};
+    if (!['active', 'frozen'].includes(status)) {
+      return res.status(400).json({ error: 'status 须为 active 或 frozen' });
+    }
+    try {
+      res.json({
+        user: await updateUserStatus(req.params.id, status, reason ? String(reason) : undefined),
+      });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '更新失败' });
     }
   });
 

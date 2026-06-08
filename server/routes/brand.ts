@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from 'express';
-import { requireBrandName, requireBrandAccess } from '../middleware/require-publisher.js';
+import { requireBrandName, requireBrandAccess, requirePublisherUser } from '../middleware/require-publisher.js';
 import { getAuthMode } from '../middleware/request-context.js';
 import {
   getBrandProfile,
@@ -31,7 +31,7 @@ import {
   getDefaultOrganization,
 } from '../services/organization.service.js';
 import {
-  getOrganizationCertDetail,
+  getOrganizationCertContext,
   submitOrganizationCertification,
 } from '../services/organization-cert.service.js';
 
@@ -40,16 +40,21 @@ export function registerBrandRoutes(app: Express) {
     res.json({ members: await listOrganizationMembers() });
   });
 
-  app.get('/api/organization', async (_req, res) => {
-    const detail = await getOrganizationCertDetail();
-    if (!detail) return res.status(404).json({ error: '组织不存在' });
-    res.json({ organization: detail });
+  app.get('/api/organization', async (req, res) => {
+    if (!requirePublisherUser(req, res)) return;
+    const userId = req.ctx?.userId;
+    if (!userId) return res.status(401).json({ error: '未登录' });
+    const ctx = await getOrganizationCertContext(userId);
+    res.json(ctx);
   });
 
   app.post('/api/organization/certification/submit', async (req, res) => {
+    if (!requirePublisherUser(req, res)) return;
+    const userId = req.ctx?.userId;
+    if (!userId) return res.status(401).json({ error: '未登录' });
     const { legalName, uscc, contactName, contactPhone } = req.body ?? {};
     try {
-      const organization = await submitOrganizationCertification({
+      const organization = await submitOrganizationCertification(userId, {
         legalName: String(legalName ?? ''),
         uscc: String(uscc ?? ''),
         contactName: String(contactName ?? ''),

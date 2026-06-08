@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useToast } from '../../context/ToastContext';
+import { formatWebsiteLeadGoal } from '../../../lib/website-lead-intake';
 import { WEBSITE_PAGE_TYPES, WEBSITE_PHASE1_NOTE } from '../../../lib/website-order-flow';
 
 export interface WebsiteLeadIntakeValues {
@@ -46,20 +47,23 @@ export default function WebsiteLeadIntakeForm({
     }
     setSubmitting(true);
     try {
-      const goal = [
-        keywords.trim(),
-        notes.trim() ? `参考说明：${notes.trim()}` : '',
-        `联系方式：${contact.trim()}`,
-      ]
-        .filter(Boolean)
-        .join('\n');
+      const trimmedKeywords = keywords.trim();
+      const trimmedContact = contact.trim();
+      const trimmedNotes = notes.trim();
       const res = await fetch('/api/website-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           brandName,
           pageType,
-          goal,
+          goal: formatWebsiteLeadGoal({
+            keywords: trimmedKeywords,
+            notes: trimmedNotes,
+            contact: trimmedContact,
+          }),
+          keywords: trimmedKeywords,
+          contact: trimmedContact,
+          notes: trimmedNotes || undefined,
           referenceUrl: referenceUrl.trim() || undefined,
           modules: ['客资提交'],
         }),

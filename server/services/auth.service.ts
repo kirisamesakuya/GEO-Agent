@@ -226,11 +226,26 @@ export async function ensureDemoAuthUsers(providerId?: string) {
     { id: DEMO_USER_IDS.platform, displayName: 'Demo 平台用户' },
   ];
 
+  const phoneById: Record<string, string> = {
+    [DEMO_USER_IDS.publisher]: '13800001001',
+    [DEMO_USER_IDS.provider]: '13800001111',
+    [DEMO_USER_IDS.platform]: '13800002999',
+  };
   for (const u of users) {
     await prisma.user.upsert({
       where: { id: u.id },
-      create: { id: u.id, displayName: u.displayName, status: 'active' },
-      update: { displayName: u.displayName, status: 'active' },
+      create: {
+        id: u.id,
+        displayName: u.displayName,
+        phone: phoneById[u.id],
+        accountType: u.id === DEMO_USER_IDS.publisher ? 'enterprise' : 'personal',
+        status: 'active',
+      },
+      update: {
+        displayName: u.displayName,
+        phone: phoneById[u.id],
+        status: 'active',
+      },
     });
   }
 

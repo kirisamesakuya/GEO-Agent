@@ -167,7 +167,7 @@ export default function BrandListView({ onBrandCreated, onOpenBrandWorkspace }: 
                 brands.map((b) => (
                   <tr
                     key={b.id}
-                    className="cursor-pointer hover:bg-[var(--neutral-bg-02)]"
+                    className="cursor-pointer"
                     onClick={() => openEdit(b.name)}
                   >
                     <td className="font-medium">

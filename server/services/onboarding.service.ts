@@ -4,13 +4,14 @@ import {
   getHermesLocalDevice,
   resolveHermesSetupReason,
 } from './hermes-local.service.js';
+import { isHermesMockSyncReady } from './hermes-sync.service.js';
 import { checkHermesHealth } from '../agent/executors/hermes.js';
 import {
   getHermesExtendedHealth,
   resolveHermesConnectionMode,
   type HermesConnectionMode,
 } from './hermes-binding.service.js';
-import { SETUP_REASON_LABELS, isTerminalStatus } from '../lib/agent-status.js';
+import { isTerminalStatus } from '../lib/agent-status.js';
 import {
   getGeoCapabilities,
   resolveReadinessUiState,
@@ -68,12 +69,18 @@ export async function getOnboardingStatus(brandName?: string) {
     (t) => GEO_DETECTION_TYPES.has(t.type) && (t.status === 'succeeded' || t.status === 'partial')
   );
 
-  const hermesReady =
-    (health.apiGatewayOk ||
-      (Boolean(device) && healthOk)) &&
-    (!tokenCapacity ||
-      (tokenCapacity.tokenCapacityStatus === 'available' &&
-        tokenCapacity.modelRuntimeStatus === 'available'));
+  const tokenCapacityOk =
+    !tokenCapacity ||
+    (tokenCapacity.tokenCapacityStatus === 'available' &&
+      tokenCapacity.modelRuntimeStatus === 'available');
+
+  // API Gateway（8642）可用即视为可执行；Mock 登录同步完成且设备/词元就绪时同样视为可执行。
+  const mockSyncReady = await isHermesMockSyncReady();
+  const hermesReady = health.apiGatewayOk
+    ? true
+    : mockSyncReady && Boolean(device) && tokenCapacityOk
+      ? true
+      : Boolean(device) && healthOk && tokenCapacityOk;
 
   let hermesUiStatus:
     | 'not_installed'
@@ -99,6 +106,8 @@ export async function getOnboardingStatus(brandName?: string) {
       hermesUiStatus = 'installed_not_running';
     } else if (setupReason === 'hermes_not_installed') {
       hermesUiStatus = 'not_installed';
+    } else if (health.apiGatewayOk) {
+      hermesUiStatus = 'running_task';
     } else {
       hermesUiStatus = 'not_installed';
     }
@@ -123,6 +132,7 @@ export async function getOnboardingStatus(brandName?: string) {
   }
 
   const displayGeoTask = activeGeoTask ?? latestGeoTask;
+  const hasGeoTask = Boolean(displayGeoTask);
 
   const steps: OnboardingStep[] = [
     {
@@ -134,22 +144,17 @@ export async function getOnboardingStatus(brandName?: string) {
       id: 'brand_profile',
       label: '品牌资料已整理',
       done: Boolean(extractTask?.status === 'succeeded' || targetBrand?.industry),
-      current: Boolean(targetBrand && !extractTask && !displayGeoTask),
+      current: Boolean(targetBrand && !extractTask && !hasGeoTask),
     },
-    {
+  ];
+
+  if (hasGeoTask) {
+    steps.push({
       id: 'quick_start_task',
       label: '检测任务已生成',
-      done: Boolean(displayGeoTask),
-    },
-    {
-      id: 'hermes_ready',
-      label: setupReason
-        ? SETUP_REASON_LABELS[setupReason] ?? '等待本机 Hermes 就绪'
-        : '本机 Hermes 已就绪',
-      done: hermesReady,
-      current: Boolean(activeGeoTask && !hermesReady),
-    },
-    {
+      done: true,
+    });
+    steps.push({
       id: 'first_report',
       label: activeGeoTask
         ? '等待本次检测完成'
@@ -157,9 +162,9 @@ export async function getOnboardingStatus(brandName?: string) {
           ? '报告已生成'
           : '等待检测完成',
       done: Boolean(latestSucceededGeo && !activeGeoTask),
-      current: Boolean(activeGeoTask && hermesReady),
-    },
-  ];
+      current: Boolean(activeGeoTask),
+    });
+  }
 
   const showOnboardingHero =
     brands.length <= 1 && !firstReport && !hermesReady;

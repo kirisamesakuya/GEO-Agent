@@ -133,6 +133,7 @@ export default function HermesConnectionIndicator({ onNavigate }: Props) {
 
   const tooltip = [
     meta.label,
+    onNavigate ? (state === 'ready' ? '点击打开本机 Hermes 控制台' : '点击完成安装与绑定') : null,
     versionLabel,
     health.agentVersion && health.desktopAppVersion && health.agentVersion !== health.desktopAppVersion
       ? `Agent 内核 v${health.agentVersion}`
@@ -151,18 +152,23 @@ export default function HermesConnectionIndicator({ onNavigate }: Props) {
     if (!onNavigate) return;
     if (state === 'ready') {
       onNavigate('hermes_console');
-    } else {
-      onNavigate('onboarding_console');
+      return;
     }
+    onNavigate('hermes_console', 'setup');
   };
+
+  const clickable = Boolean(onNavigate);
 
   return (
     <button
       type="button"
       onClick={handleClick}
-      disabled={!onNavigate}
+      disabled={!clickable}
       title={tooltip}
-      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-medium transition-opacity disabled:cursor-default"
+      aria-label={state === 'ready' ? '本机 Hermes 已连接，打开控制台' : '本机 Hermes 未就绪，前往安装与绑定'}
+      className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-medium transition-opacity ${
+        clickable ? 'cursor-pointer hover:opacity-85' : 'cursor-default'
+      }`}
       style={{
         borderColor: meta.border,
         color: meta.text,

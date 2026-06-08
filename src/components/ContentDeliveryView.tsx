@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ViewType } from '../types';
 import BrandSwitcher from './common/BrandSwitcher';
-import GeoProjectLibraryShell from './geo-project/GeoProjectLibraryShell';
+import ArticleDeliveryUnifiedView from './delivery/ArticleDeliveryUnifiedView';
 import OrderDeliveryView from './OrderDeliveryView';
 import {
   CONTENT_DELIVERY_TABS,
@@ -50,7 +50,6 @@ export default function ContentDeliveryView({
   onBrandChange,
   onNavigate,
   initialTab,
-  initialProjectId,
 }: Props) {
   const [pageTab, setPageTab] = useState<ContentDeliveryTab>(
     initialTab ?? parseContentDeliveryTabFromUrl()
@@ -83,24 +82,10 @@ export default function ContentDeliveryView({
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden">
-        {(pageTab === 'list' || pageTab === 'publish_records') && (
-          <GeoProjectLibraryShell
+        {pageTab === 'article' && (
+          <ArticleDeliveryUnifiedView
             brandName={brandName}
             onBrandChange={onBrandChange}
-            onNavigate={onNavigate}
-            initialProjectId={initialProjectId}
-            initialSection={pageTab === 'publish_records' ? 'publish_records' : 'articles'}
-            embeddedSection={pageTab === 'publish_records' ? 'publish_records' : 'articles'}
-            pageTitle="内容交付"
-          />
-        )}
-        {pageTab === 'manual' && (
-          <OrderDeliveryView
-            brandName={brandName}
-            onBrandChange={onBrandChange}
-            initialMainTab="task"
-            embeddedTab="task"
-            pageTitle="人工交付"
             onNavigate={onNavigate}
           />
         )}

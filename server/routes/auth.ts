@@ -11,6 +11,11 @@ import {
   resolveDemoContext,
   sessionCookieHeader,
 } from '../services/auth.service.js';
+import {
+  loginWithPhone,
+  registerWithPhone,
+  sendVerificationCode,
+} from '../services/phone-auth.service.js';
 import { prisma } from '../db/client.js';
 import { getProvider } from '../services/provider.service.js';
 
@@ -51,6 +56,10 @@ export function registerAuthRoutes(app: Express) {
         authMode: getAuthMode(),
       });
     }
+    const user = await prisma.user.findUnique({
+      where: { id: req.ctx.userId },
+      select: { displayName: true, phone: true, accountType: true },
+    });
     const brands = req.ctx.brandIds?.length
       ? await prisma.brand.findMany({
           where: { id: { in: req.ctx.brandIds }, status: { not: 'archived' } },
@@ -66,6 +75,9 @@ export function registerAuthRoutes(app: Express) {
         : [];
     res.json({
       userId: req.ctx.userId,
+      displayName: user?.displayName ?? '',
+      phone: user?.phone ?? '',
+      accountType: user?.accountType ?? 'personal',
       organizationId: req.ctx.organizationId,
       brandName: req.ctx.brandName,
       brands,
@@ -102,5 +114,51 @@ export function registerAuthRoutes(app: Express) {
     if (token) await deleteSession(token);
     res.setHeader('Set-Cookie', clearSessionCookieHeader());
     res.json({ ok: true });
+  });
+
+  app.post('/api/auth/send-code', async (req, res) => {
+    const { phone, scene } = req.body ?? {};
+    if (!phone) return res.status(400).json({ error: '缺少 phone' });
+    const s = scene === 'register' ? 'register' : 'login';
+    try {
+      res.json(await sendVerificationCode(String(phone), s));
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '发送失败' });
+    }
+  });
+
+  app.post('/api/auth/register', async (req, res) => {
+    const { phone, code, displayName } = req.body ?? {};
+    if (!phone || !code) return res.status(400).json({ error: '缺少 phone 或 code' });
+    try {
+      const { token, expiresAt, user } = await registerWithPhone({
+        phone: String(phone),
+        code: String(code),
+        displayName: displayName ? String(displayName) : undefined,
+        req,
+      });
+      res.setHeader('Set-Cookie', sessionCookieHeader(token, expiresAt));
+      const ctx = await resolveContextFromSession(token);
+      res.json({ ok: true, user: { id: user.id, phone: user.phone, displayName: user.displayName }, context: ctx });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '注册失败' });
+    }
+  });
+
+  app.post('/api/auth/phone-login', async (req, res) => {
+    const { phone, code } = req.body ?? {};
+    if (!phone || !code) return res.status(400).json({ error: '缺少 phone 或 code' });
+    try {
+      const { token, expiresAt, user } = await loginWithPhone({
+        phone: String(phone),
+        code: String(code),
+        req,
+      });
+      res.setHeader('Set-Cookie', sessionCookieHeader(token, expiresAt));
+      const ctx = await resolveContextFromSession(token);
+      res.json({ ok: true, user: { id: user.id, phone: user.phone, displayName: user.displayName }, context: ctx });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '登录失败' });
+    }
   });
 }

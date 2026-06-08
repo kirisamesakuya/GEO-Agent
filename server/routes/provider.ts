@@ -5,6 +5,8 @@ import {
   listProviders,
   getProviderDashboard,
   upsertProviderProfile,
+  updateProviderPayoutAccount,
+  verifyProviderIdentity,
   submitProviderApplication,
   listTaskMarketplace,
   applyToTaskOrder,
@@ -144,6 +146,37 @@ export function registerProviderRoutes(app: Express) {
     }
     const provider = await upsertProviderProfile(providerId, data);
     res.json({ provider });
+  });
+
+  app.post('/api/provider/identity-verify', async (req, res) => {
+    const providerId = requireProviderId(req, res);
+    if (!providerId) return;
+    const { realName, idNumber } = req.body ?? {};
+    try {
+      const provider = await verifyProviderIdentity(providerId, {
+        realName: String(realName ?? ''),
+        idNumber: String(idNumber ?? ''),
+      });
+      res.json({ provider });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '认证失败' });
+    }
+  });
+
+  app.put('/api/provider/payout-account', async (req, res) => {
+    const providerId = requireProviderId(req, res);
+    if (!providerId) return;
+    const { payoutChannel, payoutAccountName, payoutAccountLabel } = req.body ?? {};
+    try {
+      const provider = await updateProviderPayoutAccount(providerId, {
+        payoutChannel: String(payoutChannel ?? ''),
+        payoutAccountName: String(payoutAccountName ?? ''),
+        payoutAccountLabel: String(payoutAccountLabel ?? ''),
+      });
+      res.json({ provider });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '保存失败' });
+    }
   });
 
   app.get('/api/provider/applications', async (req, res) => {

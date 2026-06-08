@@ -101,7 +101,14 @@ export async function fetchHermesSkills(): Promise<{
   note?: string;
 }> {
   const res = await fetch('/api/hermes/skills');
-  return res.json();
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(typeof data.error === 'string' ? data.error : '获取技能清单失败');
+  }
+  return {
+    ...data,
+    skills: Array.isArray(data.skills) ? data.skills : [],
+  };
 }
 
 export async function createHermesBindToken(): Promise<{
@@ -110,7 +117,44 @@ export async function createHermesBindToken(): Promise<{
   steps: string[];
 }> {
   const res = await fetch('/api/hermes/bind-token', { method: 'POST' });
-  return res.json();
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(typeof data.error === 'string' ? data.error : '生成绑定码失败');
+  }
+  return data;
+}
+
+export type HermesSyncPhase = 'await_login' | 'syncing' | 'ready' | 'failed';
+
+export type HermesSyncStatus = {
+  phase: HermesSyncPhase;
+  message: string;
+  mock: boolean;
+  syncedAt?: string | null;
+  deviceName?: string | null;
+};
+
+export async function fetchHermesSyncStatus(): Promise<HermesSyncStatus> {
+  const res = await fetch('/api/hermes/sync-status');
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(typeof data.error === 'string' ? data.error : '获取同步状态失败');
+  }
+  return data;
+}
+
+/** PRODUCTION_TODO: 真实环境由 Hermes 登录回调触发；当前 Mock 演示链路 */
+export async function confirmHermesLoginSync(input?: { deviceName?: string }) {
+  const res = await fetch('/api/hermes/sync/confirm-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input ?? {}),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(typeof data.error === 'string' ? data.error : '同步失败');
+  }
+  return data as HermesSyncStatus & { device?: { deviceName: string; hermesVersion?: string } };
 }
 
 export async function updateHermesConcurrencySettings(input: {

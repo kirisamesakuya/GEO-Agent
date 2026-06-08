@@ -15,6 +15,8 @@ export const HERMES_MODE_DESCRIPTIONS: Record<HermesConcurrencyMode, string> = {
 };
 
 export const HERMES_DOWNLOAD_URL = 'https://hermes.agentsyun.com/';
+/** 本机已安装的汇智爱马仕助手本地入口（登录与绑定在客户端内完成） */
+export const HERMES_CLIENT_LOCAL_URL = 'http://127.0.0.1:9120';
 
 export function hermesUsagePercent(used: number, total: number) {
   if (total <= 0) return 0;

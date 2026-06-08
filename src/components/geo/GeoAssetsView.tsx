@@ -4,7 +4,10 @@ import type { ViewType } from '../../types';
 
 import { useToast } from '../../context/ToastContext';
 
-import AgentTaskBackgroundCard, { type TaskQueueHint } from '../common/AgentTaskBackgroundCard';
+import AgentTaskBackgroundCard, {
+  isAgentTaskBlocking,
+  type TaskQueueHint,
+} from '../common/AgentTaskBackgroundCard';
 
 import type { AgentTask, AgentTaskStatus } from '../../types';
 
@@ -513,7 +516,9 @@ export default function GeoAssetsView({ brandName, onNavigate }: Props) {
 
                     className="geo-btn-primary geo-btn-sm"
 
-                    disabled={loading || brandName === '__all__'}
+                    disabled={
+                      loading || brandName === '__all__' || isAgentTaskBlocking(taskId, taskStatus)
+                    }
 
                     onClick={handleGenerateClick}
 
@@ -571,6 +576,7 @@ export default function GeoAssetsView({ brandName, onNavigate }: Props) {
                     queueHint={queueHint}
                     onNavigate={onNavigate}
                     onComplete={onComplete}
+                    onStatusChange={setTaskStatus}
                   />
                 )}
 

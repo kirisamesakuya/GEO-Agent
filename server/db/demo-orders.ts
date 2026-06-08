@@ -475,35 +475,34 @@ const DEMO_WEB_PREFIX = '[演示]';
 
 export async function ensureDemoWebsiteOrders(brandName: string) {
   const key = 'demo_website_orders_v';
+  const version = '2';
   const cfg = await prisma.systemConfig.findUnique({ where: { key } });
-  if (cfg?.value === '1') return;
+  if (cfg?.value === version) return;
 
-  const count = await prisma.websiteRequest.count({
-    where: { brandName, goal: { startsWith: DEMO_WEB_PREFIX } },
-  });
-  if (count >= 3) {
-    await prisma.systemConfig.upsert({
-      where: { key },
-      create: { key, value: '1' },
-      update: { value: '1' },
-    });
-    return;
-  }
-
-  const { createWebsiteRequest, confirmWebsiteOrder } = await import('../services/website.service.js');
+  const { createWebsiteLeadRequest } = await import('../services/website.service.js');
 
   const specs = [
-    { pageType: '活动落地页', goal: `${DEMO_WEB_PREFIX} 待分配 · 暑期矫正活动`, status: 'pending' as const },
     {
-      pageType: '品牌介绍页',
-      goal: `${DEMO_WEB_PREFIX} 制作中 · 门店升级`,
-      status: 'in_progress' as const,
-      previewUrl: 'https://preview.example.com/yunshan-upgrade',
-      assigneeName: '北辰工作室',
+      pageType: '活动落地页',
+      keywords: `${DEMO_WEB_PREFIX} 暑期矫正活动`,
+      contact: '13800001001',
+      notes: '突出暑期优惠与预约入口',
+      referenceUrl: 'https://www.yunshan-dental.cn/summer',
+      status: 'pending' as const,
     },
     {
-      pageType: '服务专题页',
-      goal: `${DEMO_WEB_PREFIX} 已完成 · 种植牙专题`,
+      pageType: '品牌介绍页',
+      keywords: `${DEMO_WEB_PREFIX} 门店升级`,
+      contact: '微信 yunshan_ops',
+      notes: '参考同城竞品首页结构',
+      status: 'revision' as const,
+      revisionReason: '请补充门店实景照片与医生资质',
+    },
+    {
+      pageType: '服务详情页',
+      keywords: `${DEMO_WEB_PREFIX} 种植牙专题`,
+      contact: '13800001001',
+      notes: '需 FAQ 与案例模块',
       status: 'completed' as const,
       previewUrl: 'https://www.yunshan-dental.cn/implant-demo',
       deliveryNote: '已上线，请验收。',
@@ -512,36 +511,52 @@ export async function ensureDemoWebsiteOrders(brandName: string) {
 
   for (const spec of specs) {
     const dup = await prisma.websiteRequest.findFirst({
-      where: { brandName, goal: spec.goal },
+      where: { brandName, keywords: spec.keywords },
     });
     if (dup) continue;
 
-    const req = await createWebsiteRequest({
+    const { order } = await createWebsiteLeadRequest({
       brandName,
       pageType: spec.pageType,
-      goal: spec.goal,
-      modules: ['Hero', '服务介绍', '预约 CTA'],
-      previewHtml: `<html><body><h1>${spec.pageType}</h1><p>${spec.goal}</p></body></html>`,
+      referenceUrl: spec.referenceUrl,
+      keywords: spec.keywords,
+      contact: spec.contact,
+      notes: spec.notes,
     });
-    const order = await confirmWebsiteOrder(req.id);
-    if (spec.status !== 'pending') {
-      const provider = spec.assigneeName ? await resolveProvider(spec.assigneeName) : null;
+
+    if (spec.status === 'revision') {
       await prisma.websiteOrder.update({
         where: { id: order.id },
         data: {
-          status: spec.status,
+          status: 'revision',
+          revisionReason: spec.revisionReason ?? '需补充材料',
+        },
+      });
+    } else if (spec.status === 'completed') {
+      await prisma.websiteOrder.update({
+        where: { id: order.id },
+        data: {
+          status: 'completed',
           previewUrl: spec.previewUrl ?? null,
           deliveryNote: spec.deliveryNote ?? null,
-          assigneeId: provider?.id ?? null,
-          assigneeName: spec.assigneeName ?? provider?.name ?? null,
         },
       });
     }
   }
 
+  // 清理旧版演示数据（AI 预览 HTML 格式）
+  const legacy = await prisma.websiteRequest.findMany({
+    where: { brandName, goal: { startsWith: DEMO_WEB_PREFIX }, keywords: null },
+    select: { id: true },
+  });
+  for (const row of legacy) {
+    await prisma.websiteOrder.deleteMany({ where: { requestId: row.id } });
+    await prisma.websiteRequest.delete({ where: { id: row.id } });
+  }
+
   await prisma.systemConfig.upsert({
     where: { key },
-    create: { key, value: '1' },
-    update: { value: '1' },
+    create: { key, value: version },
+    update: { value: version },
   });
 }

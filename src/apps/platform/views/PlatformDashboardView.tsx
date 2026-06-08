@@ -64,9 +64,14 @@ const TODO_VIEW_MAP: Record<string, PlatformView> = {
   provider_applications: 'providers',
   agent_tasks: 'agents',
   orders: 'orders',
-  deposits: 'funds',
-  funds: 'funds',
-  risk_center: 'risk_center',
+  deposits: 'publisher_deposits',
+  funds: 'provider_withdrawals',
+  publisher_accounts: 'publisher_accounts',
+  publisher_deposits: 'publisher_deposits',
+  provider_accounts: 'provider_accounts',
+  provider_settlement: 'provider_settlement',
+  provider_withdrawals: 'provider_withdrawals',
+  org_certs: 'org_certs',
 };
 
 const PIPELINE_ICONS: Record<string, LucideIcon> = {
@@ -100,9 +105,17 @@ export default function PlatformDashboardView({ dashboard, onNavigate }: Props) 
   const cockpit = dashboard?.cockpit as CockpitData | undefined;
 
   if (!cockpit) {
+    const err = typeof dashboard?.error === 'string' ? dashboard.error : null;
     return (
-      <div className="platform-dashboard-grid">
-        <p className="text-sm text-[var(--platform-text-tertiary)]">驾驶舱数据加载中…</p>
+      <div className="platform-dashboard-grid space-y-2">
+        <p className="text-sm text-[var(--platform-text-tertiary)]">
+          {err ? `驾驶舱加载失败：${err}` : '驾驶舱数据加载中…'}
+        </p>
+        {err && (
+          <p className="text-xs text-[var(--platform-text-tertiary)]">
+            请确认已选择平台角色（侧栏底部），或刷新页面后重试。
+          </p>
+        )}
       </div>
     );
   }

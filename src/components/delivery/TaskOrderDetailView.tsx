@@ -151,7 +151,7 @@ export default function TaskOrderDetailView({ orderId, onNavigate, onBack }: Pro
       <button
         type="button"
         className="geo-btn-secondary geo-btn-sm flex items-center gap-2"
-        onClick={onBack ?? (() => onNavigate?.('content_delivery', 'manual'))}
+        onClick={onBack ?? (() => onNavigate?.('content_delivery'))}
       >
         <ArrowLeft className="w-4 h-4" />
         返回接单任务

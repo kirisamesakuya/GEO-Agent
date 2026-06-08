@@ -21,6 +21,8 @@ export function registerIndexingRoutes(app: Express) {
     if (!planRow) return;
     const plan = await getIndexPlan(req.params.id);
     if (!plan) return res.status(404).json({ error: '计划不存在' });
+    const { ensureDemoPublisherSnapshot } = await import('../db/demo-publisher-snapshot.js');
+    await ensureDemoPublisherSnapshot(plan.brandName);
     const results = await listIndexResults({ planId: plan.id });
     res.json({ plan, results });
   });

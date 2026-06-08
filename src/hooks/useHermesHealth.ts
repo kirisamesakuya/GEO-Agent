@@ -33,7 +33,16 @@ export function useHermesHealth(options: Options = {}) {
     setError(null);
     try {
       const tasks: Promise<unknown>[] = [fetchHermesHealth()];
-      if (includeSkills) tasks.push(fetchHermesSkills());
+      if (includeSkills) {
+        tasks.push(
+          fetchHermesSkills().catch(() => ({
+            installed: false,
+            version: '—',
+            skills: [] as HermesSkill[],
+            note: '技能清单暂不可用，请稍后刷新',
+          }))
+        );
+      }
       if (includeApprovalPolicy) {
         tasks.push(fetchGeoApprovalPolicy().catch(() => ({ skipApprovalForGeo: false })));
       }

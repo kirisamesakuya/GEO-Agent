@@ -23,7 +23,7 @@ const VIEW_TITLES: Record<ViewType, string> = {
   workbench: '工作台',
   keyword_library: '关键词库',
   knowledge_base: '企业知识库',
-  indexing_rank: '排名监控',
+  indexing_rank: 'GEO监控',
   asset_library: '图片素材库',
   publish_schedule: '自有账号发布',
   publish_records: '内容交付 · 发布记录',
@@ -53,7 +53,7 @@ const VIEW_TITLES: Record<ViewType, string> = {
   team_settings: '团队权限',
   notifications: '消息通知',
   brand_confirm: '确认品牌资料',
-  onboarding_console: '首启控制台',
+  onboarding_console: 'GEO 检测',
 };
 
 function resolvePageTitle(activeView: ViewType): string {
@@ -68,16 +68,21 @@ function resolvePageTitle(activeView: ViewType): string {
     if (geoTab === 'history') return 'GEO 分析 · 报告历史';
   }
   if (activeView === 'content_delivery' || activeView === 'content_library' || activeView === 'order_delivery') {
-    if (hint.startsWith('content:')) return '内容交付 · 文章详情';
+    if (hint.startsWith('delivery:content:')) return '内容交付 · 文章交付 · 详情';
+    if (hint.startsWith('delivery:order:')) return '内容交付 · 文章交付 · 任务详情';
+    if (hint.startsWith('content:')) return '内容交付 · 文章交付 · 详情';
     if (hint.startsWith('publish:')) return '内容交付 · 发布详情';
-    if (hint.startsWith('order:')) return '内容交付 · 任务详情';
+    if (hint.startsWith('order:')) return '内容交付 · 文章交付 · 任务详情';
     if (hint.startsWith('website_req:')) return '内容交付 · 网页需求详情';
     const deliveryTab = params.get('deliveryTab');
     const tabMeta = CONTENT_DELIVERY_TABS.find((t) => t.id === deliveryTab);
     if (tabMeta) return `内容交付 · ${tabMeta.label}`;
-    if (params.get('contentTab') === 'publish_records') return '内容交付 · 发布记录';
+    if (params.get('contentTab') === 'publish_records') return '内容交付 · 文章交付';
     if (params.get('orderTab') === 'website') return '内容交付 · 网页需求';
-    if (params.get('orderTab') === 'task') return '内容交付 · 人工交付';
+    if (params.get('orderTab') === 'task') return '内容交付 · 文章交付';
+    if (params.get('deliveryTab') === 'list' || params.get('deliveryTab') === 'manual') {
+      return '内容交付 · 文章交付';
+    }
   }
   return VIEW_TITLES[activeView] ?? activeView;
 }

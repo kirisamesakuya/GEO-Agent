@@ -54,6 +54,11 @@ export default function AgentTaskResultSummary({ task }: { task: AgentTask }) {
     summary = `已生成 ${count} 条知识库条目，确认后将写入企业知识库。`;
   } else if (task.type === 'brand_extract') {
     summary = 'AI 已提取品牌资料字段，请对比来源材料后确认写入。';
+  } else if (task.type === 'article_generation' || task.type === 'article_rewrite') {
+    const count = Array.isArray(task.output?.articles) ? task.output!.articles!.length : 0;
+    summary = count
+      ? `已生成 ${count} 篇文章草稿，请在下方预览正文后确认入库。`
+      : '文章生成已完成，请在下方预览正文。';
   } else if (task.userErrorMessage) {
     summary = task.userErrorMessage;
   } else if (task.errorMessage) {

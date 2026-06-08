@@ -2,11 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import PlatformDataTable from '../components/PlatformDataTable';
 import PlatformDetailDrawer from '../components/PlatformDetailDrawer';
 import PlatformFilterBar from '../components/PlatformFilterBar';
+import PlatformFilterField from '../components/PlatformFilterField';
+import { includesText } from '../lib/platform-filter-utils';
 import PlatformStatSummary from '../components/PlatformStatSummary';
 import PlatformStatusTag from '../components/PlatformStatusTag';
 import { useToast } from '../../../context/ToastContext';
 import { usePlatformRole } from '../../../hooks/usePlatformRole';
-import { platformFetch } from '../../../lib/platform-api';
+import { platformFetch, platformApiFetch } from '../../../lib/platform-api';
+import { PlatformTableAction, PlatformTableActions } from '../components/PlatformTableActions';
 
 interface MerchantRow {
   id: string;
@@ -39,13 +42,15 @@ export default function PlatformMerchantsView() {
   const [merchants, setMerchants] = useState<MerchantRow[]>([]);
   const [selected, setSelected] = useState<MerchantRow | null>(null);
   const [detail, setDetail] = useState<MerchantDetail | null>(null);
+  const [brandName, setBrandName] = useState('');
   const [industry, setIndustry] = useState('');
   const [status, setStatus] = useState('');
   const [riskOnly, setRiskOnly] = useState(false);
   const [statusReason, setStatusReason] = useState('');
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const loadList = () => {
-    fetch('/api/platform/merchants')
+    platformApiFetch('/api/platform/merchants')
       .then((r) => r.json())
       .then((d) => setMerchants(d.merchants ?? []));
   };
@@ -57,9 +62,11 @@ export default function PlatformMerchantsView() {
   useEffect(() => {
     if (!selected) {
       setDetail(null);
+      setDetailLoading(false);
       return;
     }
-    fetch(`/api/platform/merchants/${encodeURIComponent(selected.name)}`)
+    setDetailLoading(true);
+    platformApiFetch(`/api/platform/merchants/${encodeURIComponent(selected.name)}`)
       .then((r) => r.json())
       .then((d) => {
         if (d.error) {
@@ -67,7 +74,8 @@ export default function PlatformMerchantsView() {
           return;
         }
         setDetail(d as MerchantDetail);
-      });
+      })
+      .finally(() => setDetailLoading(false));
   }, [selected, toast]);
 
   const industries = useMemo(
@@ -77,12 +85,13 @@ export default function PlatformMerchantsView() {
 
   const filtered = useMemo(() => {
     return merchants.filter((m) => {
+      if (!includesText(m.name, brandName)) return false;
       if (industry && m.industry !== industry) return false;
       if (status && m.status !== status) return false;
       if (riskOnly && !(m.frozen > m.balance)) return false;
       return true;
     });
-  }, [merchants, industry, status, riskOnly]);
+  }, [merchants, brandName, industry, status, riskOnly]);
 
   const stats = useMemo(() => {
     const highRisk = merchants.filter((m) => m.frozen > m.balance).length;
@@ -96,7 +105,7 @@ export default function PlatformMerchantsView() {
   }, [merchants]);
 
   const refreshDetail = async (name: string) => {
-    const res = await fetch(`/api/platform/merchants/${encodeURIComponent(name)}`);
+    const res = await platformApiFetch(`/api/platform/merchants/${encodeURIComponent(name)}`);
     const d = await res.json();
     if (!d.error) setDetail(d as MerchantDetail);
     loadList();
@@ -137,26 +146,36 @@ export default function PlatformMerchantsView() {
             { label: '高风险', value: stats.highRisk },
           ]}
         />
-        <PlatformFilterBar onReset={() => { setIndustry(''); setStatus(''); setRiskOnly(false); }}>
-          <select value={industry} onChange={(e) => setIndustry(e.target.value)} className="platform-filter-input">
-            <option value="">全部行业</option>
-            {industries.map((i) => (
-              <option key={i} value={i}>{i}</option>
-            ))}
-          </select>
-          <select value={status} onChange={(e) => setStatus(e.target.value)} className="platform-filter-input">
-            <option value="">全部状态</option>
-            <option value="active">正常</option>
-            <option value="disabled">已禁用</option>
-          </select>
-          <label className="flex items-center gap-1 text-xs text-[var(--platform-text-secondary)]">
-            <input type="checkbox" checked={riskOnly} onChange={(e) => setRiskOnly(e.target.checked)} />
-            仅余额风险
-          </label>
+        <PlatformFilterBar onReset={() => { setBrandName(''); setIndustry(''); setStatus(''); setRiskOnly(false); }}>
+          <PlatformFilterField label="品牌">
+            <input value={brandName} onChange={(e) => setBrandName(e.target.value)} placeholder="品牌名称" className="platform-filter-input" />
+          </PlatformFilterField>
+          <PlatformFilterField label="行业">
+            <select value={industry} onChange={(e) => setIndustry(e.target.value)} className="platform-filter-input">
+              <option value="">全部</option>
+              {industries.map((i) => (
+                <option key={i} value={i}>{i}</option>
+              ))}
+            </select>
+          </PlatformFilterField>
+          <PlatformFilterField label="品牌状态">
+            <select value={status} onChange={(e) => setStatus(e.target.value)} className="platform-filter-input">
+              <option value="">全部</option>
+              <option value="active">正常</option>
+              <option value="disabled">已禁用</option>
+            </select>
+          </PlatformFilterField>
+          <PlatformFilterField label="余额风险" className="platform-filter-field--checkbox">
+            <label className="platform-filter-checkbox-row">
+              <input type="checkbox" checked={riskOnly} onChange={(e) => setRiskOnly(e.target.checked)} />
+              <span>仅高风险</span>
+            </label>
+          </PlatformFilterField>
         </PlatformFilterBar>
         <PlatformDataTable<MerchantRow>
           rows={filtered}
           rowKey={(r) => r.id}
+          selectedKey={selected?.id}
           onRowClick={setSelected}
           columns={[
             { key: 'name', header: '品牌', render: (r) => <span className="font-medium">{r.name}</span> },
@@ -176,16 +195,26 @@ export default function PlatformMerchantsView() {
               ),
             },
           ]}
+          renderActions={(r) => (
+            <PlatformTableActions>
+              <PlatformTableAction label="详情" variant="primary" onClick={() => setSelected(r)} />
+              {r.status === 'active' ? (
+                <PlatformTableAction label="停用" variant="danger" disabled={!can('merchant.disable')} onClick={() => setSelected(r)} />
+              ) : (
+                <PlatformTableAction label="启用" variant="primary" onClick={() => setSelected(r)} />
+              )}
+            </PlatformTableActions>
+          )}
         />
       </div>
 
-      {selected && detail && (
+      {selected && (
         <PlatformDetailDrawer
           title={selected.name}
           statusLabel={selected.status === 'disabled' ? '已禁用' : '正常'}
           statusKind={selected.status === 'disabled' ? 'muted' : 'success'}
-          onClose={() => setSelected(null)}
-          footer={(
+          onClose={() => { setSelected(null); setStatusReason(''); }}
+          footer={!detailLoading ? (
             <div className="space-y-2">
               <input
                 value={statusReason}
@@ -207,8 +236,12 @@ export default function PlatformMerchantsView() {
                 </button>
               </div>
             </div>
-          )}
+          ) : undefined}
         >
+          {detailLoading || !detail ? (
+            <p className="text-sm text-[var(--platform-text-tertiary)]">详情加载中…</p>
+          ) : (
+          <>
           <p className="text-xs text-[var(--platform-text-secondary)]">
             {String(detail.brand.industry ?? '—')} · {String(detail.brand.city ?? '—')}
             {detail.brand.website ? ` · ${String(detail.brand.website)}` : ''}
@@ -291,6 +324,8 @@ export default function PlatformMerchantsView() {
               冻结合计 ¥{detail.ledgerSummary.freezeTotal} · 释放合计 ¥{detail.ledgerSummary.releaseTotal}
             </p>
           </div>
+          </>
+          )}
         </PlatformDetailDrawer>
       )}
     </div>

@@ -49,6 +49,12 @@ async function bootstrap() {
 
   if (process.env.SEED_DEMO_DATA === 'true') {
     await seedDatabase();
+    const { ensureDemoUsers } = await import('./server/db/demo-users.js');
+    const { ensureDemoFinance } = await import('./server/db/demo-finance.js');
+    const { ensureDemoPlatformSuite } = await import('./server/db/demo-platform-suite.js');
+    await ensureDemoUsers();
+    await ensureDemoFinance();
+    await ensureDemoPlatformSuite();
   }
 
   await ensureRuntimeDefaults();
@@ -103,7 +109,9 @@ async function bootstrap() {
     res.status(404).json({ error: 'API route not found' });
   });
 
-  if (process.env.NODE_ENV !== 'production') {
+  const useFrontendDevServer = process.env.USE_FRONTEND_DEV_SERVER === 'true';
+
+  if (process.env.NODE_ENV !== 'production' && !useFrontendDevServer) {
     const vite = await createViteServer({
       server: { middlewareMode: true, hmr: { port: HMR_PORT } },
       appType: 'spa',
@@ -112,6 +120,8 @@ async function bootstrap() {
       if (req.path.startsWith('/api/')) return next();
       return vite.middlewares(req, res, next);
     });
+  } else if (process.env.NODE_ENV !== 'production' && useFrontendDevServer) {
+    console.log('API-only mode — frontend dev server expected separately (npm run dev:web)');
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));

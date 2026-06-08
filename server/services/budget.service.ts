@@ -92,7 +92,7 @@ export async function createDepositRequest(brandName: string, amount: number, no
   return request;
 }
 
-export async function listDepositRequests(brandName?: string, status = 'pending') {
+export async function listDepositRequests(brandName?: string, status?: string) {
   return prisma.budgetDepositRequest.findMany({
     where: {
       ...(brandName ? { brandName } : {}),
@@ -100,6 +100,156 @@ export async function listDepositRequests(brandName?: string, status = 'pending'
     },
     orderBy: { createdAt: 'desc' },
   });
+}
+
+export async function listPlatformPublisherAccounts(options?: {
+  q?: string;
+  brandName?: string;
+  organizationName?: string;
+  ownerName?: string;
+  ownerPhone?: string;
+  ownerUserNo?: string;
+  brandStatus?: string;
+  anomalyOnly?: boolean;
+}) {
+  const [accounts, brands] = await Promise.all([
+    prisma.budgetAccount.findMany({ orderBy: { brandName: 'asc' } }),
+    prisma.brand.findMany({
+      include: {
+        organization: {
+          include: {
+            members: { where: { role: 'owner' }, take: 1 },
+          },
+        },
+      },
+    }),
+  ]);
+
+  const brandByName = new Map(brands.map((b) => [b.name, b]));
+  const ownerUserIds = brands.flatMap((b) => b.organization?.members.map((m) => m.userId) ?? []);
+  const users = ownerUserIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: ownerUserIds } },
+        select: { id: true, userNo: true, displayName: true, phone: true },
+      })
+    : [];
+  const userMap = new Map(users.map((u) => [u.id, u]));
+
+  let rows = accounts.map((acc) => {
+    const brand = brandByName.get(acc.brandName);
+    const ownerMember = brand?.organization?.members[0];
+    const owner = ownerMember ? userMap.get(ownerMember.userId) : null;
+    const available = acc.balance - acc.frozen;
+    const anomaly = acc.frozen > acc.balance;
+    return {
+      brandName: acc.brandName,
+      brandId: brand?.id ?? null,
+      brandStatus: brand?.status ?? 'active',
+      organizationName: brand?.organization?.name ?? null,
+      ownerUserNo: owner?.userNo ?? null,
+      ownerName: owner?.displayName ?? brand?.ownerName ?? null,
+      ownerPhone: owner?.phone ?? null,
+      balance: acc.balance,
+      frozen: acc.frozen,
+      available,
+      anomaly,
+      updatedAt: acc.updatedAt.toISOString(),
+    };
+  });
+
+  const q = options?.q?.trim().toLowerCase();
+  if (q) {
+    rows = rows.filter(
+      (r) =>
+        r.brandName.toLowerCase().includes(q) ||
+        (r.organizationName?.toLowerCase().includes(q) ?? false) ||
+        (r.ownerName?.toLowerCase().includes(q) ?? false) ||
+        (r.ownerPhone?.includes(q) ?? false) ||
+        String(r.ownerUserNo ?? '').includes(q)
+    );
+  }
+  if (options?.brandName?.trim()) {
+    const v = options.brandName.trim().toLowerCase();
+    rows = rows.filter((r) => r.brandName.toLowerCase().includes(v));
+  }
+  if (options?.organizationName?.trim()) {
+    const v = options.organizationName.trim().toLowerCase();
+    rows = rows.filter((r) => (r.organizationName ?? '').toLowerCase().includes(v));
+  }
+  if (options?.ownerName?.trim()) {
+    const v = options.ownerName.trim().toLowerCase();
+    rows = rows.filter((r) => (r.ownerName ?? '').toLowerCase().includes(v));
+  }
+  if (options?.ownerPhone?.trim()) {
+    const v = options.ownerPhone.trim();
+    rows = rows.filter((r) => (r.ownerPhone ?? '').includes(v));
+  }
+  if (options?.ownerUserNo?.trim() && /^\d+$/.test(options.ownerUserNo.trim())) {
+    const v = options.ownerUserNo.trim();
+    rows = rows.filter((r) => String(r.ownerUserNo ?? '').includes(v));
+  }
+  if (options?.brandStatus) {
+    rows = rows.filter((r) => r.brandStatus === options.brandStatus);
+  }
+  if (options?.anomalyOnly) {
+    rows = rows.filter((r) => r.anomaly);
+  }
+
+  return rows;
+}
+
+export async function getPlatformPublisherAccountDetail(brandName: string) {
+  const brand = await prisma.brand.findFirst({
+    where: { name: brandName },
+    include: { organization: true },
+  });
+  if (!brand) throw new Error('品牌不存在');
+
+  const account = await getBudgetAccount(brandName);
+  const ownerMember = brand.organizationId
+    ? await prisma.organizationMember.findFirst({
+        where: { organizationId: brand.organizationId, role: 'owner' },
+      })
+    : null;
+  const owner = ownerMember
+    ? await prisma.user.findUnique({
+        where: { id: ownerMember.userId },
+        select: { id: true, userNo: true, displayName: true, phone: true, accountType: true },
+      })
+    : null;
+
+  const [ledger, pendingDeposits, recentDeposits] = await Promise.all([
+    listBudgetLedger(brandName, 30),
+    listDepositRequests(brandName, 'pending'),
+    listDepositRequests(brandName),
+  ]);
+
+  return {
+    account,
+    brand: {
+      id: brand.id,
+      name: brand.name,
+      status: brand.status,
+      industry: brand.industry,
+      city: brand.city,
+    },
+    organization: brand.organization
+      ? {
+          id: brand.organization.id,
+          name: brand.organization.name,
+          certStatus: brand.organization.certStatus,
+        }
+      : null,
+    owner,
+    ledger,
+    pendingDeposits,
+    recentDeposits: recentDeposits.slice(0, 10),
+    summary: {
+      anomaly: account.frozen > account.balance,
+      freezeTotal: ledger.filter((l) => l.type === 'freeze').reduce((s, l) => s + l.amount, 0),
+      releaseTotal: ledger.filter((l) => l.type === 'release').reduce((s, l) => s + l.amount, 0),
+    },
+  };
 }
 
 export async function approveDepositRequest(requestId: string) {

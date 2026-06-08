@@ -1,10 +1,13 @@
+import { platformApiFetch } from '../../../lib/platform-api';
 import { useEffect, useState } from 'react';
 import PlatformDataTable from '../components/PlatformDataTable';
 import PlatformDetailDrawer from '../components/PlatformDetailDrawer';
 import PlatformFilterBar from '../components/PlatformFilterBar';
+import PlatformFilterField from '../components/PlatformFilterField';
 import PlatformStatSummary from '../components/PlatformStatSummary';
 import PlatformStatusTag from '../components/PlatformStatusTag';
 import PlatformTabBar from '../components/PlatformTabBar';
+import { PlatformTableAction, PlatformTableActions } from '../components/PlatformTableActions';
 import type { PlatformStatusKind } from '../types';
 
 interface ContentRow {
@@ -51,7 +54,7 @@ export default function PlatformContentGovernanceView() {
     if (platform) q.set('platform', platform);
     if (tab !== 'all' && tab !== 'library' && tab !== 'risky') q.set('tab', tab);
     if (tab === 'risky') q.set('status', 'failed');
-    fetch(`/api/platform/content-governance?${q}`)
+    platformApiFetch(`/api/platform/content-governance?${q}`)
       .then((r) => r.json())
       .then((d) => {
         setStats(d.stats ?? { library: 0, pending: 0, publishing: 0, failed: 0, published: 0, risky: 0 });
@@ -73,18 +76,23 @@ export default function PlatformContentGovernanceView() {
           ]}
         />
         <PlatformFilterBar onReset={() => { setBrandName(''); setPlatform(''); }}>
-          <input value={brandName} onChange={(e) => setBrandName(e.target.value)} placeholder="品牌" className="platform-filter-input" />
-          <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="platform-filter-input">
-            <option value="">全部平台</option>
-            <option value="小红书">小红书</option>
-            <option value="知乎">知乎</option>
-            <option value="抖音">抖音</option>
-          </select>
+          <PlatformFilterField label="品牌">
+            <input value={brandName} onChange={(e) => setBrandName(e.target.value)} placeholder="品牌名称" className="platform-filter-input" />
+          </PlatformFilterField>
+          <PlatformFilterField label="发布平台">
+            <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="platform-filter-input">
+              <option value="">全部</option>
+              <option value="小红书">小红书</option>
+              <option value="知乎">知乎</option>
+              <option value="抖音">抖音</option>
+            </select>
+          </PlatformFilterField>
         </PlatformFilterBar>
         <PlatformTabBar tabs={TABS} active={tab} onChange={setTab} />
         <PlatformDataTable<ContentRow>
           rows={items}
           rowKey={(r) => r.id}
+          selectedKey={selected?.id}
           onRowClick={setSelected}
           columns={[
             { key: 'title', header: '标题', render: (r) => <span className="max-w-[200px] truncate block">{r.title}</span> },
@@ -93,6 +101,17 @@ export default function PlatformContentGovernanceView() {
             { key: 'status', header: '状态', render: (r) => <PlatformStatusTag label={r.status} kind={statusKind(r.status)} /> },
             { key: 'risk', header: '风险', render: (r) => <PlatformStatusTag label={r.risk} kind={r.risk === '正常' ? 'success' : 'danger'} /> },
           ]}
+          renderActions={(r) => (
+            <PlatformTableActions>
+              <PlatformTableAction label="详情" variant="primary" onClick={() => setSelected(r)} />
+              {(r.status === 'failed' || r.status === 'partial') && (
+                <>
+                  <PlatformTableAction label="重试" variant="primary" onClick={() => setSelected(r)} />
+                  <PlatformTableAction label="转人工" onClick={() => setSelected(r)} />
+                </>
+              )}
+            </PlatformTableActions>
+          )}
         />
       </div>
       {selected && (

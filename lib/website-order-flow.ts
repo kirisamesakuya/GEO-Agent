@@ -1,3 +1,6 @@
+// 网页客资需求：发布端提交 → 平台线下交付登记。
+// 不走 TaskOrder 接单申请、不走 ArticleDelivery 文章履约链路。
+
 /** 网页改装任务：页面类型（与 PRD / CreateWebsiteView 对齐） */
 export const WEBSITE_PAGE_TYPES = [
   '品牌介绍页',

@@ -1,4 +1,5 @@
 import { GEO_REPORT_FIELD_LABELS, GEO_REPORT_SECTION_ORDER } from '../../lib/geo-report-fields';
+import { SCORE_LABELS, type GeoAuditFinding } from '../../lib/geo-audit-client';
 import { PUBLISHER_APP_NAME } from '../../lib/app-branding';
 import type { GeoReportWatermarkSettings } from '../../lib/geo-report-watermark';
 
@@ -9,8 +10,12 @@ export interface GeoReportPrintData {
   mentionRate?: number | null;
   rank?: number | null;
   gapsFound?: number | null;
+  totalScore?: number | null;
   sections: Record<string, string>;
   prospectMode?: boolean;
+  scores?: Record<string, number> | null;
+  findings?: GeoAuditFinding[];
+  actionPlan?: Array<{ id: string; horizon: string; title: string; detail: string }>;
 }
 
 interface Props {
@@ -20,11 +25,50 @@ interface Props {
   preview?: boolean;
 }
 
+const FINDING_LEVEL_STYLE: Record<string, { bg: string; color: string; label: string }> = {
+  critical: { bg: '#fef2f2', color: '#b91c1c', label: '严重' },
+  high: { bg: '#fff1f2', color: '#e11d48', label: '高' },
+  medium: { bg: '#fff7ed', color: '#c2410c', label: '中' },
+  low: { bg: '#f8fafc', color: '#475569', label: '低' },
+};
+
+function renderParagraphs(body: string) {
+  return body
+    .split(/\n{2,}/)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean)
+    .map((chunk, i) => (
+      <p
+        key={i}
+        style={{
+          fontSize: 11,
+          lineHeight: 1.75,
+          margin: i === 0 ? 0 : '10px 0 0',
+          color: '#334155',
+        }}
+      >
+        {chunk.split('\n').map((line, j) => (
+          <span key={j}>
+            {j > 0 && <br />}
+            {line}
+          </span>
+        ))}
+      </p>
+    ));
+}
+
 export default function GeoReportPrintLayout({ data, watermark, preview = false }: Props) {
   const wm = watermark?.enabled && watermark.text.trim() ? watermark : null;
 
+  const metrics = [
+    ...(data.totalScore != null ? [{ label: '综合得分', value: `${data.totalScore}` }] : []),
+    { label: '提及率', value: data.mentionRate != null ? `${data.mentionRate}%` : '—' },
+    { label: '排名', value: data.rank != null ? `#${data.rank}` : '—' },
+    { label: '内容缺口', value: data.gapsFound != null ? `${data.gapsFound} 项` : '—' },
+  ];
+
   return (
-    <div
+    <article
       className={preview ? 'geo-report-print geo-report-print--preview' : 'geo-report-print'}
       style={{
         position: 'relative',
@@ -33,7 +77,7 @@ export default function GeoReportPrintLayout({ data, watermark, preview = false 
         background: '#fff',
         color: '#1a1a1a',
         fontFamily: 'system-ui, "PingFang SC", "Microsoft YaHei", sans-serif',
-        padding: preview ? '24px' : '48px 52px',
+        padding: preview ? '32px 36px' : '48px 52px',
         boxSizing: 'border-box',
       }}
     >
@@ -81,86 +125,211 @@ export default function GeoReportPrintLayout({ data, watermark, preview = false 
       )}
 
       <div style={{ position: 'relative', zIndex: 2 }}>
-        <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 8px' }}>GEO 分析报告</p>
-        <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 6px', lineHeight: 1.35 }}>
-          {data.title}
-        </h1>
-        <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 20px' }}>
-          品牌：{data.brandName}
-          {data.prospectMode ? ' · 售前探店' : ''} · 生成于{' '}
-          {new Date(data.createdAt).toLocaleString('zh-CN', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
-        </p>
+        <header style={{ marginBottom: 28, paddingBottom: 20, borderBottom: '1px solid #e2e8f0' }}>
+          <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 8px', letterSpacing: '0.04em' }}>
+            GEO 分析报告
+          </p>
+          <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 8px', lineHeight: 1.35, color: '#0f172a' }}>
+            {data.title}
+          </h1>
+          <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>
+            品牌：{data.brandName}
+            {data.prospectMode ? ' · 售前探店' : ''} · 生成于{' '}
+            {new Date(data.createdAt).toLocaleString('zh-CN', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </p>
+        </header>
 
-        <div
+        <section
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
+            gridTemplateColumns: `repeat(${Math.min(metrics.length, 4)}, 1fr)`,
             gap: 12,
-            marginBottom: 24,
+            marginBottom: 28,
           }}
         >
-          {[
-            { label: '提及率', value: data.mentionRate != null ? `${data.mentionRate}%` : '—' },
-            { label: '排名', value: data.rank != null ? `#${data.rank}` : '—' },
-            { label: '内容缺口', value: data.gapsFound != null ? `${data.gapsFound} 项` : '—' },
-          ].map((m) => (
+          {metrics.map((m) => (
             <div
               key={m.label}
               style={{
                 border: '1px solid #e2e8f0',
-                borderRadius: 8,
-                padding: '12px 8px',
+                borderRadius: 10,
+                padding: '14px 10px',
                 textAlign: 'center',
+                background: '#f8fafc',
               }}
             >
               <p style={{ fontSize: 10, color: '#64748b', margin: 0 }}>{m.label}</p>
-              <p style={{ fontSize: 18, fontWeight: 700, margin: '4px 0 0' }}>{m.value}</p>
+              <p style={{ fontSize: 20, fontWeight: 700, margin: '6px 0 0', color: '#0f172a' }}>{m.value}</p>
             </div>
           ))}
-        </div>
+        </section>
+
+        {data.scores && Object.keys(data.scores).length > 0 && (
+          <section style={{ marginBottom: 28 }}>
+            <h2
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                margin: '0 0 12px',
+                color: '#1e3a8a',
+              }}
+            >
+              分项评分
+            </h2>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+              <tbody>
+                {Object.entries(data.scores).map(([key, value]) => (
+                  <tr key={key} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                    <td style={{ padding: '8px 0', color: '#64748b' }}>{SCORE_LABELS[key] ?? key}</td>
+                    <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600, color: '#0f172a' }}>
+                      {value}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
 
         {GEO_REPORT_SECTION_ORDER.map((key) => {
           const body = data.sections[key];
-          if (!body?.trim()) return null;
+          if (!body?.trim() || body.trim() === '—') return null;
           return (
-            <section key={key} style={{ marginBottom: 18 }}>
+            <section key={key} style={{ marginBottom: 24 }}>
               <h2
                 style={{
-                  fontSize: 13,
+                  fontSize: 14,
                   fontWeight: 600,
-                  margin: '0 0 8px',
-                  paddingBottom: 6,
+                  margin: '0 0 10px',
+                  paddingBottom: 8,
                   borderBottom: '2px solid #1d4ed8',
                   color: '#1e3a8a',
                 }}
               >
                 {GEO_REPORT_FIELD_LABELS[key] ?? key}
               </h2>
-              <p
-                style={{
-                  fontSize: 11,
-                  lineHeight: 1.65,
-                  margin: 0,
-                  whiteSpace: 'pre-wrap',
-                  color: '#334155',
-                }}
-              >
-                {body}
-              </p>
+              <div>{renderParagraphs(body)}</div>
             </section>
           );
         })}
 
-        <p style={{ fontSize: 9, color: '#94a3b8', marginTop: 32, textAlign: 'center' }}>
+        {(data.findings?.length ?? 0) > 0 && (
+          <section style={{ marginBottom: 24 }}>
+            <h2
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                margin: '0 0 12px',
+                color: '#1e3a8a',
+              }}
+            >
+              关键问题
+            </h2>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {data.findings!.map((f) => {
+                const level = FINDING_LEVEL_STYLE[f.level] ?? FINDING_LEVEL_STYLE.low;
+                return (
+                  <div
+                    key={f.id}
+                    style={{
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 10,
+                      padding: '12px 14px',
+                      background: level.bg,
+                    }}
+                  >
+                    <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#0f172a' }}>
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          marginRight: 8,
+                          padding: '1px 6px',
+                          borderRadius: 4,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: level.color,
+                          background: '#fff',
+                        }}
+                      >
+                        {level.label}
+                      </span>
+                      {f.title}
+                    </p>
+                    {f.impact && (
+                      <p style={{ margin: '6px 0 0', fontSize: 11, color: '#475569', lineHeight: 1.6 }}>
+                        影响：{f.impact}
+                      </p>
+                    )}
+                    {f.suggestion && (
+                      <p style={{ margin: '4px 0 0', fontSize: 11, color: '#334155', lineHeight: 1.6 }}>
+                        建议：{f.suggestion}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {(data.actionPlan?.length ?? 0) > 0 && (
+          <section style={{ marginBottom: 24 }}>
+            <h2
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                margin: '0 0 12px',
+                color: '#1e3a8a',
+              }}
+            >
+              行动计划
+            </h2>
+            <ol style={{ margin: 0, paddingLeft: 18, fontSize: 11, color: '#334155' }}>
+              {data.actionPlan!.map((a) => (
+                <li key={a.id} style={{ marginBottom: 10, lineHeight: 1.65 }}>
+                  <strong style={{ color: '#0f172a' }}>
+                    [{a.horizon}] {a.title}
+                  </strong>
+                  {a.detail ? ` — ${a.detail}` : ''}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        <footer
+          style={{
+            fontSize: 9,
+            color: '#94a3b8',
+            marginTop: 36,
+            paddingTop: 16,
+            borderTop: '1px solid #e2e8f0',
+            textAlign: 'center',
+          }}
+        >
           本报告由 {PUBLISHER_APP_NAME} 生成 · 数据为 AI 平台采样分析结果，仅供参考
-        </p>
+        </footer>
       </div>
-    </div>
+    </article>
   );
+}
+
+export function pickGeoReportHtmlArtifact(
+  artifacts?: Array<{ type: string; name: string; preview?: string; mimeType?: string }>
+): string | null {
+  if (!artifacts?.length) return null;
+  const htmlArt = artifacts.find(
+    (a) =>
+      a.type === 'html' ||
+      a.mimeType?.includes('html') ||
+      a.name.toLowerCase().endsWith('.html')
+  );
+  const content = htmlArt?.preview?.trim();
+  return content || null;
 }

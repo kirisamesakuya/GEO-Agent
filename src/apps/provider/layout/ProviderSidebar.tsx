@@ -12,6 +12,7 @@ import {
 import type { ProviderPageId } from '../types';
 import AppModeLinks from '../../../components/common/AppModeLinks';
 import { PROVIDER_APP_NAME } from '../../../lib/app-branding';
+import { isProviderViewEnabled } from '../provider-feature-flags';
 
 interface Props {
   currentTab: ProviderPageId;
@@ -29,7 +30,7 @@ const MAIN_NAV: { id: ProviderPageId; label: string; icon: typeof Home }[] = [
   { id: 'orders', label: '我的订单', icon: FileText },
   { id: 'accounts', label: '账号资源', icon: Users },
   { id: 'earnings', label: '收益中心', icon: Wallet },
-];
+].filter((item) => isProviderViewEnabled(item.id));
 
 export default function ProviderSidebar({
   currentTab,

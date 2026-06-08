@@ -1,10 +1,14 @@
+import { platformApiFetch } from '../../../lib/platform-api';
 import { useCallback, useEffect, useState } from 'react';
 import PlatformDataTable from '../components/PlatformDataTable';
 import PlatformDetailDrawer from '../components/PlatformDetailDrawer';
 import PlatformFilterBar from '../components/PlatformFilterBar';
+import PlatformFilterField, { PlatformFilterDateRange } from '../components/PlatformFilterField';
+import { includesText, matchesDateRange } from '../lib/platform-filter-utils';
 import PlatformStatSummary from '../components/PlatformStatSummary';
 import PlatformStatusTag from '../components/PlatformStatusTag';
 import { useToast } from '../../../context/ToastContext';
+import { PlatformTableAction, PlatformTableActions } from '../components/PlatformTableActions';
 
 interface AppRow {
   id: string;
@@ -26,14 +30,17 @@ export default function PlatformApplicationsView() {
   const [apps, setApps] = useState<AppRow[]>([]);
   const [selected, setSelected] = useState<AppRow | null>(null);
   const [platform, setPlatform] = useState('');
+  const [brandName, setBrandName] = useState('');
   const [providerName, setProviderName] = useState('');
+  const [dateSince, setDateSince] = useState('');
+  const [dateUntil, setDateUntil] = useState('');
   const [confirming, setConfirming] = useState(false);
 
   const load = useCallback(() => {
     const q = new URLSearchParams();
     if (platform) q.set('platform', platform);
     if (providerName) q.set('providerName', providerName);
-    fetch(`/api/platform/order-applications?${q}`)
+    platformApiFetch(`/api/platform/order-applications?${q}`)
       .then((r) => r.json())
       .then((d) => {
         const rows = (d.applications ?? []) as Array<Record<string, unknown>>;
@@ -55,7 +62,7 @@ export default function PlatformApplicationsView() {
 
   const confirm = async (id: string) => {
     setConfirming(true);
-    const res = await fetch(`/api/platform/order-applications/${id}/confirm`, { method: 'POST' });
+    const res = await platformApiFetch(`/api/platform/order-applications/${id}/confirm`, { method: 'POST' });
     const data = await res.json();
     setConfirming(false);
     if (data.error) {
@@ -68,34 +75,43 @@ export default function PlatformApplicationsView() {
   };
 
   const platforms = [...new Set(apps.map((a) => a.order.platform))];
+  const filteredApps = apps.filter(
+    (a) =>
+      includesText(a.order.brandName, brandName)
+      && matchesDateRange(a.createdAt, dateSince, dateUntil)
+  );
 
   return (
     <div className="flex min-h-0 flex-1">
       <div className="flex-1 space-y-4">
         <PlatformStatSummary
           items={[
-            { label: '待确认', value: apps.length },
+            { label: '待确认', value: filteredApps.length },
             { label: '涉及平台', value: platforms.length },
-            { label: '接单方', value: new Set(apps.map((a) => a.providerName)).size },
+            { label: '接单方', value: new Set(filteredApps.map((a) => a.providerName)).size },
           ]}
         />
-        <PlatformFilterBar onReset={() => { setPlatform(''); setProviderName(''); }}>
-          <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="platform-filter-input">
-            <option value="">全部平台</option>
-            {platforms.map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-          <input
-            value={providerName}
-            onChange={(e) => setProviderName(e.target.value)}
-            placeholder="接单方名称"
-            className="platform-filter-input"
-          />
+        <PlatformFilterBar onReset={() => { setPlatform(''); setBrandName(''); setProviderName(''); setDateSince(''); setDateUntil(''); }}>
+          <PlatformFilterField label="品牌">
+            <input value={brandName} onChange={(e) => setBrandName(e.target.value)} placeholder="商家品牌" className="platform-filter-input" />
+          </PlatformFilterField>
+          <PlatformFilterField label="投放平台">
+            <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="platform-filter-input">
+              <option value="">全部</option>
+              {platforms.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </PlatformFilterField>
+          <PlatformFilterField label="接单方">
+            <input value={providerName} onChange={(e) => setProviderName(e.target.value)} placeholder="接单方名称" className="platform-filter-input" />
+          </PlatformFilterField>
+          <PlatformFilterDateRange since={dateSince} until={dateUntil} onSinceChange={setDateSince} onUntilChange={setDateUntil} />
         </PlatformFilterBar>
         <PlatformDataTable<AppRow>
-          rows={apps}
+          rows={filteredApps}
           rowKey={(r) => r.id}
+          selectedKey={selected?.id}
           onRowClick={setSelected}
           emptyText="暂无待处理申请"
           columns={[
@@ -115,6 +131,12 @@ export default function PlatformApplicationsView() {
               render: () => <PlatformStatusTag label="待确认" kind="pending" />,
             },
           ]}
+          renderActions={(r) => (
+            <PlatformTableActions>
+              <PlatformTableAction label="详情" variant="primary" onClick={() => setSelected(r)} />
+              <PlatformTableAction label="确认接单" variant="primary" disabled={confirming} onClick={() => void confirm(r.id)} />
+            </PlatformTableActions>
+          )}
         />
       </div>
 

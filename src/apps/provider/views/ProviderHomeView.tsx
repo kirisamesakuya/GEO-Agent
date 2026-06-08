@@ -139,17 +139,17 @@ export default function ProviderHomeView({
 
         <button
           type="button"
-          onClick={() => onNavigate('accounts')}
+          onClick={() => onNavigate('profile')}
           className="provider-card rounded-2xl p-5 shadow-sm text-left h-[120px] hover:shadow-md transition-all group"
         >
-          <span className="text-xs text-provider-secondary block mb-1 font-medium">绑定的服务资源</span>
+          <span className="text-xs text-provider-secondary block mb-1 font-medium">个人中心</span>
           <span className="text-2xl font-bold text-provider-title font-mono">
-            {platformCount} <span className="text-xs font-normal text-provider-muted">个平台</span>
+            {platformCount} <span className="text-xs font-normal text-provider-muted">个平台偏好</span>
           </span>
           <div className="flex justify-between text-[11px] text-provider-muted mt-2">
-            <span>完善资料可提升匹配度</span>
+            <span>维护提现账户与接单偏好</span>
             <span className="text-brand font-semibold flex items-center gap-0.5">
-              去管理 <ArrowRight className="w-3 h-3" />
+              去设置 <ArrowRight className="w-3 h-3" />
             </span>
           </div>
         </button>

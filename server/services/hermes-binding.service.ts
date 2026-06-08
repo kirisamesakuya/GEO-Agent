@@ -3,6 +3,7 @@ import { prisma } from '../db/client.js';
 import { checkHermesHealth } from '../agent/executors/hermes.js';
 
 import { getHermesDevice } from './hermes-local.service.js';
+import { isHermesMockSyncReady } from './hermes-sync.service.js';
 import {
   GEO_SKILLS_VERSION,
   getGeoCapabilities,
@@ -39,14 +40,21 @@ export async function getHermesExtendedHealth() {
   const device = await getHermesDevice();
   const binding = readHermesDeviceBindingSummary(device);
   const heartbeatOnline =
-    device?.lastHeartbeatAt &&
-    Date.now() - new Date(device.lastHeartbeatAt).getTime() < 90_000;
+    (await isHermesMockSyncReady()) ||
+    (device?.lastHeartbeatAt &&
+      Date.now() - new Date(device.lastHeartbeatAt).getTime() < 90_000);
   const apiGatewayOk = health.apiGatewayOk ?? false;
 
   return {
     ok: health.ok,
     url: health.url,
-    detail: health.detail ?? (health.ok ? 'Hermes 在线' : 'Hermes 未连接'),
+    detail:
+      health.detail ??
+      (health.ok
+        ? 'Hermes 在线'
+        : (await isHermesMockSyncReady())
+          ? 'Hermes 已同步（Mock 演示）'
+          : 'Hermes 未连接'),
     mode: health.mode,
     apiGatewayOk,
     desktopRunning: health.desktopRunning ?? false,

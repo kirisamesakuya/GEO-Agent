@@ -15,6 +15,10 @@ import {
   setGeoApprovalPolicy,
 } from '../services/hermes-approval.service.js';
 import {
+  getHermesSyncStatus,
+  mockConfirmHermesLoginSync,
+} from '../services/hermes-sync.service.js';
+import {
   getHermesCapacitySnapshot,
   getHermesConcurrencySettings,
   updateHermesConcurrencySettings,
@@ -100,6 +104,22 @@ export function registerHermesRoutes(app: Express) {
   app.post('/api/hermes/bind-token', async (req, res) => {
     if (!requirePublisherUser(req, res)) return;
     res.json(await createHermesBindToken());
+  });
+
+  /** PRODUCTION_TODO: 替换为 Hermes 客户端登录后的真实 sync-session 回调/轮询 */
+  app.get('/api/hermes/sync-status', async (req, res) => {
+    if (!requirePublisherUser(req, res)) return;
+    res.json(await getHermesSyncStatus());
+  });
+
+  app.post('/api/hermes/sync/confirm-login', async (req, res) => {
+    if (!requirePublisherUser(req, res)) return;
+    try {
+      const deviceName = typeof req.body?.deviceName === 'string' ? req.body.deviceName : undefined;
+      res.json(await mockConfirmHermesLoginSync({ deviceName }));
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '同步失败' });
+    }
   });
 
   app.get('/api/hermes/approval-policy', async (req, res) => {

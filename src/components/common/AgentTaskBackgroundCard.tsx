@@ -4,7 +4,9 @@ import { useAgentTaskPolling } from '../../hooks/useAgentTaskPolling';
 import { resolveTaskPillDisplay } from '../../lib/agent-task-display';
 import type { AgentTask } from '../../types';
 import { Bot, Bell, ChevronRight, Clock, Loader2 } from 'lucide-react';
-import { navigateToAgentTasks, isAgentTaskInProgress } from './AgentTaskProgressLink';
+import { navigateToAgentTasks, isAgentTaskInProgress, isAgentTaskBlocking } from './AgentTaskProgressLink';
+
+export { isAgentTaskBlocking };
 import { navigateToAgentTaskResult } from '../../lib/agent-task-result-nav';
 
 export type TaskQueueHint = {
@@ -19,17 +21,62 @@ interface Props {
   taskTitle?: string;
   initialStatus?: AgentTaskStatus | null;
   queueHint?: TaskQueueHint | null;
+  hermesSetupRequired?: boolean;
   onNavigate?: (view: ViewType, hint?: string) => void;
   onComplete?: (task: AgentTask) => void;
-  showWhyQueued?: boolean;
+  onStatusChange?: (status: AgentTaskStatus) => void;
 }
 
-function statusHeadline(status: AgentTaskStatus | null | undefined, queueHint?: TaskQueueHint | null) {
+function resolveDetailMessage(
+  status: AgentTaskStatus | null | undefined,
+  inProgress: boolean,
+  queueHint?: TaskQueueHint | null,
+  hermesSetupRequired?: boolean
+): string {
+  if (
+    hermesSetupRequired &&
+    (status === 'pending_setup' ||
+      status === 'waiting_local_device' ||
+      status === 'pending' ||
+      !status)
+  ) {
+    return '任务已创建，但本机 Hermes 尚未绑定。请先完成安装与绑定，绑定后任务将自动继续执行。';
+  }
+  if (status === 'succeeded' || status === 'partial') {
+    return '任务已完成，请前往结果中心确认并应用结果。';
+  }
+  if (status === 'failed') {
+    return '任务执行失败，可在结果中心查看详情后重试。';
+  }
+  if (inProgress) {
+    const ahead = queueHint?.aheadCount ?? 0;
+    if (ahead > 0) {
+      return `任务已提交并排队中（前面还有 ${ahead} 个）。完成前暂无法提交新任务，可前往结果中心查看进度。`;
+    }
+    return '任务处理中，完成前暂无法提交新任务。可前往结果中心查看进度，完成后我们会通知你。';
+  }
+  return '任务已提交，可前往结果中心查看进度。';
+}
+
+function statusHeadline(
+  status: AgentTaskStatus | null | undefined,
+  queueHint?: TaskQueueHint | null,
+  hermesSetupRequired?: boolean
+) {
   if (status === 'succeeded' || status === 'partial') {
     return '任务已完成';
   }
   if (status === 'failed') {
     return '任务执行失败';
+  }
+  if (
+    hermesSetupRequired &&
+    (status === 'pending_setup' ||
+      status === 'waiting_local_device' ||
+      status === 'pending' ||
+      !status)
+  ) {
+    return '等待本机 Hermes 绑定';
   }
   if (status === 'running') {
     return 'Hermes 正在执行';
@@ -45,9 +92,10 @@ export default function AgentTaskBackgroundCard({
   taskTitle,
   initialStatus,
   queueHint,
+  hermesSetupRequired,
   onNavigate,
   onComplete,
-  showWhyQueued = true,
+  onStatusChange,
 }: Props) {
   const [status, setStatus] = useState<AgentTaskStatus | null>(initialStatus ?? null);
   const [progress, setProgress] = useState(0);
@@ -56,6 +104,7 @@ export default function AgentTaskBackgroundCard({
     const display = resolveTaskPillDisplay(task);
     setStatus(display.status);
     setProgress(task.progress ?? 0);
+    onStatusChange?.(display.status);
   };
 
   const handleComplete = (task: AgentTask) => {
@@ -72,12 +121,10 @@ export default function AgentTaskBackgroundCard({
   if (!taskId) return null;
 
   const inProgress = isAgentTaskInProgress(status);
-  const headline = statusHeadline(status, queueHint);
-  const detailMessage =
-    queueHint?.userMessage ??
-    (status === 'running'
-      ? '你可以先去处理其他工作，完成后会通过通知提醒你。'
-      : '任务已提交，本机 Hermes 会在后台处理。你可以先去做其他事，完成后我们会通过通知提醒你。');
+  const isDone = status === 'succeeded' || status === 'partial';
+  const isFailed = status === 'failed' || status === 'canceled';
+  const headline = statusHeadline(status, queueHint, hermesSetupRequired);
+  const detailMessage = resolveDetailMessage(status, inProgress, queueHint, hermesSetupRequired);
 
   return (
     <div
@@ -108,33 +155,55 @@ export default function AgentTaskBackgroundCard({
           {(queueHint?.aheadCount ?? 0) > 0 && inProgress && (
             <p className="text-xs mt-1 flex items-center gap-1 text-amber-800">
               <Clock className="w-3 h-3 shrink-0" />
-              排队中，前面还有 {queueHint!.aheadCount} 个任务
+              排队中
             </p>
           )}
           <p className="text-xs mt-1.5 leading-relaxed text-[var(--neutral-text-03)]">{detailMessage}</p>
         </div>
       </div>
 
-      {showWhyQueued && inProgress && (queueHint?.isQueued || queueHint?.aheadCount) && (
-        <div
-          className="text-[11px] rounded-lg px-3 py-2 leading-relaxed"
-          style={{ background: 'var(--neutral-bg-02)', color: 'var(--neutral-text-03)' }}
-        >
-          <p className="font-medium text-[var(--neutral-text-02)] mb-0.5">为什么排队？</p>
-          当前为保守模式：分析任务最多同时 2 个，发布任务一次只执行 1 个。这样可以避免影响你在 Hermes 桌面端的正常使用。
-        </div>
-      )}
-
       {onNavigate && (
-        <div className="flex flex-wrap gap-2 pt-1">
-          <button
-            type="button"
-            className="geo-btn-secondary geo-btn-xs inline-flex items-center gap-1"
-            onClick={() => navigateToAgentTasks(onNavigate, taskId)}
-          >
-            查看后台进度
-            <ChevronRight className="w-3 h-3" />
-          </button>
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          {isDone ? (
+            <>
+              <button
+                type="button"
+                className="geo-btn-primary geo-btn-xs inline-flex items-center gap-1"
+                onClick={() => navigateToAgentTaskResult(onNavigate, taskId)}
+              >
+                查看结果
+                <ChevronRight className="w-3 h-3" />
+              </button>
+              <button
+                type="button"
+                className="geo-btn-secondary geo-btn-xs inline-flex items-center gap-1"
+                onClick={() => onNavigate('agent_task_results')}
+              >
+                结果中心
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="geo-btn-primary geo-btn-xs inline-flex items-center gap-1"
+                onClick={() => navigateToAgentTasks(onNavigate, taskId)}
+              >
+                查看本任务进度
+                <ChevronRight className="w-3 h-3" />
+              </button>
+              {!isFailed && (
+                <button
+                  type="button"
+                  className="geo-btn-secondary geo-btn-xs"
+                  onClick={() => onNavigate('agent_task_results')}
+                >
+                  全部任务
+                </button>
+              )}
+            </>
+          )}
           <button
             type="button"
             className="geo-btn-secondary geo-btn-xs"
@@ -142,15 +211,6 @@ export default function AgentTaskBackgroundCard({
           >
             返回工作台
           </button>
-          {(status === 'succeeded' || status === 'partial') && (
-            <button
-              type="button"
-              className="geo-btn-primary geo-btn-xs"
-              onClick={() => navigateToAgentTaskResult(onNavigate, taskId)}
-            >
-              查看结果
-            </button>
-          )}
         </div>
       )}
     </div>

@@ -28,7 +28,6 @@ async function seedDemoExtras(orgId: string, brandName: string) {
     await prisma.organizationMember.createMany({
       data: [
         { organizationId: orgId, userId: 'publisher-demo', displayName: '组织负责人', role: 'owner' },
-        { organizationId: orgId, userId: 'editor-demo', displayName: '品牌运营', role: 'editor' },
       ],
     });
   }
@@ -44,15 +43,6 @@ async function seedDemoExtras(orgId: string, brandName: string) {
     });
   }
 
-  const brands = await prisma.brand.findMany({ where: { organizationId: orgId } });
-  for (const b of brands) {
-    const permCount = await prisma.brandMemberPermission.count({ where: { brandId: b.id } });
-    if (permCount === 0) {
-      await prisma.brandMemberPermission.create({
-        data: { brandId: b.id, userId: 'editor-demo', role: 'editor' },
-      });
-    }
-  }
 
   await prisma.provider.updateMany({
     where: { name: '晨光传媒', applicationStatus: { not: 'approved' } },
@@ -64,12 +54,18 @@ async function seedDemoExtras(orgId: string, brandName: string) {
   const { ensureDemoPlatformOps } = await import('./demo-platform.js');
   const { ensureDemoPublisherNotifications } = await import('./demo-notifications.js');
   const { ensureDemoPublisherSnapshot } = await import('./demo-publisher-snapshot.js');
+  const { ensureDemoUsers } = await import('./demo-users.js');
+  const { ensureDemoFinance } = await import('./demo-finance.js');
+  const { ensureDemoPlatformSuite } = await import('./demo-platform-suite.js');
 
   await ensureDemoMarketplaceReady();
   await ensureDemoWebsiteOrders(brandName);
   await ensureDemoPlatformOps();
   await ensureDemoPublisherNotifications(brandName);
   await ensureDemoPublisherSnapshot(brandName);
+  await ensureDemoUsers();
+  await ensureDemoFinance();
+  await ensureDemoPlatformSuite();
 }
 
 export async function seedDatabase() {
@@ -194,7 +190,9 @@ export async function seedDatabase() {
 
 const isDirectRun = process.argv[1]?.replace(/\\/g, '/').endsWith('server/db/seed.ts');
 if (isDirectRun) {
-  await prisma.$connect();
-  await seedDatabase();
-  await prisma.$disconnect();
+  (async () => {
+    await prisma.$connect();
+    await seedDatabase();
+    await prisma.$disconnect();
+  })();
 }

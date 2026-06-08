@@ -111,7 +111,7 @@ export default function ArticleResultDetailView({ brandName, contentItemId, onNa
       setHermesWork((h) => ({ ...h, open: false }));
       if (task.status === 'succeeded') {
         toast('发布任务已提交，请在发布记录查看结果', 'success');
-        onNavigate?.('content_delivery', 'publish_records');
+        onNavigate?.('content_delivery');
       } else {
         toast('发布未成功，请查看发布记录', 'error');
       }
@@ -147,7 +147,7 @@ export default function ArticleResultDetailView({ brandName, contentItemId, onNa
         onClick={() => onNavigate?.('content_delivery')}
       >
         <ArrowLeft className="w-4 h-4" />
-        返回内容交付
+        返回文章交付
       </button>
 
       {!item ? (

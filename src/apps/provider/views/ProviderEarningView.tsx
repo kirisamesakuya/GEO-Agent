@@ -1,7 +1,6 @@
 ﻿import { useEffect, useState, type FormEvent } from 'react';
 import {
   CheckCircle2,
-  ChevronDown,
   HelpCircle,
   Search,
   X,
@@ -15,6 +14,10 @@ import {
   MOCK_PROVIDER_WALLET,
   hasRealEarningsData,
 } from '../lib/provider-mock-earnings';
+import {
+  hasMockProviderPayoutReady,
+  loadMockProviderPayoutAccount,
+} from '../lib/provider-mock-payout';
 
 interface Props {
   providerId: string;
@@ -58,7 +61,8 @@ export default function ProviderEarningView({ providerId }: Props) {
   const [transactions, setTransactions] = useState<EarningsTransaction[]>(MOCK_PROVIDER_TRANSACTIONS);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [bankName, setBankName] = useState('支付宝交易账户');
+  const [bankName, setBankName] = useState('');
+  const [hasPayoutAccount, setHasPayoutAccount] = useState(false);
   const [withdrawSuccess, setWithdrawSuccess] = useState(false);
   const [activeDateTab, setActiveDateTab] = useState<DateTab>('7d');
   const [localSearch, setLocalSearch] = useState('');
@@ -92,6 +96,37 @@ export default function ProviderEarningView({ providerId }: Props) {
     void loadEarnings();
   }, [providerId]);
 
+  useEffect(() => {
+    const applyMockPayout = () => {
+      const mock = loadMockProviderPayoutAccount(providerId);
+      if (mock?.payoutAccountLabel) {
+        setBankName(mock.payoutAccountLabel);
+        setHasPayoutAccount(true);
+        return true;
+      }
+      return false;
+    };
+
+    fetch(`/api/provider/profile?providerId=${providerId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const label = d.provider?.payoutAccountLabel as string | undefined;
+        if (label?.trim()) {
+          setBankName(label.trim());
+          setHasPayoutAccount(true);
+        } else if (!applyMockPayout()) {
+          setBankName('支付宝交易账户');
+          setHasPayoutAccount(hasMockProviderPayoutReady(providerId));
+        }
+      })
+      .catch(() => {
+        if (!applyMockPayout()) {
+          setBankName('支付宝交易账户');
+          setHasPayoutAccount(hasMockProviderPayoutReady(providerId));
+        }
+      });
+  }, [providerId]);
+
   const filteredTx = transactions.filter((tx) => {
     const q = localSearch.trim().toLowerCase();
     if (!q) return true;
@@ -111,6 +146,15 @@ export default function ProviderEarningView({ providerId }: Props) {
     if (Number.isNaN(cash) || cash <= 0 || cash > wallet.extractable) return;
     if (isDemo) {
       toast('演示数据：提现功能即将开放，请联系平台运营', 'info');
+      setShowWithdraw(false);
+      return;
+    }
+    if (!hasPayoutAccount && !hasMockProviderPayoutReady(providerId)) {
+      toast('请先在个人中心完成实名认证并绑定提现账户', 'error');
+      return;
+    }
+    if (hasMockProviderPayoutReady(providerId) && isDemo) {
+      toast('演示：Mock 提现账户已绑定，真实提现请等待 API 联调', 'info');
       setShowWithdraw(false);
       return;
     }
@@ -363,23 +407,24 @@ export default function ProviderEarningView({ providerId }: Props) {
             <h2 className="text-lg font-bold text-provider-title mb-1 flex items-center gap-1.5">
               <Sparkles className="w-5 h-5 text-brand" /> 结存资金安全提现
             </h2>
-            <p className="text-xs text-provider-muted mb-5">审核通过后将支付到绑定账户。</p>
+            <p className="text-xs text-provider-muted mb-5">
+              {hasPayoutAccount
+                ? '审核通过后将支付到个人中心绑定的账户。'
+                : '请先在个人中心维护提现账户后再申请提现。'}
+            </p>
 
             <form onSubmit={handleWithdraw} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-provider-body mb-1.5">提现渠道</label>
-                <div className="relative">
-                  <select
-                    value={bankName}
-                    onChange={(e) => setBankName(e.target.value)}
-                    className="w-full p-2.5 border border-provider rounded-xl text-xs outline-none focus:border-brand bg-white appearance-none pr-8"
-                  >
-                    <option value="支付宝交易账户">支付宝</option>
-                    <option value="招商银行网银账户">招商银行储蓄卡</option>
-                    <option value="微信结算账户">微信收款</option>
-                  </select>
-                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-provider-muted pointer-events-none" />
-                </div>
+                <label className="block text-xs font-bold text-provider-body mb-1.5">提现账户</label>
+                {hasPayoutAccount ? (
+                  <div className="w-full p-2.5 border border-provider rounded-xl text-xs bg-provider-subtle text-provider-body">
+                    {bankName}
+                  </div>
+                ) : (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-2.5">
+                    尚未绑定提现账户，请前往个人中心填写。
+                  </p>
+                )}
               </div>
 
               <div>

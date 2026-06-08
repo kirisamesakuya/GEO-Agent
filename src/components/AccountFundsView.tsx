@@ -31,8 +31,27 @@ const ORDER_STATUS: Record<string, string> = {
   paid: '已支付',
 };
 
-function formatCny(amount: number) {
-  return `¥${amount.toLocaleString('zh-CN')}`;
+function formatCny(amount: unknown) {
+  const n = typeof amount === 'number' ? amount : Number(amount);
+  if (!Number.isFinite(n)) return '¥0';
+  return `¥${n.toLocaleString('zh-CN')}`;
+}
+
+function normalizeDelivery(raw: unknown) {
+  const data = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const balance = Number(data.balance);
+  const frozen = Number(data.frozen);
+  const available =
+    data.available != null
+      ? Number(data.available)
+      : Number.isFinite(balance) && Number.isFinite(frozen)
+        ? balance - frozen
+        : 0;
+  return {
+    balance: Number.isFinite(balance) ? balance : 0,
+    frozen: Number.isFinite(frozen) ? frozen : 0,
+    available: Number.isFinite(available) ? available : 0,
+  };
 }
 
 export default function AccountFundsView({ brandName, embedded }: Props) {
@@ -46,17 +65,35 @@ export default function AccountFundsView({ brandName, embedded }: Props) {
   const [paying, setPaying] = useState(false);
 
   const load = async () => {
-    if (brandName === '__all__') return;
-    const [credits, acc, led, orders] = await Promise.all([
-      fetch(`/api/ai-credits/${encodeURIComponent(brandName)}`).then((r) => r.json()),
-      fetch(`/api/budget/${encodeURIComponent(brandName)}`).then((r) => r.json()),
-      fetch(`/api/budget/${encodeURIComponent(brandName)}/ledger`).then((r) => r.json()),
-      fetch(`/api/budget/${encodeURIComponent(brandName)}/recharge-orders`).then((r) => r.json()),
-    ]);
-    setTokenBalance(credits.balance ?? 0);
-    setDelivery(acc);
-    setLedger(led.ledger ?? []);
-    setRechargeOrders(orders.orders ?? []);
+    if (!brandName || brandName === '__all__') return;
+    try {
+      const [creditsRes, accRes, ledRes, ordersRes] = await Promise.all([
+        fetch(`/api/ai-credits/${encodeURIComponent(brandName)}`),
+        fetch(`/api/budget/${encodeURIComponent(brandName)}`),
+        fetch(`/api/budget/${encodeURIComponent(brandName)}/ledger`),
+        fetch(`/api/budget/${encodeURIComponent(brandName)}/recharge-orders`),
+      ]);
+      const [credits, acc, led, orders] = await Promise.all([
+        creditsRes.json(),
+        accRes.json(),
+        ledRes.json(),
+        ordersRes.json(),
+      ]);
+      if (!creditsRes.ok) {
+        toast(typeof credits.error === 'string' ? credits.error : '词元账户加载失败', 'error');
+      } else {
+        setTokenBalance(Number(credits.balance) || 0);
+      }
+      if (!accRes.ok) {
+        toast(typeof acc.error === 'string' ? acc.error : '投放账户加载失败', 'error');
+      } else {
+        setDelivery(normalizeDelivery(acc));
+      }
+      setLedger(Array.isArray(led.ledger) ? led.ledger : []);
+      setRechargeOrders(Array.isArray(orders.orders) ? orders.orders : []);
+    } catch {
+      toast('账户数据加载失败', 'error');
+    }
   };
 
   useEffect(() => {
@@ -87,7 +124,7 @@ export default function AccountFundsView({ brandName, embedded }: Props) {
     void load();
   };
 
-  if (brandName === '__all__') {
+  if (!brandName || brandName === '__all__') {
     return (
       <div className={embedded ? 'p-6' : 'geo-page-content max-w-3xl'}>
         <p className="text-sm" style={{ color: 'var(--neutral-text-03)' }}>请选择具体品牌查看账户余额。</p>

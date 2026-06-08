@@ -16,6 +16,13 @@ export function isAgentTaskInProgress(
   return status != null && IN_PROGRESS_STATUSES.includes(status as AgentTaskStatus);
 }
 
+export function isAgentTaskBlocking(
+  taskId: string | null | undefined,
+  status: AgentTaskStatus | string | null | undefined
+): boolean {
+  return Boolean(taskId && isAgentTaskInProgress(status));
+}
+
 export function navigateToAgentTasks(
   onNavigate: ((view: ViewType, hint?: string) => void) | undefined,
   taskId?: string | null

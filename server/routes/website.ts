@@ -2,6 +2,7 @@ import type { Express } from 'express';
 import { requireBrandName } from '../middleware/require-publisher.js';
 import { ensureWebsiteRequestScope } from '../lib/publisher-scope.js';
 import {
+  createWebsiteLeadRequest,
   createWebsiteRequest,
   listWebsiteRequests,
   getWebsiteRequest,
@@ -26,7 +27,29 @@ export function registerWebsiteRoutes(app: Express) {
   app.post('/api/website-requests', async (req, res) => {
     const brandName = await requireBrandName(req, res);
     if (!brandName) return;
-    const { pageType, goal, referenceUrl, modules, attachments } = req.body ?? {};
+    const { pageType, goal, referenceUrl, modules, attachments, keywords, contact, notes } =
+      req.body ?? {};
+
+    if (keywords && contact) {
+      if (!pageType || !String(keywords).trim() || !String(contact).trim()) {
+        return res.status(400).json({ error: '缺少页面类型、目标关键词或联系方式' });
+      }
+      try {
+        const { request, order } = await createWebsiteLeadRequest({
+          brandName,
+          pageType,
+          referenceUrl,
+          keywords: String(keywords).trim(),
+          contact: String(contact).trim(),
+          notes: notes ? String(notes).trim() : undefined,
+          modules: Array.isArray(modules) ? modules : undefined,
+        });
+        return res.status(201).json({ request, order });
+      } catch (err) {
+        return res.status(400).json({ error: err instanceof Error ? err.message : '提交失败' });
+      }
+    }
+
     if (!pageType || !goal) {
       return res.status(400).json({ error: '缺少页面类型或目标' });
     }
