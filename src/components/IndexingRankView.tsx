@@ -339,7 +339,7 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
     selectedPlatforms.length > 0;
 
   return (
-    <div className="geo-page-content overflow-y-auto h-full space-y-4">
+    <div className="geo-page-content space-y-4">
       <PageHeaderWithBrand
         title="GEO监控"
         brandName={brandName}
@@ -398,10 +398,6 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
 
       {activeTab === 'plans' && (
         <>
-      <p className="text-xs text-[var(--neutral-text-03)] px-1">
-        执行采样将调用本机 Hermes 技能 <code className="text-[11px]">geo-platform-ranking-sampling</code> 进行真机查询；部分平台可能需在本机浏览器登录。未就绪时将提示配置 Hermes。
-      </p>
-
       <div className="geo-table-wrap">
         <table className="geo-table">
           <thead>

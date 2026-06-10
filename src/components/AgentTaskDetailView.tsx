@@ -13,6 +13,7 @@ import HermesApprovalPanel from './agent/HermesApprovalPanel';
 import type { GeoApprovalPolicy, HermesRunSnapshot } from '../lib/hermes-approval';
 import HermesPublishResultPanel from './agent/HermesPublishResultPanel';
 import GeoAssetResultPanel from './agent/GeoAssetResultPanel';
+import CampaignPlanResultPanel from './agent/CampaignPlanResultPanel';
 import { getResultConfirmUiStatus, isResultConfirmPending } from '../lib/agent-result-confirmation';
 
 const IN_PROGRESS = new Set([
@@ -56,6 +57,8 @@ export default function AgentTaskDetailView({ taskId, onBack, onNavigate }: Prop
     device?: { deviceName: string; hermesVersion?: string | null; lastHeartbeatAt?: string | null } | null;
     artifacts?: GeoAuditArtifact[];
     deliverable?: TaskDeliverableView | null;
+    campaignPlanId?: string | null;
+    campaignPackageCount?: number | null;
     approvalPolicy?: GeoApprovalPolicy | null;
     hermesRun?: HermesRunSnapshot | null;
   } | null>(null);
@@ -178,7 +181,7 @@ export default function AgentTaskDetailView({ taskId, onBack, onNavigate }: Prop
     await load();
   };
   return (
-    <div className="geo-page-content h-full overflow-y-auto space-y-4 pb-8">
+    <div className="geo-page-content space-y-4 pb-8">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <button type="button" className="geo-btn-secondary text-sm flex items-center gap-2" onClick={onBack}>
           <ArrowLeft className="w-4 h-4" />
@@ -325,6 +328,13 @@ export default function AgentTaskDetailView({ taskId, onBack, onNavigate }: Prop
       {showGeoAssetResult && (
         <GeoAssetResultPanel task={task} onNavigate={onNavigate} />
       )}
+
+      <CampaignPlanResultPanel
+        task={task}
+        campaignPlanId={meta?.campaignPlanId}
+        campaignPackageCount={meta?.campaignPackageCount}
+        onNavigate={onNavigate}
+      />
 
       {geoReportPreview && (
         <div className="geo-card p-6 space-y-3">

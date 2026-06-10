@@ -3,6 +3,7 @@ import {
   AI_MONITOR_LOGIN_URLS,
   AI_MONITOR_PLATFORMS,
 } from '../../lib/ai-monitor-platforms';
+import type { AiMonitorPlatformCatalogEntry } from '../../lib/ai-monitor-platform-catalog';
 
 export type AiMonitorSessionStatus =
   | 'unknown'
@@ -31,14 +32,58 @@ export interface AiMonitorSessionsResponse {
   notReadyCount: number;
 }
 
-export const AI_MONITOR_PLATFORM_CATALOG = AI_MONITOR_PLATFORMS.map((platform) => ({
+type CatalogRow = { platform: string; loginUrl: string; loginHint: string };
+
+const STATIC_CATALOG: CatalogRow[] = AI_MONITOR_PLATFORMS.map((platform) => ({
   platform,
   loginUrl: AI_MONITOR_LOGIN_URLS[platform],
   loginHint: AI_MONITOR_LOGIN_HINTS[platform],
 }));
 
+let resolvedCatalog: CatalogRow[] | null = null;
+let catalogPromise: Promise<CatalogRow[]> | null = null;
+
+function mapCatalogEntries(entries: AiMonitorPlatformCatalogEntry[]): CatalogRow[] {
+  return entries.map((entry) => ({
+    platform: entry.label,
+    loginUrl: entry.loginUrl,
+    loginHint: entry.loginHint,
+  }));
+}
+
+function activeCatalog(): CatalogRow[] {
+  return resolvedCatalog ?? STATIC_CATALOG;
+}
+
+export async function ensureAiMonitorPlatformCatalog(): Promise<CatalogRow[]> {
+  if (resolvedCatalog) return resolvedCatalog;
+  if (!catalogPromise) {
+    catalogPromise = (async () => {
+      try {
+        const res = await fetch('/api/ai-monitor-platforms');
+        if (res.ok) {
+          const data = (await res.json()) as { platforms?: AiMonitorPlatformCatalogEntry[] };
+          const rows = mapCatalogEntries(data.platforms ?? []);
+          if (rows.length) {
+            resolvedCatalog = rows;
+            return rows;
+          }
+        }
+      } catch {
+        // fall through to static defaults
+      }
+      resolvedCatalog = STATIC_CATALOG;
+      return STATIC_CATALOG;
+    })();
+  }
+  return catalogPromise;
+}
+
+/** @deprecated 使用 ensureAiMonitorPlatformCatalog；保留静态默认值供首屏占位 */
+export const AI_MONITOR_PLATFORM_CATALOG = STATIC_CATALOG;
+
 export function buildDefaultAiMonitorSessions(): AiMonitorSession[] {
-  return AI_MONITOR_PLATFORM_CATALOG.map((entry) => ({
+  return activeCatalog().map((entry) => ({
     id: `catalog-${entry.platform}`,
     platform: entry.platform,
     status: 'unknown' as AiMonitorSessionStatus,
@@ -48,9 +93,8 @@ export function buildDefaultAiMonitorSessions(): AiMonitorSession[] {
 }
 
 export function mergeAiMonitorSessions(sessions: AiMonitorSession[]): AiMonitorSession[] {
-  const byPlatform = new Map(sessions.map((s) => [s.platform, s]));
-  return AI_MONITOR_PLATFORM_CATALOG.map((entry) => {
-    const existing = byPlatform.get(entry.platform);
+  return activeCatalog().map((entry) => {
+    const existing = sessions.find((s) => s.platform === entry.platform);
     if (existing) {
       return {
         ...existing,
@@ -75,6 +119,7 @@ export function summarizeAiMonitorSessions(sessions: AiMonitorSession[]): AiMoni
 }
 
 export async function fetchAiMonitorSessions(brandName: string): Promise<AiMonitorSessionsResponse> {
+  await ensureAiMonitorPlatformCatalog();
   const fallback = summarizeAiMonitorSessions(buildDefaultAiMonitorSessions());
   if (!brandName?.trim()) return fallback;
 
@@ -112,6 +157,7 @@ export async function verifyAiMonitorSessions(
   brandName: string,
   platforms?: string[]
 ): Promise<{ taskId: string; sessions: AiMonitorSession[] } | null> {
+  await ensureAiMonitorPlatformCatalog();
   const res = await fetch(
     `/api/ai-monitor-sessions/verify?brandName=${encodeURIComponent(brandName)}`,
     {

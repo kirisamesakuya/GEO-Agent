@@ -273,10 +273,10 @@ export default function AccountBindingView({ brandName, embedded }: AccountBindi
   };
 
   return (
-    <div className={`${embedded ? 'h-full' : 'geo-page-content'} flex h-full min-h-0 overflow-hidden text-left`}>
-      <div className="geo-brand-workspace flex-1 min-h-0">
+    <div className={`${embedded ? '' : 'geo-page-content'} flex min-h-0 text-left`}>
+      <div className="geo-brand-workspace">
         <div
-          className={`geo-brand-main ${embedded ? '' : 'geo-card'} flex flex-col overflow-hidden min-h-0`}
+          className={`geo-brand-main ${embedded ? '' : 'geo-card'} flex flex-col`}
           style={{ maxWidth: 'none' }}
         >
           {!embedded && (
@@ -323,7 +323,7 @@ export default function AccountBindingView({ brandName, embedded }: AccountBindi
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div className="p-6 space-y-4 pb-8">
             <div className="flex items-center justify-between gap-3">
               <h3 className="geo-label mb-0" style={{ fontSize: 'var(--font-size-body)' }}>
                 平台发布账号

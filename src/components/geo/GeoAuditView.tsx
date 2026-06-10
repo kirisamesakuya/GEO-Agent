@@ -11,6 +11,8 @@ import { submitGeoAgentTask } from '../../lib/geo-audit-client';
 import { AUDIT_MODULE_SPECS, resolveAuditModuleTask } from '../../lib/geo-audit-modules';
 import { DEFAULT_GEO_AI_PLATFORMS, GEO_AI_PLATFORM_LABELS } from '../../../lib/media-platforms';
 import { useHermesSubmitGuard } from '../hermes/HermesSubmitGuard';
+import OverlayDrawer from '../common/OverlayDrawer';
+import { X } from 'lucide-react';
 
 interface Props {
   brandName: string;
@@ -32,6 +34,7 @@ export default function GeoAuditView({ brandName, onNavigate, onOpenHistory }: P
   const [taskTitle, setTaskTitle] = useState('');
   const [taskStatus, setTaskStatus] = useState<AgentTaskStatus | null>(null);
   const [queueHint, setQueueHint] = useState<TaskQueueHint | null>(null);
+  const [modulesDrawerOpen, setModulesDrawerOpen] = useState(false);
   const displayBrand = brandName === '__all__' ? '品牌' : brandName;
 
   const modulePlan = resolveAuditModuleTask(modules);
@@ -110,8 +113,8 @@ export default function GeoAuditView({ brandName, onNavigate, onOpenHistory }: P
   };
 
   return (
-    <div className="flex flex-1 min-h-0 overflow-hidden">
-      <div className="flex-1 min-h-0 overflow-y-auto geo-page-content max-w-3xl">
+    <>
+    <div className="geo-page-content max-w-3xl pb-8">
         <AgentInputCard
           title="GEO 专业审计"
           description={
@@ -121,6 +124,13 @@ export default function GeoAuditView({ brandName, onNavigate, onOpenHistory }: P
           }
           footer={
             <div className="flex flex-col gap-2 w-full">
+              <button
+                type="button"
+                className="geo-btn-secondary text-sm self-start"
+                onClick={() => setModulesDrawerOpen(true)}
+              >
+                审计模块（{modules.length}/{AUDIT_MODULE_SPECS.length}）
+              </button>
               <button
                 type="button"
                 className="geo-btn-primary text-sm"
@@ -207,28 +217,45 @@ export default function GeoAuditView({ brandName, onNavigate, onOpenHistory }: P
             />
           </div>
         )}
-      </div>
-
-      <aside className="hidden lg:block w-56 shrink-0 border-l p-4 text-xs" style={{ borderColor: 'var(--neutral-divider-02)' }}>
-        <p className="font-semibold mb-2">审计模块</p>
-        <p className="text-[10px] text-[var(--neutral-text-03)] mb-2 leading-relaxed">
-          勾选后可用「单跑选中模块」。仅选 1 项时将映射到对应 Hermes 专项 skill。
-        </p>
-        <div className="space-y-1">
-          {AUDIT_MODULE_SPECS.map((m) => (
-            <label key={m.id} className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={modules.includes(m.id)}
-                onChange={() =>
-                  setModules((prev) => (prev.includes(m.id) ? prev.filter((x) => x !== m.id) : [...prev, m.id]))
-                }
-              />
-              <span>{m.label}</span>
-            </label>
-          ))}
-        </div>
-      </aside>
     </div>
+
+      {modulesDrawerOpen && (
+        <OverlayDrawer
+          onClose={() => setModulesDrawerOpen(false)}
+          width={320}
+          panelClassName="border-l"
+          panelStyle={{ background: 'var(--color-bg-card)', borderColor: 'var(--neutral-divider-02)' }}
+        >
+          <div
+            className="flex items-center justify-between px-4 py-3 border-b shrink-0"
+            style={{ borderColor: 'var(--neutral-divider-02)' }}
+          >
+            <h3 className="text-sm font-semibold text-[var(--color-title)]">审计模块</h3>
+            <button type="button" onClick={() => setModulesDrawerOpen(false)} className="p-1 rounded hover:bg-[var(--color-bg)]">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 text-xs">
+            <p className="text-[10px] text-[var(--neutral-text-03)] mb-3 leading-relaxed">
+              勾选后可用「单跑选中模块」。仅选 1 项时将映射到对应 Hermes 专项 skill。
+            </p>
+            <div className="space-y-1">
+              {AUDIT_MODULE_SPECS.map((m) => (
+                <label key={m.id} className="flex items-center gap-2 cursor-pointer py-1">
+                  <input
+                    type="checkbox"
+                    checked={modules.includes(m.id)}
+                    onChange={() =>
+                      setModules((prev) => (prev.includes(m.id) ? prev.filter((x) => x !== m.id) : [...prev, m.id]))
+                    }
+                  />
+                  <span>{m.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </OverlayDrawer>
+      )}
+    </>
   );
 }

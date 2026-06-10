@@ -4,6 +4,7 @@ import { getPlatformStats, appendAuditLog } from './audit.service.js';
 import { checkHermesHealth } from '../agent/executors/index.js';
 import { listDepositRequests, getBudgetAccount } from './budget.service.js';
 import { getAiCredits } from './ai-credits.service.js';
+import { checkBrandCompleteness, mapBrand } from './brand.service.js';
 import { createProviderNotification } from './notification.service.js';
 import { refreshSkillRoutesFromDb } from '../lib/agent-skill.js';
 import { ROLE_PERMISSIONS, PLATFORM_ROLE_LABELS, type PlatformRole } from '../lib/platform-auth.js';
@@ -764,31 +765,32 @@ export async function listSystemConfigVersions(key: string, limit = 20) {
 }
 
 export async function listPlatformMerchants() {
-  const brands = await prisma.brand.findMany({ orderBy: { name: 'asc' } });
-  return Promise.all(
-    brands.map(async (b) => {
-      const [taskCount, orderCount, budget, credits] = await Promise.all([
-        prisma.agentTask.count({ where: { brandName: b.name } }),
-        prisma.taskOrder.count({ where: { brandName: b.name } }),
-        getBudgetAccount(b.name),
-        getAiCredits(b.name),
-      ]);
-      return {
-        id: b.id,
-        name: b.name,
-        website: b.website,
-        industry: b.industry,
-        city: b.city,
-        status: b.status,
-        taskCount,
-        orderCount,
-        balance: budget.balance,
-        frozen: budget.frozen,
-        aiCredits: credits.balance,
-        createdAt: b.createdAt,
-      };
-    })
-  );
+  const brands = await prisma.brand.findMany({
+    orderBy: { name: 'asc' },
+    include: {
+      organization: { select: { id: true, name: true, certStatus: true } },
+    },
+  });
+  return brands.map((b) => {
+    const profile = mapBrand(b);
+    const completeness = checkBrandCompleteness(profile);
+    return {
+      id: b.id,
+      name: b.name,
+      website: b.website,
+      industry: b.industry,
+      city: b.city,
+      ownerName: b.ownerName,
+      storeCount: b.storeCount,
+      status: b.status,
+      profileComplete: completeness.complete,
+      missingFields: completeness.missing,
+      organizationName: b.organization?.name ?? null,
+      certStatus: b.organization?.certStatus ?? null,
+      createdAt: b.createdAt,
+      updatedAt: b.updatedAt,
+    };
+  });
 }
 
 export async function setMerchantStatus(brandName: string, status: 'active' | 'disabled', reason: string) {
@@ -808,56 +810,105 @@ export async function setMerchantStatus(brandName: string, status: 'active' | 'd
   return updated;
 }
 
+export async function listPlatformProviderIdentities(options?: {
+  status?: 'verified' | 'unverified';
+  providerName?: string;
+  realName?: string;
+}) {
+  const providers = await prisma.provider.findMany({
+    where: {
+      applicationStatus: 'approved',
+      ...(options?.providerName?.trim()
+        ? { name: { contains: options.providerName.trim(), mode: 'insensitive' } }
+        : {}),
+      ...(options?.realName?.trim()
+        ? { identityRealName: { contains: options.realName.trim(), mode: 'insensitive' } }
+        : {}),
+      ...(options?.status === 'verified' ? { identityVerifiedAt: { not: null } } : {}),
+      ...(options?.status === 'unverified' ? { identityVerifiedAt: null } : {}),
+    },
+    orderBy: [{ identityVerifiedAt: 'desc' }, { name: 'asc' }],
+    select: {
+      id: true,
+      name: true,
+      contactName: true,
+      phone: true,
+      identityRealName: true,
+      identityIdNumberMask: true,
+      identityVerifiedAt: true,
+      payoutChannel: true,
+      payoutAccountName: true,
+      payoutAccountLabel: true,
+      updatedAt: true,
+    },
+  });
+
+  return providers.map((p) => {
+    const hasPayoutAccount = Boolean(p.payoutAccountLabel?.trim());
+    const identityVerified = Boolean(p.identityVerifiedAt);
+    const nameMatch =
+      identityVerified && p.identityRealName && p.payoutAccountName
+        ? p.identityRealName === p.payoutAccountName
+        : null;
+    return {
+      providerId: p.id,
+      providerName: p.name,
+      contactName: p.contactName,
+      phone: p.phone,
+      identityVerified,
+      identityRealName: p.identityRealName,
+      identityIdNumberMask: p.identityIdNumberMask,
+      identityVerifiedAt: p.identityVerifiedAt,
+      payoutChannel: p.payoutChannel,
+      payoutAccountName: p.payoutAccountName,
+      payoutAccountLabel: p.payoutAccountLabel,
+      hasPayoutAccount,
+      nameMatch,
+      updatedAt: p.updatedAt,
+    };
+  });
+}
+
 export async function getMerchantDetail(brandName: string) {
-  const brand = await prisma.brand.findFirst({ where: { name: brandName } });
+  const brand = await prisma.brand.findFirst({
+    where: { name: brandName },
+    include: { organization: true },
+  });
   if (!brand) return null;
-  const [tasks, failedTasks, orders, websiteOrders, budget, credits, ledger] = await Promise.all([
-    prisma.agentTask.findMany({
-      where: { brandName },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-      select: { id: true, title: true, type: true, status: true, createdAt: true },
-    }),
-    prisma.agentTask.findMany({
-      where: { brandName, status: 'failed' },
-      orderBy: { createdAt: 'desc' },
-      take: 8,
-      select: { id: true, title: true, type: true, status: true, errorMessage: true, createdAt: true },
-    }),
-    prisma.taskOrder.findMany({
-      where: { brandName },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-      select: { id: true, title: true, status: true, createdAt: true, budget: true },
-    }),
-    prisma.websiteOrder.findMany({
-      where: { brandName },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-      include: { request: true },
-    }),
-    getBudgetAccount(brandName),
-    getAiCredits(brandName),
-    prisma.budgetLedger.findMany({
-      where: { brandName },
-      orderBy: { createdAt: 'desc' },
-      take: 8,
-    }),
+  const profile = mapBrand(brand);
+  const [taskCount, orderCount, websiteOrderCount, customPlatformCount] = await Promise.all([
+    prisma.agentTask.count({ where: { brandName } }),
+    prisma.taskOrder.count({ where: { brandName } }),
+    prisma.websiteOrder.count({ where: { brandName } }),
+    Promise.resolve(
+      (() => {
+        try {
+          const parsed = JSON.parse(brand.customPublishPlatforms || '[]') as unknown[];
+          return Array.isArray(parsed) ? parsed.length : 0;
+        } catch {
+          return 0;
+        }
+      })()
+    ),
   ]);
   return {
-    brand,
-    tasks,
-    failedTasks,
-    orders,
-    websiteOrders,
-    budget,
-    credits,
-    ledger,
-    ledgerSummary: {
-      freezeTotal: ledger.filter((l) => l.type === 'freeze').reduce((s, l) => s + l.amount, 0),
-      releaseTotal: ledger.filter((l) => l.type === 'release').reduce((s, l) => s + l.amount, 0),
-      anomaly: budget.frozen > budget.balance,
-    },
+    profile,
+    organization: brand.organization
+      ? {
+          id: brand.organization.id,
+          name: brand.organization.name,
+          legalName: brand.organization.legalName,
+          certStatus: brand.organization.certStatus,
+          contactName: brand.organization.contactName,
+          contactPhone: brand.organization.contactPhone,
+        }
+      : null,
+    profileCompleteness: checkBrandCompleteness(profile),
+    sourceMaterialCount: profile.sourceMaterials?.length ?? 0,
+    customPlatformCount,
+    activitySummary: { taskCount, orderCount, websiteOrderCount },
+    createdAt: brand.createdAt,
+    updatedAt: brand.updatedAt,
   };
 }
 
@@ -1060,16 +1111,42 @@ export async function listPlatformContentGovernance(filters?: {
     risky: await prisma.publishRecord.count({ where: { reviewCategory: { not: null } } }),
   };
 
+  const recordIds = records.map((r) => r.id);
+  const linkedJobs = recordIds.length
+    ? await prisma.publishJob.findMany({
+        where: { publishRecordId: { in: recordIds } },
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true,
+          publishRecordId: true,
+          agentTaskId: true,
+          status: true,
+        },
+      })
+    : [];
+  const jobByRecordId = new Map<string, (typeof linkedJobs)[number]>();
+  for (const job of linkedJobs) {
+    if (job.publishRecordId && !jobByRecordId.has(job.publishRecordId)) {
+      jobByRecordId.set(job.publishRecordId, job);
+    }
+  }
+
   return {
     stats,
     items: records.map((r) => {
       const content = r.contentItemId ? itemById.get(r.contentItemId) : undefined;
+      const job = jobByRecordId.get(r.id);
+      const failedLike =
+        r.status === 'failed' ||
+        r.reviewCategory === 'need_manual_publish' ||
+        job?.status === 'failed' ||
+        job?.status === 'need_manual';
       return {
         id: r.id,
         title: content?.title ?? '未命名内容',
         brandName: brandById.get(r.brandId) ?? '—',
         platform: r.platform,
-        status: r.status,
+        status: r.status === 'succeeded' ? 'published' : r.status,
         risk: r.reviewCategory ? '有风险' : '正常',
         publishedUrl: r.publishedUrl,
         errorCode: r.errorCode,
@@ -1078,9 +1155,144 @@ export async function listPlatformContentGovernance(filters?: {
         qualityChecksJson: content?.qualityChecksJson,
         executedAt: r.executedAt,
         createdAt: r.createdAt,
+        contentItemId: r.contentItemId,
+        publishJobId: job?.id ?? null,
+        agentTaskId: job?.agentTaskId ?? null,
+        canRedispatch: failedLike,
+        canManualFlag: failedLike || Boolean(r.reviewCategory),
       };
     }),
   };
+}
+
+async function resolvePublishRecordGovernanceContext(recordId: string) {
+  const record = await prisma.publishRecord.findUnique({ where: { id: recordId } });
+  if (!record) throw new Error('发布记录不存在');
+
+  const brand = await prisma.brand.findUnique({ where: { id: record.brandId }, select: { name: true } });
+  if (!brand) throw new Error('品牌不存在');
+
+  const job = await prisma.publishJob.findFirst({
+    where: { publishRecordId: recordId },
+    orderBy: { updatedAt: 'desc' },
+  });
+
+  return { record, brandName: brand.name, job };
+}
+
+/** 平台监管：重新派发到商家本机 Hermes，非平台代发 */
+export async function platformRedispatchPublishRecord(recordId: string, reason?: string) {
+  const { record, brandName, job } = await resolvePublishRecordGovernanceContext(recordId);
+
+  if (record.status === 'succeeded' || record.status === 'published') {
+    throw new Error('已成功发布的记录无需重新派发');
+  }
+
+  let redispatched = false;
+
+  if (job?.agentTaskId) {
+    const { retryAgentTask } = await import('../agent/worker.js');
+    const { enqueueAgentTask } = await import('../agent/worker.js');
+    const task = await retryAgentTask(job.agentTaskId);
+    if (task) {
+      await enqueueAgentTask(task);
+      redispatched = true;
+    }
+  }
+
+  if (!redispatched && job) {
+    await prisma.publishRecord.update({
+      where: { id: recordId },
+      data: {
+        status: 'pending',
+        errorCode: null,
+        reviewCategory: null,
+        executedAt: new Date(),
+      },
+    });
+    await prisma.publishJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'pending',
+        scheduledAt: new Date(),
+        lastErrorCode: null,
+      },
+    });
+    if (record.contentItemId) {
+      await prisma.contentItem.update({
+        where: { id: record.contentItemId },
+        data: { publishStatus: 'scheduled' },
+      });
+    }
+    const { processDuePublishJobs } = await import('./publish-plan.service.js');
+    await processDuePublishJobs();
+    redispatched = true;
+  }
+
+  if (!redispatched) {
+    throw new Error('未找到可派发的发布任务，请通知商家在其发布端重试');
+  }
+
+  const { notifyPublisherPublishRedispatched } = await import('../lib/publisher-notification-events.js');
+  await notifyPublisherPublishRedispatched({
+    brandName,
+    platform: record.platform,
+    recordId,
+  });
+
+  await appendAuditLog({
+    action: 'platform_publish_redispatch',
+    entity: 'PublishRecord',
+    entityId: recordId,
+    detail: reason?.trim() || '平台运营重新派发',
+    source: 'platform',
+  });
+
+  return { success: true, recordId, brandName };
+}
+
+/** 平台监管：标记需人工处理，通知商家跟进 */
+export async function platformFlagPublishRecordManual(recordId: string, reason: string) {
+  if (!reason.trim()) throw new Error('请填写转人工原因');
+
+  const { record, brandName, job } = await resolvePublishRecordGovernanceContext(recordId);
+
+  await prisma.publishRecord.update({
+    where: { id: recordId },
+    data: {
+      reviewCategory: 'need_manual_publish',
+      errorCode: record.errorCode ?? 'platform_manual_flag',
+    },
+  });
+
+  if (job) {
+    await prisma.publishJob.update({
+      where: { id: job.id },
+      data: { status: 'need_manual', lastErrorCode: reason.trim().slice(0, 200) },
+    });
+  }
+
+  if (job?.agentTaskId) {
+    await flagAgentTaskForReview(job.agentTaskId, reason.trim(), 'need_manual_publish');
+  }
+
+  const { notifyPublisherPublishManualHandling } = await import('../lib/publisher-notification-events.js');
+  await notifyPublisherPublishManualHandling({
+    brandName,
+    platform: record.platform,
+    recordId,
+    reason: reason.trim(),
+  });
+
+  await appendAuditLog({
+    action: 'platform_publish_manual_flag',
+    entity: 'PublishRecord',
+    entityId: recordId,
+    detail: reason.trim(),
+    source: 'platform',
+  });
+
+  return { success: true, recordId, brandName };
 }
 
 export async function listPlatformRiskTickets(filters?: {
@@ -1748,18 +1960,18 @@ export async function listPlatformReports(filters?: { period?: string; businessL
   const period = filters?.period ?? '近30天';
   const businessLine = filters?.businessLine ?? '全部';
 
-  const [brandCount, orderCount, completedOrders, agentTotal, agentFailed, merchants] = await Promise.all([
+  const [brandCount, orderCount, completedOrders, agentTotal, agentFailed, budgetRows] = await Promise.all([
     prisma.brand.count({ where: { status: { not: 'archived' } } }),
     prisma.taskOrder.count(),
     prisma.taskOrder.count({ where: { status: 'completed' } }),
     prisma.agentTask.count(),
     prisma.agentTask.count({ where: { status: 'failed' } }),
-    listPlatformMerchants(),
+    prisma.budgetAccount.findMany({ select: { balance: true, frozen: true } }),
   ]);
 
   const completionRate = orderCount > 0 ? Math.round((completedOrders / orderCount) * 100) : 0;
   const agentSuccessRate = agentTotal > 0 ? Math.round(((agentTotal - agentFailed) / agentTotal) * 100) : 100;
-  const highRiskMerchants = merchants.filter((m) => Number(m.frozen) > Number(m.balance)).length;
+  const highRiskMerchants = budgetRows.filter((m) => Number(m.frozen) > Number(m.balance)).length;
 
   const merchantGrowth = [8, 10, 9, 12, 11, 14, 13, 15, 16, 18, 17, brandCount % 20 + 10];
   const orderFulfillment = [62, 68, 71, 69, 74, 78, 75, 80, 82, completionRate % 30 + 70, 85, completionRate];

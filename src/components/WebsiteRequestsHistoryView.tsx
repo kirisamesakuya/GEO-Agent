@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, ChevronRight, FileText } from 'lucide-react';
 import { formatWebsiteLeadListLabel } from '../../lib/website-lead-intake';
+import { hasWebsiteGeoAnalysisNotes } from '../lib/website-requirement-nav';
 
 export interface WebsiteAttachment {
   name: string;
@@ -42,7 +43,7 @@ export default function WebsiteRequestsHistoryView({ brandName, onBack, onSelect
   }, [brandName]);
 
   return (
-    <div className="geo-page-content h-full overflow-y-auto space-y-4 pb-8">
+    <div className="geo-page-content space-y-4 pb-8">
       <button type="button" className="geo-btn-secondary text-sm flex items-center gap-2" onClick={onBack}>
         <ArrowLeft className="w-4 h-4" />
         返回创建网页
@@ -72,6 +73,11 @@ export default function WebsiteRequestsHistoryView({ brandName, onBack, onSelect
                 <div className="flex items-center gap-2 font-medium text-[var(--color-title)]">
                   <FileText className="w-4 h-4 shrink-0 text-[var(--color-accent)]" />
                   {req.pageType}
+                  {hasWebsiteGeoAnalysisNotes(req.notes) && (
+                    <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium bg-[var(--color-primary-light)] text-[var(--color-primary)]">
+                      含分析
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs mt-1 truncate" style={{ color: 'var(--neutral-text-03)' }}>
                   {formatWebsiteLeadListLabel(req)}

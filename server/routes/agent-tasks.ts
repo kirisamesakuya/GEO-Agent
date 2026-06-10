@@ -35,6 +35,8 @@ import {
 } from '../services/hermes-approval.service.js';
 import { isHermesExecutorTask } from '../lib/agent-status.js';
 import { getTaskQueueHint } from '../services/hermes-concurrency.service.js';
+import { getCampaignPlanByTaskId } from '../services/campaign.service.js';
+import { extractCampaignPackages } from '../../lib/campaign-package-output.js';
 
 const VALID_TYPES: AgentTaskType[] = [
   'article_generation', 'geo_analysis', 'geo_quick_start', 'geo_audit', 'geo_schema',
@@ -91,7 +93,7 @@ export function registerAgentTaskRoutes(app: Express) {
     const artifacts = Array.isArray(task.output?.artifacts)
       ? (task.output!.artifacts as Array<Record<string, unknown>>)
       : [];
-    const [confirmations, approvalPolicy, hermesRun] = await Promise.all([
+    const [confirmations, approvalPolicy, hermesRun, linkedCampaignPlan] = await Promise.all([
       task.output?.geoReportId
         ? prisma.geoActionConfirmation.findMany({
             where: { reportId: String(task.output.geoReportId) },
@@ -103,7 +105,20 @@ export function registerAgentTaskRoutes(app: Express) {
       task.externalRunId && isHermesExecutorTask(task.executor)
         ? fetchHermesRunSnapshot(task.externalRunId)
         : Promise.resolve(null),
+      task.type === 'campaign_plan'
+        ? getCampaignPlanByTaskId(task.id)
+        : Promise.resolve(null),
     ]);
+    const outputCampaignPlanId = task.output?.campaignPlanId
+      ? String(task.output.campaignPlanId)
+      : undefined;
+    const campaignPlanId = outputCampaignPlanId ?? linkedCampaignPlan?.id;
+    const campaignPackageCount =
+      task.type === 'campaign_plan'
+        ? extractCampaignPackages(task.output ?? {}).length ||
+          linkedCampaignPlan?.packages.length ||
+          0
+        : 0;
     res.json({
       task,
       logs,
@@ -125,6 +140,8 @@ export function registerAgentTaskRoutes(app: Express) {
         artifacts,
         executorLabel: task.executor === 'nous_hermes' ? '本机 Hermes' : '内置 Web AI',
         deliverable: buildTaskDeliverableView(task.type, task.output ?? undefined),
+        campaignPlanId: campaignPlanId ?? null,
+        campaignPackageCount: campaignPackageCount || null,
         approvalPolicy,
         hermesRun,
       },

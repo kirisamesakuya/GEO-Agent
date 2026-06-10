@@ -9,6 +9,7 @@ import { useHermesSubmitGuard } from '../hermes/HermesSubmitGuard';
 import {
   AI_MONITOR_STATUS_LABEL,
   buildDefaultAiMonitorSessions,
+  ensureAiMonitorPlatformCatalog,
   fetchAiMonitorSessions,
   mergeAiMonitorSessions,
   summarizeAiMonitorSessions,
@@ -48,6 +49,7 @@ export default function AiMonitorPlatformsPanel({
   );
 
   const loadSessions = useCallback(async () => {
+    await ensureAiMonitorPlatformCatalog();
     if (!brandName) {
       applySessions(buildDefaultAiMonitorSessions());
       return;
@@ -143,11 +145,6 @@ export default function AiMonitorPlatformsPanel({
 
   return (
     <div className="space-y-4">
-      <p className="text-xs px-1" style={{ color: 'var(--neutral-text-02)' }}>
-        请在本机浏览器打开下方各 AI 对话页完成登录；登录成功后点击「标记已就绪」即可用于查询采样。
-        密码与 Cookie 仅保存在本机浏览器，SaaS 不存储，与「发布账号」无关。
-      </p>
-
       <div className="geo-table-wrap">
         <table className="geo-table">
           <thead>

@@ -9,6 +9,7 @@ import {
   syncContentDeliveryUrl,
   type ContentDeliveryTab,
 } from '../lib/content-delivery-nav';
+import { parseArticleDeliveryStatusFromUrl } from '../lib/article-delivery-unified';
 
 interface Props {
   brandName: string;
@@ -65,10 +66,14 @@ export default function ContentDeliveryView({
   };
 
   const activeMeta = CONTENT_DELIVERY_TABS.find((t) => t.id === pageTab);
+  const articleStage = parseArticleDeliveryStatusFromUrl();
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden">
-      <div className="shrink-0 px-6 pt-4 pb-0 border-b" style={{ borderColor: 'var(--neutral-divider-02)' }}>
+    <div className="flex flex-col min-h-0">
+      <div
+        className="geo-page-tab-sticky shrink-0 px-6 pt-4 pb-0 border-b"
+        style={{ borderColor: 'var(--neutral-divider-02)' }}
+      >
         <div className="mb-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <h2 className="text-sm font-bold text-[var(--color-title)]">内容交付</h2>
@@ -81,12 +86,13 @@ export default function ContentDeliveryView({
         <ContentDeliveryTabs tab={pageTab} onTabChange={switchTab} />
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex flex-col min-w-0">
         {pageTab === 'article' && (
           <ArticleDeliveryUnifiedView
             brandName={brandName}
             onBrandChange={onBrandChange}
             onNavigate={onNavigate}
+            initialStatusFilter={articleStage}
           />
         )}
         {pageTab === 'website' && (

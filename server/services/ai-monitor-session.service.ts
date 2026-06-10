@@ -1,10 +1,13 @@
 import {
-  AI_MONITOR_PLATFORMS,
   AI_MONITOR_PROBE_KEYWORD,
-  aiMonitorPlatformCatalog,
   aiMonitorProbeBusinessRef,
   parseAiMonitorProbeBrandId,
 } from '../../lib/ai-monitor-platforms.js';
+import {
+  getAiMonitorLoginMeta,
+  getEnabledAiMonitorPlatformLabels,
+  listEnabledAiMonitorPlatformCatalog,
+} from './ai-monitor-platform-catalog.service.js';
 import type { IndexSamplingResultRow } from '../lib/index-sampling-output.js';
 import { prisma } from '../db/client.js';
 import { findBrandRow } from './brand.service.js';
@@ -28,6 +31,7 @@ export interface AiMonitorSessionDto {
   lastError?: string;
   verifyTaskId?: string;
   loginUrl?: string;
+  loginHint?: string;
 }
 
 async function mapSessionRow(row: {
@@ -39,7 +43,7 @@ async function mapSessionRow(row: {
   lastError: string | null;
   verifyTaskId: string | null;
 }): Promise<AiMonitorSessionDto> {
-  const { aiMonitorLoginUrl } = await import('../../lib/ai-monitor-platforms.js');
+  const meta = await getAiMonitorLoginMeta(row.platform);
   return {
     id: row.id,
     platform: row.platform,
@@ -48,31 +52,40 @@ async function mapSessionRow(row: {
     lastVerifiedAt: row.lastVerifiedAt?.toISOString(),
     lastError: row.lastError ?? undefined,
     verifyTaskId: row.verifyTaskId ?? undefined,
-    loginUrl: aiMonitorLoginUrl(row.platform),
+    loginUrl: meta.loginUrl,
+    loginHint: meta.loginHint,
   };
 }
 
-function catalogFallbackSessions(): AiMonitorSessionDto[] {
-  return aiMonitorPlatformCatalog().map((entry) => ({
-    id: `catalog-${entry.platform}`,
-    platform: entry.platform,
+async function catalogFallbackSessions(): Promise<AiMonitorSessionDto[]> {
+  const catalog = await listEnabledAiMonitorPlatformCatalog();
+  return catalog.map((entry) => ({
+    id: `catalog-${entry.label}`,
+    platform: entry.label,
     status: 'unknown',
     loginUrl: entry.loginUrl,
+    loginHint: entry.loginHint,
   }));
 }
 
-function mergeSessionsWithCatalog(sessions: AiMonitorSessionDto[]): AiMonitorSessionDto[] {
+async function mergeSessionsWithCatalog(sessions: AiMonitorSessionDto[]): Promise<AiMonitorSessionDto[]> {
+  const catalog = await listEnabledAiMonitorPlatformCatalog();
   const byPlatform = new Map(sessions.map((s) => [s.platform, s]));
-  return aiMonitorPlatformCatalog().map((entry) => {
-    const existing = byPlatform.get(entry.platform);
+  return catalog.map((entry) => {
+    const existing = byPlatform.get(entry.label);
     if (existing) {
-      return { ...existing, loginUrl: existing.loginUrl ?? entry.loginUrl };
+      return {
+        ...existing,
+        loginUrl: existing.loginUrl ?? entry.loginUrl,
+        loginHint: entry.loginHint,
+      };
     }
     return {
-      id: `catalog-${entry.platform}`,
-      platform: entry.platform,
+      id: `catalog-${entry.label}`,
+      platform: entry.label,
       status: 'unknown',
       loginUrl: entry.loginUrl,
+      loginHint: entry.loginHint,
     };
   });
 }
@@ -90,7 +103,8 @@ export async function ensureAiMonitorSessions(brandId: string): Promise<void> {
       select: { platform: true },
     });
     const have = new Set(existing.map((r) => r.platform));
-    const missing = AI_MONITOR_PLATFORMS.filter((p) => !have.has(p));
+    const enabled = await getEnabledAiMonitorPlatformLabels();
+    const missing = enabled.filter((p) => !have.has(p));
     if (!missing.length) return;
     await prisma.aiMonitorSession.createMany({
       data: missing.map((platform) => ({
@@ -110,7 +124,7 @@ export async function listAiMonitorSessions(brandName: string): Promise<{
   notReadyCount: number;
 }> {
   const brand = await findBrandRow(brandName);
-  if (!brand) return summarizeSessions(catalogFallbackSessions());
+  if (!brand) return summarizeSessions(await catalogFallbackSessions());
 
   await ensureAiMonitorSessions(brand.id);
 
@@ -120,9 +134,9 @@ export async function listAiMonitorSessions(brandName: string): Promise<{
       orderBy: { platform: 'asc' },
     });
     const sessions = await Promise.all(rows.map((row) => mapSessionRow(row)));
-    return summarizeSessions(mergeSessionsWithCatalog(sessions));
+    return summarizeSessions(await mergeSessionsWithCatalog(sessions));
   } catch {
-    return summarizeSessions(catalogFallbackSessions());
+    return summarizeSessions(await catalogFallbackSessions());
   }
 }
 
@@ -156,7 +170,8 @@ export async function updateAiMonitorSessionStatus(
   const brand = await findBrandRow(brandName);
   if (!brand) return null;
 
-  if (!AI_MONITOR_PLATFORMS.includes(platform as typeof AI_MONITOR_PLATFORMS[number])) {
+  const enabled = await getEnabledAiMonitorPlatformLabels();
+  if (!enabled.includes(platform)) {
     throw new Error('无效监测平台');
   }
 
@@ -298,10 +313,10 @@ export async function startAiMonitorVerify(
   if (!brand) return null;
 
   await ensureAiMonitorSessions(brand.id);
-  const targetPlatforms =
-    platforms?.length
-      ? platforms.filter((p) => AI_MONITOR_PLATFORMS.includes(p as typeof AI_MONITOR_PLATFORMS[number]))
-      : [...AI_MONITOR_PLATFORMS];
+  const enabled = await getEnabledAiMonitorPlatformLabels();
+  const targetPlatforms = platforms?.length
+    ? platforms.filter((p) => enabled.includes(p))
+    : enabled;
 
   if (!targetPlatforms.length) throw new Error('未指定有效监测平台');
 

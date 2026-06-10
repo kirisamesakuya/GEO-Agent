@@ -11,6 +11,7 @@ import CreateOrderView from './components/CreateOrderView';
 import {
   createOrderModeFromHint,
   CUSTOM_PUBLISH_ENABLED,
+  parseCampaignPlanIdFromHint,
   parseGeoReportIdFromHint,
   parseGeoReportIdFromUrl,
   resolveCreateOrderEntry,
@@ -75,6 +76,7 @@ import {
   parsePublishRecordIdFromHint,
 } from './lib/article-result-nav';
 import {
+  articleDeliveryStatusFromHint,
   parseArticleDeliveryDetailHint,
   parseArticleDeliveryOrderHint,
 } from './lib/article-delivery-unified';
@@ -144,9 +146,15 @@ function resolveInitialRoute(): { view: ViewType; hint?: string } {
       const taskHint = params.get('orderTask') ?? (om === 'custom' ? 'article_writing' : undefined);
       return resolveCreateOrderEntry(taskHint ?? undefined);
     }
+    const planId = params.get('campaignPlanId');
+    if (planId) return { view: 'create_order', hint: `plan:${planId}` };
+    const geoReportId = params.get('geoReportId');
+    if (geoReportId) return { view: 'create_order', hint: `geo:${geoReportId}` };
     return { view: 'create_order', hint: 'ai' };
   }
   if (v === 'delivery_plan') {
+    const planId = params.get('campaignPlanId');
+    if (planId) return { view: 'create_order', hint: `plan:${planId}` };
     return { view: 'create_order', hint: 'ai' };
   }
   const allowed: ViewType[] = [
@@ -270,6 +278,9 @@ function PublisherMain() {
       const geoReportId = parseGeoReportIdFromHint(targetHint);
       if (geoReportId) url.searchParams.set('geoReportId', geoReportId);
       else url.searchParams.delete('geoReportId');
+      const campaignPlanId = parseCampaignPlanIdFromHint(targetHint);
+      if (campaignPlanId) url.searchParams.set('campaignPlanId', campaignPlanId);
+      else url.searchParams.delete('campaignPlanId');
       if (orderMode === 'custom') {
         const task = parseCustomTaskKindFromHint(targetHint);
         if (task) url.searchParams.set('orderTask', task);
@@ -298,12 +309,21 @@ function PublisherMain() {
       url.searchParams.delete('contentTab');
       url.searchParams.delete('orderTab');
       url.searchParams.set('deliveryTab', contentDeliveryTabFromHint(targetHint));
-      if (
+      const stageFromHint = articleDeliveryStatusFromHint(targetHint);
+      if (stageFromHint && stageFromHint !== 'all') {
+        url.searchParams.set('articleStage', stageFromHint);
+      } else {
+        url.searchParams.delete('articleStage');
+      }
+      if (stageFromHint) {
+        url.searchParams.delete('hint');
+      } else if (
         targetHint?.startsWith('content:') ||
         targetHint?.startsWith('publish:') ||
         targetHint?.startsWith('order:') ||
         targetHint?.startsWith('website_req:') ||
-        targetHint?.startsWith('project:')
+        targetHint?.startsWith('project:') ||
+        targetHint?.startsWith('delivery:')
       ) {
         url.searchParams.set('hint', targetHint);
       } else if (targetHint && isLikelyOrderId(targetHint)) {
@@ -334,6 +354,7 @@ function PublisherMain() {
       url.searchParams.delete('orderMode');
       url.searchParams.delete('orderTask');
       url.searchParams.delete('geoReportId');
+      url.searchParams.delete('campaignPlanId');
     }
     if (targetView === 'indexing_rank' && targetHint) {
       url.searchParams.set('planId', targetHint);
@@ -706,16 +727,15 @@ function PublisherMain() {
           resolveBrandCenterTabFromUrl()
         );
         return (
-          <div key={`${effectiveBrand}-${activeView}`} className="flex h-full min-h-0 flex-col overflow-hidden">
-            <BrandCenterView
-              brandName={effectiveBrand}
-              initialTab={centerTab}
-              keywordHint={activeView === 'keyword_library' ? viewHint : undefined}
-              onBrandNameChange={handleBrandChange}
-              onBackToBrandManagement={() => navigate('brand_list')}
-              onNavigate={navigate}
-            />
-          </div>
+          <BrandCenterView
+            key={`${effectiveBrand}-${activeView}`}
+            brandName={effectiveBrand}
+            initialTab={centerTab}
+            keywordHint={activeView === 'keyword_library' ? viewHint : undefined}
+            onBrandNameChange={handleBrandChange}
+            onBackToBrandManagement={() => navigate('brand_list')}
+            onNavigate={navigate}
+          />
         );
       }
       case 'account_binding':
@@ -779,10 +799,10 @@ function PublisherMain() {
           onMenuToggle={() => setSidebarOpen((v) => !v)}
         />
         <div
-          className="flex-1 flex flex-col overflow-hidden min-w-0"
+          className="flex-1 flex flex-col overflow-hidden min-w-0 min-h-0"
           style={{ marginTop: 'var(--layout-header-height)' }}
         >
-          <main className="flex-1 overflow-hidden flex flex-col min-w-0">{renderActiveView()}</main>
+          <main className="geo-layout-scroll flex-1 min-h-0 min-w-0">{renderActiveView()}</main>
         </div>
       </div>
 

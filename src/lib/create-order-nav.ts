@@ -5,6 +5,7 @@ import {
   parseCustomTaskKindFromUrl,
   type ActiveCustomTaskKind,
 } from './custom-order-types';
+export { parseCampaignPlanIdFromHint, parseCampaignPlanIdFromUrl } from './campaign-plan-nav';
 /** 发布任务 Tab：AI 生成任务包 | 自定义发布 */
 export type CreateOrderMode = 'custom' | 'ai';
 
@@ -25,7 +26,7 @@ export const VISIBLE_CREATE_ORDER_MODES = CUSTOM_PUBLISH_ENABLED
 export function createOrderModeFromHint(hint?: string): CreateOrderMode {
   if (!CUSTOM_PUBLISH_ENABLED) return 'ai';
   if (!hint) return 'ai';
-  if (hint.startsWith('geo:')) return 'ai';
+  if (hint.startsWith('geo:') || hint.startsWith('plan:')) return 'ai';
   if (hint === 'ai' || hint === 'campaign' || hint === 'delivery') return 'ai';
   if (hint === 'article_writing' || hint === 'article' || hint === 'website') return 'custom';
   return 'ai';
@@ -79,6 +80,6 @@ export function resolveCreateOrderEntry(hint?: string): { view: ViewType; hint?:
   const kind = normalizeCustomTaskKind(parseCustomTaskKindFromHint(hint) ?? undefined);
   if (kind === 'website') return { view: 'create_website' };
   if (hint === 'article_writing' || hint === 'article') return { view: 'generate_article' };
-  if (hint?.startsWith('geo:')) return { view: 'create_order', hint };
+  if (hint?.startsWith('geo:') || hint?.startsWith('plan:')) return { view: 'create_order', hint };
   return { view: 'create_order', hint: 'ai' };
 }

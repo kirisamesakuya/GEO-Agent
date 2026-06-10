@@ -10,7 +10,8 @@ export type TaskOrderStatus =
   | 'pending_review'
   | 'revision'
   | 'completed'
-  | 'disputed';
+  | 'disputed'
+  | 'cancelled';
 
 export interface TaskOrderLike {
   type?: string;
@@ -34,6 +35,7 @@ export const TASK_ORDER_STATUS_LABEL: Record<string, string> = {
   revision: '最终返修',
   completed: '已完成',
   disputed: '争议中',
+  cancelled: '已撤回',
 };
 
 /** 发布端任务列表/详情展示用，避免与 Agent「已入队」等技术态混用 */

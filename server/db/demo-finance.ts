@@ -1,115 +1,142 @@
 import { prisma } from './client.js';
+import {
+  DEMO_PROVIDER_PAYOUT_PROFILES,
+  DEMO_WITHDRAWAL_REQUESTS,
+  demoChannelLabel,
+} from './demo-provider-finance-fixtures.js';
 
 const DEMO_FINANCE_KEY = 'demo_finance_v';
-const DEMO_FINANCE_VERSION = '2';
+const DEMO_FINANCE_VERSION = '5';
 
-export async function ensureDemoFinance(): Promise<void> {
-  const marker = await prisma.systemConfig.findUnique({ where: { key: DEMO_FINANCE_KEY } });
-  if (marker?.value === DEMO_FINANCE_VERSION) return;
+function profileData(profile: (typeof DEMO_PROVIDER_PAYOUT_PROFILES)[number]) {
+  return {
+    applicationStatus: profile.applicationStatus,
+    status: 'active' as const,
+    contactName: profile.contactName,
+    phone: profile.phone,
+    ...(profile.city ? { city: profile.city } : {}),
+    identityRealName: profile.identityRealName,
+    identityIdNumberMask: profile.identityIdNumberMask,
+    identityVerifiedAt: new Date(profile.identityVerifiedAt),
+    payoutChannel: profile.payoutChannel,
+    payoutAccountName: profile.payoutAccountName,
+    payoutAccountLabel: profile.payoutAccountLabel,
+  };
+}
 
-  const chenguang = await prisma.provider.findFirst({ where: { name: '晨光传媒' } });
-  if (chenguang) {
-    await prisma.provider.update({
-      where: { id: chenguang.id },
-      data: {
-        identityRealName: '张晨',
-        identityIdNumberMask: '320***********1234',
-        identityVerifiedAt: new Date('2025-01-15'),
-        payoutChannel: 'bank',
-        payoutAccountName: '张晨',
-        payoutAccountLabel: '银行卡 招商银行储蓄卡 ****8821',
-      },
-    });
-    const completedOrders = await prisma.taskOrder.findMany({
-      where: { providerId: chenguang.id, status: 'completed' },
-      include: { settlement: true },
-      take: 3,
-    });
-    for (const order of completedOrders) {
-      if (order.settlement) {
-        await prisma.settlementRecord.update({
-          where: { id: order.settlement.id },
-          data: { status: 'settled' },
-        });
-      } else {
-        await prisma.settlementRecord.create({
-          data: {
-            orderId: order.id,
-            status: 'settled',
-            amount: order.budget,
-          },
-        });
-      }
+/** 幂等同步演示接单方实名与提现账户（开发/演示环境每次启动可跑） */
+export async function syncDemoProviderFinanceProfiles(): Promise<number> {
+  let synced = 0;
+  for (const profile of DEMO_PROVIDER_PAYOUT_PROFILES) {
+    const data = profileData(profile);
+    const existing = await prisma.provider.findFirst({ where: { name: profile.providerName } });
+    if (existing) {
+      await prisma.provider.update({ where: { id: existing.id }, data });
+    } else {
+      await prisma.provider.create({
+        data: {
+          name: profile.providerName,
+          type: profile.type,
+          capabilities: JSON.stringify(profile.capabilities),
+          ...data,
+        },
+      });
     }
+    synced += 1;
+  }
+  return synced;
+}
 
-    const existingWithdrawals = await prisma.providerWithdrawalRequest.count({
-      where: { providerId: chenguang.id },
-    });
-    if (existingWithdrawals === 0) {
-      const now = Date.now();
-      await prisma.providerWithdrawalRequest.createMany({
-        data: [
-          {
-            providerId: chenguang.id,
-            amount: 1200,
-            channel: 'bank',
-            channelLabel: '招商银行 **** 8821',
-            status: 'pending',
-            createdAt: new Date(now - 2 * 86400000),
-          },
-          {
-            providerId: chenguang.id,
-            amount: 800,
-            channel: 'alipay',
-            channelLabel: '支付宝 张晨',
-            status: 'pending',
-            createdAt: new Date(now - 86400000),
-          },
-          {
-            providerId: chenguang.id,
-            amount: 1500,
-            channel: 'bank',
-            channelLabel: '招商银行 **** 8821',
-            status: 'approved',
-            reviewedAt: new Date(now - 43200000),
-            createdAt: new Date(now - 3 * 86400000),
-          },
-          {
-            providerId: chenguang.id,
-            amount: 2000,
-            channel: 'bank',
-            channelLabel: '招商银行 **** 8821',
-            status: 'paid',
-            reviewedAt: new Date(now - 10 * 86400000),
-            paidAt: new Date(now - 9 * 86400000),
-            paidNote: '线下转账流水号 202606010001',
-            createdAt: new Date(now - 12 * 86400000),
-          },
-          {
-            providerId: chenguang.id,
-            amount: 500,
-            channel: 'alipay',
-            channelLabel: '支付宝 张晨',
-            status: 'paid',
-            reviewedAt: new Date(now - 20 * 86400000),
-            paidAt: new Date(now - 19 * 86400000),
-            paidNote: '支付宝批量付款 202605280088',
-            createdAt: new Date(now - 21 * 86400000),
-          },
-          {
-            providerId: chenguang.id,
-            amount: 3000,
-            channel: 'bank',
-            channelLabel: '招商银行 **** 8821',
-            status: 'rejected',
-            note: '提现金额超过可提现余额',
-            reviewedAt: new Date(now - 5 * 86400000),
-            createdAt: new Date(now - 6 * 86400000),
-          },
-        ],
+async function settleProviderOrders(providerName: string, take = 3) {
+  const provider = await prisma.provider.findFirst({ where: { name: providerName } });
+  if (!provider) return;
+
+  const completedOrders = await prisma.taskOrder.findMany({
+    where: { providerId: provider.id, status: 'completed' },
+    include: { settlement: true },
+    take,
+  });
+
+  for (const order of completedOrders) {
+    if (order.settlement) {
+      await prisma.settlementRecord.update({
+        where: { id: order.settlement.id },
+        data: { status: 'settled' },
+      });
+    } else {
+      await prisma.settlementRecord.create({
+        data: {
+          orderId: order.id,
+          status: 'settled',
+          amount: order.budget,
+        },
       });
     }
   }
+}
+
+async function seedDemoWithdrawals() {
+  const now = Date.now();
+  const dayMs = 86400000;
+
+  for (const spec of DEMO_WITHDRAWAL_REQUESTS) {
+    const provider = await prisma.provider.findFirst({
+      where: { name: spec.providerName },
+      select: {
+        id: true,
+        payoutChannel: true,
+        payoutAccountName: true,
+        payoutAccountLabel: true,
+      },
+    });
+    if (!provider) continue;
+
+    const createdAt = new Date(now - spec.daysAgo * dayMs);
+    const channel = provider.payoutChannel ?? 'alipay';
+    const channelLabel = demoChannelLabel(provider);
+
+    const exists = await prisma.providerWithdrawalRequest.findFirst({
+      where: {
+        providerId: provider.id,
+        amount: spec.amount,
+        status: spec.status,
+        createdAt: {
+          gte: new Date(createdAt.getTime() - dayMs / 2),
+          lte: new Date(createdAt.getTime() + dayMs / 2),
+        },
+      },
+    });
+    if (exists) continue;
+
+    await prisma.providerWithdrawalRequest.create({
+      data: {
+        providerId: provider.id,
+        amount: spec.amount,
+        channel,
+        channelLabel,
+        status: spec.status,
+        note: spec.note ?? null,
+        paidNote: spec.paidNote ?? null,
+        createdAt,
+        reviewedAt:
+          spec.reviewedDaysAgo != null
+            ? new Date(now - spec.reviewedDaysAgo * dayMs)
+            : null,
+        paidAt: spec.paidDaysAgo != null ? new Date(now - spec.paidDaysAgo * dayMs) : null,
+      },
+    });
+  }
+}
+
+export async function ensureDemoFinance(): Promise<void> {
+  await syncDemoProviderFinanceProfiles();
+
+  const marker = await prisma.systemConfig.findUnique({ where: { key: DEMO_FINANCE_KEY } });
+  if (marker?.value === DEMO_FINANCE_VERSION) return;
+
+  await settleProviderOrders('晨光传媒');
+  await settleProviderOrders('蓝海内容', 2);
+  await seedDemoWithdrawals();
 
   const pendingDeposits = await prisma.budgetDepositRequest.count({ where: { status: 'pending' } });
   if (pendingDeposits === 0) {

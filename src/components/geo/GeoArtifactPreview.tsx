@@ -1,5 +1,5 @@
 import type { GeoAuditArtifact } from '../../lib/geo-audit-client';
-import { DEPLOY_BRIEF_BY_ARTIFACT_TYPE } from './GeoWebsiteDeployChecklist';
+import { DEPLOY_BRIEF_BY_ARTIFACT_TYPE } from './geo-artifact-delivery-brief';
 
 interface Props {
   artifact: GeoAuditArtifact;
@@ -8,16 +8,18 @@ interface Props {
 }
 
 function isMarkdown(type: string, name: string, mime?: string) {
+  const safeName = name.toLowerCase();
   return (
     type === 'markdown' ||
     mime?.includes('markdown') ||
-    name.endsWith('.md') ||
-    name.toLowerCase().includes('markdown')
+    safeName.endsWith('.md') ||
+    safeName.includes('markdown')
   );
 }
 
 function isJson(type: string, name: string, mime?: string) {
-  return type === 'json' || mime?.includes('json') || name.endsWith('.json');
+  const safeName = name.toLowerCase();
+  return type === 'json' || mime?.includes('json') || safeName.endsWith('.json');
 }
 
 function isImage(type: string, mime?: string) {
@@ -25,7 +27,9 @@ function isImage(type: string, mime?: string) {
 }
 
 export default function GeoArtifactPreview({ artifact, className = '', onRegenerateAsset }: Props) {
-  const { type, name, preview, url, mimeType } = artifact;
+  const type = artifact.type ?? '';
+  const name = artifact.name ?? '未命名产物';
+  const { preview, url, mimeType } = artifact;
   const deployBrief = DEPLOY_BRIEF_BY_ARTIFACT_TYPE[type] ?? DEPLOY_BRIEF_BY_ARTIFACT_TYPE.text;
   const assetTypeMap: Record<string, string> = {
     schema_jsonld: 'geo_schema',
@@ -133,9 +137,9 @@ export function GeoArtifactList({
 
   return (
     <ul className="space-y-2 text-[11px]">
-      {artifacts.map((a) => (
+      {artifacts.map((a, index) => (
         <li
-          key={a.id}
+          key={a.id ?? `${a.type ?? 'artifact'}-${a.name ?? index}`}
           className={`border rounded p-2 cursor-pointer transition-colors ${
             selectedId === a.id ? 'border-[var(--color-accent)] bg-[var(--color-accent-light)]/30' : ''
           }`}
@@ -145,8 +149,8 @@ export function GeoArtifactList({
           role={onSelect ? 'button' : undefined}
           tabIndex={onSelect ? 0 : undefined}
         >
-          <p className="font-medium">{a.name}</p>
-          <p className="text-[var(--neutral-text-03)]">{a.type}</p>
+          <p className="font-medium">{a.name ?? '未命名产物'}</p>
+          <p className="text-[var(--neutral-text-03)]">{a.type ?? 'unknown'}</p>
         </li>
       ))}
     </ul>

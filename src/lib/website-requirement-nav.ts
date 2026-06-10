@@ -64,6 +64,62 @@ export const WEBSITE_REQUIREMENT_STATUS_LABEL: Record<
   delivered: '已交付',
 };
 
+/** 需求备注是否来自网站 GEO 分析并附带方案摘要 */
+export function hasWebsiteGeoAnalysisNotes(notes?: string | null): boolean {
+  if (!notes) return false;
+  return notes.includes('来源：网站 GEO 资产') || notes.includes('分析摘要：');
+}
+
+export interface WebsiteGeoAnalysisNotes {
+  hasAnalysis: boolean;
+  source?: string;
+  reportId?: string;
+  reportTitle?: string;
+  websiteFromNotes?: string;
+  scope?: string;
+  summary?: string;
+  plainNotes?: string;
+}
+
+function pickPrefixedLine(notes: string, prefix: string): string | undefined {
+  const line = notes.split('\n').find((l) => l.startsWith(prefix));
+  return line ? line.slice(prefix.length).trim() : undefined;
+}
+
+/** 从需求备注解析 GEO 网站分析结构化字段 */
+export function parseWebsiteGeoAnalysisFromNotes(
+  notes?: string | null
+): WebsiteGeoAnalysisNotes {
+  const raw = notes?.trim() ?? '';
+  if (!raw) return { hasAnalysis: false };
+  if (!hasWebsiteGeoAnalysisNotes(raw)) {
+    return { hasAnalysis: false, plainNotes: raw };
+  }
+
+  const summaryIdx = raw.indexOf('分析摘要：');
+  const summary =
+    summaryIdx >= 0 ? raw.slice(summaryIdx + '分析摘要：'.length).trim() : undefined;
+
+  return {
+    hasAnalysis: true,
+    source: pickPrefixedLine(raw, '来源：'),
+    reportId: pickPrefixedLine(raw, '关联报告：'),
+    reportTitle: pickPrefixedLine(raw, '报告标题：'),
+    websiteFromNotes: pickPrefixedLine(raw, '官网：'),
+    scope: pickPrefixedLine(raw, '分析范围：'),
+    summary,
+  };
+}
+
+/** 从需求备注解析关联 GEO 报告 ID */
+export function parseGeoReportIdFromWebsiteNotes(notes?: string | null): string | undefined {
+  if (!notes) return undefined;
+  const line = notes.split('\n').find((l) => l.startsWith('关联报告：'));
+  if (!line) return undefined;
+  const id = line.slice('关联报告：'.length).trim();
+  return id || undefined;
+}
+
 export function websiteRequirementDetailHint(id: string) {
   return `website_req:${id}`;
 }

@@ -138,7 +138,7 @@ export default function KeywordLibraryView({
   const miningStatusLabel = lastMiningTask ? getResultConfirmUiStatus(lastMiningTask) : null;
 
   return (
-    <div className={`overflow-y-auto h-full space-y-4 ${embedded ? 'p-6' : 'geo-page-content'}`}>
+    <div className={`space-y-4 ${embedded ? 'p-6' : 'geo-page-content'}`}>
       {!embedded && <h2 className="text-lg font-bold">关键词库</h2>}
       <p className="text-xs text-[var(--neutral-text-03)]">供文章生成、GEO 分析、收录查询共用</p>
 

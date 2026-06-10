@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
-import { ArrowLeft, Check } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ArrowLeft, Check, PanelRight, X } from 'lucide-react';
+import OverlayDrawer from '../common/OverlayDrawer';
 
 export function ArticleDeliveryDetailShell({
   onBack,
@@ -10,6 +11,7 @@ export function ArticleDeliveryDetailShell({
   metaLine,
   mainContent,
   sidebar,
+  sidebarTitle = '交付信息',
 }: {
   onBack: () => void;
   backLabel?: string;
@@ -19,9 +21,16 @@ export function ArticleDeliveryDetailShell({
   metaLine: string;
   mainContent: ReactNode;
   sidebar: ReactNode;
+  sidebarTitle?: string;
 }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    if (sidebar) setSidebarOpen(true);
+  }, [sidebar]);
+
   return (
-    <div className="geo-page-content h-full overflow-y-auto pb-8">
+    <div className="geo-page-content pb-8">
       <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <button
           type="button"
@@ -31,7 +40,19 @@ export function ArticleDeliveryDetailShell({
           <ArrowLeft className="w-4 h-4" />
           {backLabel}
         </button>
-        {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+        <div className="flex flex-wrap gap-2">
+          {sidebar ? (
+            <button
+              type="button"
+              className="geo-btn-secondary geo-btn-sm inline-flex items-center gap-1.5"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <PanelRight className="w-4 h-4" />
+              {sidebarTitle}
+            </button>
+          ) : null}
+          {actions}
+        </div>
       </div>
 
       <div className="geo-card p-5 mb-4 space-y-3">
@@ -40,10 +61,27 @@ export function ArticleDeliveryDetailShell({
         <p className="text-xs text-[var(--neutral-text-03)]">{metaLine}</p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-        <div className="geo-card p-5 min-h-[320px]">{mainContent}</div>
-        <div className="space-y-4">{sidebar}</div>
-      </div>
+      <div className="geo-card p-5 min-h-[320px]">{mainContent}</div>
+
+      {sidebarOpen && sidebar ? (
+        <OverlayDrawer
+          onClose={() => setSidebarOpen(false)}
+          width={360}
+          panelClassName="border-l"
+          panelStyle={{ background: 'var(--color-bg-card)', borderColor: 'var(--neutral-divider-02)' }}
+        >
+          <div
+            className="flex items-center justify-between px-4 py-3 border-b shrink-0"
+            style={{ borderColor: 'var(--neutral-divider-02)' }}
+          >
+            <h3 className="text-sm font-semibold text-[var(--color-title)]">{sidebarTitle}</h3>
+            <button type="button" onClick={() => setSidebarOpen(false)} className="p-1 rounded hover:bg-[var(--color-bg)]" aria-label="关闭">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">{sidebar}</div>
+        </OverlayDrawer>
+      ) : null}
     </div>
   );
 }

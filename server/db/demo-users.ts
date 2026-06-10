@@ -177,8 +177,8 @@ async function upsertPublisherUsers() {
 async function upsertProviderUsers() {
   const appStatusByProvider: Record<string, string> = {
     晨光传媒: 'approved',
-    蓝海内容: 'submitted',
-    北辰工作室: 'draft',
+    蓝海内容: 'approved',
+    北辰工作室: 'approved',
     浩行传播: 'submitted',
   };
 

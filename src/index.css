@@ -335,6 +335,97 @@ table.geo-table > thead > tr > th {
   width: 100%;
 }
 
+/* ── 滚动策略：主内容区单滚动条；模块内可滚但隐藏滚动条 ── */
+.geo-layout-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / 0.55) transparent;
+}
+
+/* 主区单滚动：子页面按内容增高，禁止 flex 子项被压扁 */
+.geo-layout-scroll > * {
+  flex-shrink: 0;
+  min-height: min-content;
+}
+
+.geo-layout-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.geo-layout-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.geo-layout-scroll::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184 / 0.55);
+  border-radius: 999px;
+}
+
+.geo-layout-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgb(100 116 139 / 0.7);
+}
+
+.geo-scroll-hide {
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.geo-scroll-hide::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* 嵌入页 Tab 条吸顶（随主区滚动容器） */
+.geo-page-tab-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--color-bg);
+}
+
+/* 占满主区高度：顶栏固定，仅正文区滚动（品牌中心等） */
+.geo-layout-scroll > .geo-page-frame {
+  flex-shrink: 1;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.geo-page-frame__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / 0.55) transparent;
+}
+
+.geo-page-frame__body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.geo-page-frame__body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.geo-page-frame__body::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184 / 0.55);
+  border-radius: 999px;
+}
+
+.geo-page-frame__body::-webkit-scrollbar-thumb:hover {
+  background: rgb(100 116 139 / 0.7);
+}
+
 /* ── 发布端壳层：侧栏 + 主区 ── */
 .geo-layout-main {
   margin-left: var(--layout-main-offset);
@@ -426,17 +517,44 @@ table.geo-table > thead > tr > th {
   animation: geo-toast-in 200ms ease-out;
 }
 
-/* ── 左右分栏布局（内容库 / 预览面板） ── */
-@media (max-width: 1023px) {
-  .geo-split-layout {
-    flex-direction: column;
-  }
+/* ── 蒙层抽屉（GCP 风格右侧滑出） ── */
+.geo-overlay-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  border: none;
+  padding: 0;
+  background: rgba(15, 23, 42, 0.4);
+  cursor: default;
+  animation: geo-overlay-drawer-fade-in 200ms ease-out;
+}
 
-  .geo-split-layout .geo-preview-panel {
-    width: 100% !important;
-    max-height: min(45vh, 420px);
-    border-left: none !important;
-    border-top: 1px solid var(--neutral-divider-02);
+.geo-overlay-drawer-panel {
+  position: fixed;
+  inset-block: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -8px 0 32px rgba(15, 23, 42, 0.14);
+  animation: geo-overlay-drawer-slide-in 220ms ease-out;
+}
+
+@keyframes geo-overlay-drawer-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes geo-overlay-drawer-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
   }
 }
 
@@ -942,20 +1060,51 @@ table.geo-table > thead > tr > th {
   border: 1px solid var(--color-primary-soft);
 }
 
+.geo-brand-profile-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
 .geo-brand-workspace {
   display: flex;
-  flex: 1;
+  align-items: stretch;
   gap: var(--sp-lg);
-  overflow: hidden;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
+  flex: 1 1 auto;
 }
 
 .geo-brand-main {
   flex: 1;
   max-width: 48rem;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+.geo-brand-main__body {
+  flex: 1 1 auto;
   min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / 0.45) transparent;
+}
+
+.geo-brand-main__body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.geo-brand-main__body::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184 / 0.45);
+  border-radius: 999px;
 }
 
 .geo-brand-aside {
@@ -964,7 +1113,14 @@ table.geo-table > thead > tr > th {
   display: flex;
   flex-direction: column;
   gap: var(--sp-base);
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  max-height: 100%;
+  overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / 0.45) transparent;
 }
 
 /* ── 账号绑定：平台卡片列表 ── */

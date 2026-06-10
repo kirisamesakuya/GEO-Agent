@@ -20,6 +20,11 @@ export function registerWebsiteRoutes(app: Express) {
   app.get('/api/website-requests', async (req, res) => {
     const brandName = await requireBrandName(req, res);
     if (!brandName) return;
+    const { ensureDemoWebsiteOrders } = await import('../db/demo-orders.js');
+    const { isDemoPublisherSnapshotEnabled } = await import('../db/demo-publisher-snapshot.js');
+    if (isDemoPublisherSnapshotEnabled()) {
+      await ensureDemoWebsiteOrders(brandName);
+    }
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
     res.json({ requests: await listWebsiteRequests({ brandName, status }) });
   });

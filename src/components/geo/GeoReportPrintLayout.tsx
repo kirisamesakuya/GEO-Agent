@@ -13,7 +13,7 @@ export interface GeoReportPrintData {
   totalScore?: number | null;
   sections: Record<string, string>;
   prospectMode?: boolean;
-  scores?: Record<string, number> | null;
+  scores?: Record<string, string | number> | null;
   findings?: GeoAuditFinding[];
   actionPlan?: Array<{ id: string; horizon: string; title: string; detail: string }>;
 }
@@ -188,7 +188,7 @@ export default function GeoReportPrintLayout({ data, watermark, preview = false 
                   <tr key={key} style={{ borderBottom: '1px solid #e2e8f0' }}>
                     <td style={{ padding: '8px 0', color: '#64748b' }}>{SCORE_LABELS[key] ?? key}</td>
                     <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600, color: '#0f172a' }}>
-                      {value}
+                      {typeof value === 'object' ? JSON.stringify(value) : value}
                     </td>
                   </tr>
                 ))}
@@ -326,15 +326,21 @@ export default function GeoReportPrintLayout({ data, watermark, preview = false 
 }
 
 export function pickGeoReportHtmlArtifact(
-  artifacts?: Array<{ type: string; name: string; preview?: string; mimeType?: string }>
+  artifacts?: Array<{
+    type?: string;
+    name?: string;
+    preview?: string;
+    content?: string;
+    mimeType?: string;
+  }>
 ): string | null {
   if (!artifacts?.length) return null;
-  const htmlArt = artifacts.find(
-    (a) =>
-      a.type === 'html' ||
-      a.mimeType?.includes('html') ||
-      a.name.toLowerCase().endsWith('.html')
-  );
-  const content = htmlArt?.preview?.trim();
+  const htmlArt = artifacts.find((a) => {
+    const type = String(a.type ?? '').toLowerCase();
+    const name = String(a.name ?? '').toLowerCase();
+    const mime = String(a.mimeType ?? '').toLowerCase();
+    return type === 'html' || mime.includes('html') || name.endsWith('.html');
+  });
+  const content = String(htmlArt?.preview ?? htmlArt?.content ?? '').trim();
   return content || null;
 }

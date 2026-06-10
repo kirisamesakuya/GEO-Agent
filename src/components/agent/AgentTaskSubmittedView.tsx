@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { AgentTask, AgentTaskLog, ViewType } from '../../types';
 import { AGENT_TASK_TYPE_LABELS } from '../../types';
 import TaskStatusPill from '../common/TaskStatusPill';
+import OverlayDrawer from '../common/OverlayDrawer';
 import { resolveTaskPillDisplay } from '../../lib/agent-task-display';
 import { fetchHermesHealth, type HermesHealth } from '../../lib/hermes-client';
 import {
@@ -11,8 +12,10 @@ import {
   Clock,
   Cpu,
   Loader2,
+  PanelRight,
   RefreshCw,
   ShieldCheck,
+  X,
 } from 'lucide-react';
 
 interface Props {
@@ -27,6 +30,7 @@ export default function AgentTaskSubmittedView({ taskId, onNavigate }: Props) {
   const [logs, setLogs] = useState<AgentTaskLog[]>([]);
   const [health, setHealth] = useState<HermesHealth | null>(null);
   const [loading, setLoading] = useState(true);
+  const [statusDrawerOpen, setStatusDrawerOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,6 +53,10 @@ export default function AgentTaskSubmittedView({ taskId, onNavigate }: Props) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (task) setStatusDrawerOpen(true);
+  }, [task?.id]);
 
   useEffect(() => {
     if (!task || !ACTIVE.has(task.status)) return;
@@ -90,10 +98,9 @@ export default function AgentTaskSubmittedView({ taskId, onNavigate }: Props) {
   const recentLogs = logs.slice(0, 4);
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="geo-page-content max-w-6xl space-y-5 pb-8">
-        <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_0.9fr] gap-4">
-          <div className="geo-card p-6 space-y-5">
+    <div>
+      <div className="geo-page-content max-w-4xl space-y-5 pb-8">
+        <div className="geo-card p-6 space-y-5">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-start gap-3 min-w-0">
                 <div className="w-11 h-11 rounded-lg grid place-items-center bg-[var(--color-accent-light)] shrink-0">
@@ -149,6 +156,14 @@ export default function AgentTaskSubmittedView({ taskId, onNavigate }: Props) {
             </div>
 
             <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="geo-btn-secondary text-sm inline-flex items-center gap-1.5"
+                onClick={() => setStatusDrawerOpen(true)}
+              >
+                <PanelRight className="w-4 h-4" />
+                Hermes 状态
+              </button>
               <button type="button" className="geo-btn-secondary text-sm flex items-center gap-2" onClick={() => void load()}>
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                 刷新
@@ -174,8 +189,25 @@ export default function AgentTaskSubmittedView({ taskId, onNavigate }: Props) {
               )}
             </div>
           </div>
+      </div>
 
-          <div className="space-y-4">
+      {statusDrawerOpen && (
+        <OverlayDrawer
+          onClose={() => setStatusDrawerOpen(false)}
+          width={360}
+          panelClassName="border-l"
+          panelStyle={{ background: 'var(--color-bg-card)', borderColor: 'var(--neutral-divider-02)' }}
+        >
+          <div
+            className="flex items-center justify-between px-4 py-3 border-b shrink-0"
+            style={{ borderColor: 'var(--neutral-divider-02)' }}
+          >
+            <h3 className="text-sm font-semibold text-[var(--color-title)]">Hermes 状态</h3>
+            <button type="button" onClick={() => setStatusDrawerOpen(false)} className="p-1 rounded hover:bg-[var(--color-bg)]" aria-label="关闭">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
             <div className="geo-card p-5 space-y-3">
               <div className="flex items-center gap-2">
                 <Cpu className="w-5 h-5 text-[var(--color-accent)]" />
@@ -223,8 +255,8 @@ export default function AgentTaskSubmittedView({ taskId, onNavigate }: Props) {
               )}
             </div>
           </div>
-        </div>
-      </div>
+        </OverlayDrawer>
+      )}
     </div>
   );
 }

@@ -9,6 +9,21 @@ import { isAllBrandsScope } from './organization.service.js';
 import { paginatedResult, parsePagination } from '../lib/pagination.js';
 import { isArticleContentOrder } from './article-delivery.service.js';
 import { ensureDemoMarketplaceReady } from '../lib/ensure-demo-marketplace.js';
+import {
+  taskOrderStatusesForStageFilter,
+  type ArticleDeliveryStageFilter,
+} from '../lib/article-delivery-stage.js';
+import { notifyPublisherOrderWithdrawn } from '../lib/publisher-notification-events.js';
+
+export interface ListOrdersByBrandOptions {
+  /** 仅返回文章类任务（与内容交付统一列表一致） */
+  articleOnly?: boolean;
+  /** 统一阶段筛选（pending_provider = published 待接单） */
+  stage?: ArticleDeliveryStageFilter;
+  /** 原始 TaskOrder.status 精确筛选 */
+  status?: string;
+  platform?: string;
+}
 
 export async function listPublishedOrders(platform?: string) {
   await ensureDemoMarketplaceReady();
@@ -21,13 +36,33 @@ export async function listPublishedOrders(platform?: string) {
   });
 }
 
-export async function listOrdersByBrand(brandName: string) {
+export async function listOrdersByBrand(brandName: string, options?: ListOrdersByBrandOptions) {
   await ensureDemoMarketplaceReady();
-  return prisma.taskOrder.findMany({
-    where: isAllBrandsScope(brandName) ? {} : { brandName },
+
+  const stageStatuses = options?.stage ? taskOrderStatusesForStageFilter(options.stage) : undefined;
+  if (stageStatuses !== undefined && stageStatuses.length === 0) {
+    return [];
+  }
+
+  const statusFilter =
+    options?.status != null
+      ? { status: options.status }
+      : stageStatuses != null
+        ? { status: { in: stageStatuses } }
+        : {};
+
+  const rows = await prisma.taskOrder.findMany({
+    where: {
+      ...(isAllBrandsScope(brandName) ? {} : { brandName }),
+      ...(options?.platform ? { platform: options.platform } : {}),
+      ...statusFilter,
+    },
     include: { deliveries: true, revisions: true, settlement: true },
     orderBy: { updatedAt: 'desc' },
   });
+
+  if (!options?.articleOnly) return rows;
+  return rows.filter(isArticleContentOrder);
 }
 
 export async function listOrdersByProvider(providerId: string) {
@@ -68,6 +103,46 @@ function parseAttachments(raw: string | null | undefined): DeliveryAttachmentIte
 
 function acceptanceRequiresScreenshot(acceptance: string): boolean {
   return /截图|screen/i.test(acceptance);
+}
+
+/** 发布方撤回尚未被接单的任务，释放冻结预算并从大厅下架 */
+export async function withdrawPublisherTaskOrder(orderId: string, reason?: string) {
+  const existing = await prisma.taskOrder.findUnique({ where: { id: orderId } });
+  if (!existing) throw new Error('任务不存在');
+  if (existing.status !== 'published') {
+    throw new Error('仅待接单任务可撤回发单');
+  }
+  if (existing.providerId) {
+    throw new Error('已有接单方认领，无法撤回');
+  }
+
+  await prisma.taskOrderApplication.updateMany({
+    where: { orderId, status: { in: ['pending', 'accepted'] } },
+    data: { status: 'rejected' },
+  });
+
+  const order = await prisma.taskOrder.update({
+    where: { id: orderId },
+    data: { status: 'cancelled' },
+  });
+
+  const { releaseBudget } = await import('./budget.service.js');
+  await releaseBudget(order.brandName, order.budget, orderId);
+
+  await appendAuditLog({
+    action: 'order_withdraw',
+    entity: 'TaskOrder',
+    entityId: orderId,
+    detail: reason?.trim() || '发布方撤回发单',
+  });
+
+  await notifyPublisherOrderWithdrawn({
+    brandName: order.brandName,
+    orderId: order.id,
+    orderTitle: order.title,
+  });
+
+  return order;
 }
 
 export async function createTaskOrder(input: {

@@ -100,6 +100,9 @@ interface Props {
 
   onNavigate?: (view: ViewType, hint?: string) => void;
 
+  /** 从 URL articleStage 同步列表阶段筛选（发单后跳转、撤回后返回等） */
+  initialStatusFilter?: ArticleDeliveryStatusFilter;
+
 }
 
 
@@ -115,6 +118,8 @@ export default function ArticleDeliveryUnifiedView({
   onBrandChange,
 
   onNavigate,
+
+  initialStatusFilter,
 
 }: Props) {
 
@@ -155,6 +160,16 @@ export default function ArticleDeliveryUnifiedView({
     parseArticleDeliveryStatusFromUrl()
 
   );
+
+  useEffect(() => {
+    const syncStageFromUrl = () => setStatusFilter(parseArticleDeliveryStatusFromUrl());
+    window.addEventListener('popstate', syncStageFromUrl);
+    return () => window.removeEventListener('popstate', syncStageFromUrl);
+  }, []);
+
+  useEffect(() => {
+    if (initialStatusFilter) setStatusFilter(initialStatusFilter);
+  }, [initialStatusFilter]);
 
   const [page, setPage] = useState(1);
 

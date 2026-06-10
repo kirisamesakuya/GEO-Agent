@@ -142,6 +142,21 @@ export async function notifyPublisherArticleDraftSubmitted(input: {
   });
 }
 
+export async function notifyPublisherOrderWithdrawn(input: {
+  brandName: string;
+  orderId: string;
+  orderTitle: string;
+}) {
+  await createPublisherNotification({
+    brandName: input.brandName,
+    type: 'order',
+    title: '发单已撤回',
+    body: `「${input.orderTitle}」已从任务大厅下架，冻结预算已退回。`,
+    refId: input.orderId,
+    actionView: 'content_delivery',
+  });
+}
+
 export async function notifyPublisherPublishNeedReauth(input: {
   brandName: string;
   platform: string;
@@ -157,5 +172,38 @@ export async function notifyPublisherPublishNeedReauth(input: {
       `${input.platform} 发布账号授权失效，请前往发布账号管理重新授权后再发布。`,
     refId: input.recordId,
     actionView: 'account_binding',
+  });
+}
+
+export async function notifyPublisherPublishManualHandling(input: {
+  brandName: string;
+  platform: string;
+  recordId?: string;
+  reason?: string;
+}) {
+  await createPublisherNotification({
+    brandName: input.brandName,
+    type: 'publish',
+    title: '发布任务需人工处理',
+    body:
+      input.reason?.slice(0, 200) ??
+      `平台运营已将「${input.platform}」发布记录标记为需人工处理，请在内容交付中跟进。`,
+    refId: input.recordId,
+    actionView: 'content_delivery',
+  });
+}
+
+export async function notifyPublisherPublishRedispatched(input: {
+  brandName: string;
+  platform: string;
+  recordId?: string;
+}) {
+  await createPublisherNotification({
+    brandName: input.brandName,
+    type: 'publish',
+    title: '发布任务已重新派发',
+    body: `平台运营已请求重新派发「${input.platform}」发布任务，将在商家本机 Hermes 执行，请留意发布结果。`,
+    refId: input.recordId,
+    actionView: 'content_delivery',
   });
 }

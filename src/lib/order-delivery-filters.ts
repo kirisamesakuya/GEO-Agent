@@ -9,7 +9,8 @@ export type OrderStageFilter =
   | 'pending_review'
   | 'completed'
   | 'disputed'
-  | 'revision';
+  | 'revision'
+  | 'cancelled';
 
 export type OrderTypeFilter = 'all' | 'article' | 'non_article';
 
@@ -24,6 +25,7 @@ export const ORDER_STAGE_FILTER_OPTIONS: { id: OrderStageFilter; label: string }
   { id: 'revision', label: '最终返修' },
   { id: 'completed', label: '已完成' },
   { id: 'disputed', label: '争议中' },
+  { id: 'cancelled', label: '已撤回' },
 ];
 
 /** 旧 contentTab / contentPublishTabFromHint → 订单交付阶段 */

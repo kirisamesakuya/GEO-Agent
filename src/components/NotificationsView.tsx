@@ -121,7 +121,7 @@ export default function NotificationsView({ brandName, onBrandChange, onNavigate
   const failedCount = failedTasks.length;
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="geo-page-content">
       <div className="geo-page-content max-w-3xl space-y-4">
         <PageHeaderWithBrand
           title="消息通知"

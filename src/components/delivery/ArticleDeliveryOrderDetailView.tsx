@@ -29,6 +29,8 @@ interface TaskOrder {
   platform: string;
   budget: number;
   status: string;
+  deliverable?: string;
+  acceptance?: string;
   providerName?: string;
   brandName?: string;
   createdAt?: string;
@@ -58,6 +60,7 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
   const [disputeReason, setDisputeReason] = useState('');
   const [showRevisionModal, setShowRevisionModal] = useState(false);
   const [revisionSubmitting, setRevisionSubmitting] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
 
   const load = () => {
     void fetch(`/api/orders/${orderId}`)
@@ -161,6 +164,33 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
     }
   };
 
+  const withdrawOrder = async () => {
+    if (!order || withdrawing) return;
+    const ok = window.confirm(
+      `确定撤回发单「${order.title}」？\n\n任务将从资源平台下架，冻结预算 ¥${order.budget} 将退回可用余额。`
+    );
+    if (!ok) return;
+    setWithdrawing(true);
+    try {
+      const res = await fetch(`/api/orders/${order.id}/withdraw`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: '发布方撤回发单' }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok || data.error) {
+        toast(data.error ?? '撤回失败', 'error');
+        return;
+      }
+      toast('已撤回发单，预算已释放', 'success');
+      onNavigate?.('content_delivery', 'cancelled');
+    } catch {
+      toast('撤回失败，请稍后重试', 'error');
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
   const openDispute = async () => {
     if (!order || !disputeReason.trim()) {
       toast('请填写争议说明', 'error');
@@ -183,7 +213,12 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
   }
 
   const ownerLabel = order.providerName ?? '待接单';
-  const metaLine = `${ownerLabel} · 更新时间 ${formatArticleDeliveryTime(order.updatedAt ?? order.createdAt)}`;
+  const metaLine =
+    stage === 'pending_provider'
+      ? `发单时间 ${formatTaskOrderListTime(order.createdAt)} · 预算 ¥${order.budget}`
+      : stage === 'cancelled'
+        ? `已于 ${formatArticleDeliveryTime(order.updatedAt ?? order.createdAt)} 撤回`
+        : `${ownerLabel} · 更新时间 ${formatArticleDeliveryTime(order.updatedAt ?? order.createdAt)}`;
 
   const badges = (
     <>
@@ -206,27 +241,47 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
   );
 
   const actionTitle =
-    stage === 'draft_review'
-      ? '待审稿'
-      : stage === 'draft_revision'
-        ? '审稿返修'
-        : stage === 'pending_acceptance'
-          ? '待验收'
-          : stage === 'pending_publish'
-            ? '待发布'
-            : stage === 'completed'
+    stage === 'pending_provider'
+      ? '待接单'
+      : stage === 'writing'
+        ? '写作中'
+        : stage === 'draft_review'
+          ? '待审稿'
+          : stage === 'draft_revision'
+            ? '审稿返修'
+            : stage === 'pending_acceptance'
+              ? '待验收'
+              : stage === 'pending_publish'
+                ? '待发布'
+                : stage === 'completed'
               ? '已完成'
-              : '查看';
+              : stage === 'cancelled'
+                ? '已撤回'
+                : '查看';
 
   const mainBody =
-    stage === 'pending_acceptance' && latestFinal
-      ? latestFinal.content
-      : latestDraft?.content ?? latestFinal?.content ?? '（暂无交付内容）';
+    stage === 'pending_provider'
+      ? [order.deliverable, order.acceptance ? `验收标准：${order.acceptance}` : '']
+          .filter(Boolean)
+          .join('\n\n') || '（未填写交付要求）'
+      : stage === 'writing' && !latestDraft?.content
+        ? '接单方撰写中，提交草稿后将在此展示。'
+        : stage === 'pending_acceptance' && latestFinal
+          ? latestFinal.content
+          : latestDraft?.content ?? latestFinal?.content ?? '（暂无交付内容）';
 
   const mainLink = stage === 'pending_acceptance' ? latestFinal?.link : undefined;
 
   const logSteps: DeliveryLogStep[] = [
     { label: '任务发布', time: formatTaskOrderListTime(order.createdAt).split(' ')[1] ?? '—', done: true },
+    {
+      label: '接单认领',
+      time:
+        order.status !== 'published' && order.updatedAt
+          ? formatArticleDeliveryTime(order.updatedAt).split(' ')[1] ?? '—'
+          : '—',
+      done: order.status !== 'published',
+    },
     {
       label: '草稿提交',
       time: latestDraft ? formatArticleDeliveryTime(latestDraft.createdAt).split(' ')[1] ?? '—' : '—',
@@ -284,10 +339,83 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
         </>
       );
     }
+    if (stage === 'pending_provider') {
+      return (
+        <button
+          type="button"
+          className="geo-btn-secondary geo-btn-sm text-red-600 border-red-200 hover:bg-red-50"
+          disabled={withdrawing}
+          onClick={() => void withdrawOrder()}
+        >
+          {withdrawing ? '撤回中…' : '撤回发单'}
+        </button>
+      );
+    }
     return null;
   };
 
   const sidebar = () => {
+    if (stage === 'pending_provider') {
+      return (
+        <>
+          <ArticleDeliveryDetailPanel title="接单状态">
+            <p className="text-xs text-[var(--neutral-text-02)]">
+              任务已发布到资源平台，等待接单方认领。认领后将进入写作与审稿流程。
+            </p>
+            <p className="text-[11px] text-[var(--neutral-text-03)] mt-2">
+              若需调整需求或暂停招募，可使用右上角「撤回发单」下架任务并释放预算。
+            </p>
+          </ArticleDeliveryDetailPanel>
+          <ArticleDeliveryDetailPanel title="发单信息">
+            <div className="text-xs space-y-2">
+              <p>
+                <span className="text-[var(--neutral-text-03)]">预算：</span>¥{order.budget}
+              </p>
+              <p>
+                <span className="text-[var(--neutral-text-03)]">发单时间：</span>
+                {formatTaskOrderListTime(order.createdAt)}
+              </p>
+              <p>
+                <span className="text-[var(--neutral-text-03)]">接单方：</span>
+                {ownerLabel}
+              </p>
+            </div>
+          </ArticleDeliveryDetailPanel>
+          <ArticleDeliveryDetailPanel title="交付日志">
+            <ArticleDeliveryLogTimeline steps={logSteps} />
+          </ArticleDeliveryDetailPanel>
+        </>
+      );
+    }
+
+    if (stage === 'writing') {
+      return (
+        <>
+          <ArticleDeliveryDetailPanel title="写作进度">
+            <p className="text-xs text-[var(--neutral-text-02)]">
+              {order.providerName
+                ? `${order.providerName} 已接单，正在撰写文章草稿。`
+                : '等待接单方提交草稿。'}
+            </p>
+          </ArticleDeliveryDetailPanel>
+          <ArticleDeliveryDetailPanel title="接单方">
+            <div className="text-xs space-y-1">
+              <p>
+                <span className="text-[var(--neutral-text-03)]">服务商：</span>
+                {ownerLabel}
+              </p>
+              <p>
+                <span className="text-[var(--neutral-text-03)]">预算：</span>¥{order.budget}
+              </p>
+            </div>
+          </ArticleDeliveryDetailPanel>
+          <ArticleDeliveryDetailPanel title="交付日志">
+            <ArticleDeliveryLogTimeline steps={logSteps} />
+          </ArticleDeliveryDetailPanel>
+        </>
+      );
+    }
+
     if (stage === 'draft_review') {
       return (
         <>
@@ -424,6 +552,21 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
       );
     }
 
+    if (stage === 'cancelled') {
+      return (
+        <>
+          <ArticleDeliveryDetailPanel title="撤回说明">
+            <p className="text-xs text-[var(--neutral-text-02)]">
+              任务已从资源平台下架，冻结预算已退回可用余额。如需继续投放，请重新发单。
+            </p>
+          </ArticleDeliveryDetailPanel>
+          <ArticleDeliveryDetailPanel title="交付日志">
+            <ArticleDeliveryLogTimeline steps={logSteps} />
+          </ArticleDeliveryDetailPanel>
+        </>
+      );
+    }
+
     if (stage === 'pending_publish') {
       return (
         <>
@@ -447,11 +590,15 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
   };
 
   const mainTitle =
-    stage === 'draft_review' || stage === 'draft_revision'
-      ? '待审草稿'
-      : stage === 'pending_acceptance'
-        ? '发布交付内容'
-        : '文章内容';
+    stage === 'pending_provider' || stage === 'cancelled'
+      ? '任务要求'
+      : stage === 'draft_review' || stage === 'draft_revision'
+        ? '待审草稿'
+        : stage === 'pending_acceptance'
+          ? '发布交付内容'
+          : stage === 'writing'
+            ? '写作进度'
+            : '文章内容';
 
   return (
     <>
@@ -468,7 +615,16 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
         onConfirm={() => void requestRevision()}
       />
       <ArticleDeliveryDetailShell
-      onBack={() => onNavigate?.('content_delivery')}
+      onBack={() =>
+        onNavigate?.(
+          'content_delivery',
+          stage === 'pending_provider'
+            ? 'pending_provider'
+            : stage === 'cancelled'
+              ? 'cancelled'
+              : undefined
+        )
+      }
       actions={renderActions()}
       title={order.title}
       badges={badges}

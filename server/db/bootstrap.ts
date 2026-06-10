@@ -4,6 +4,10 @@ import {
   MEDIA_PLATFORM_CATALOG_CONFIG_KEY,
   buildDefaultMediaPlatformCatalog,
 } from '../../lib/media-platform-catalog.js';
+import {
+  AI_MONITOR_PLATFORM_CATALOG_CONFIG_KEY,
+  buildDefaultAiMonitorPlatformCatalog,
+} from '../../lib/ai-monitor-platform-catalog.js';
 
 const DEFAULT_SKILL_ROUTE_ENTRIES: SkillRouteEntry[] = [
   { taskType: 'article_generation', skillName: 'geo.article.generate', executor: 'direct_model', enabled: true, priority: 1 },
@@ -87,10 +91,15 @@ export async function ensureRuntimeDefaults() {
 
   await mergeSkillRoutes();
   await ensureMediaPlatformCatalogDefaults();
+  await ensureAiMonitorPlatformCatalogDefaults();
 
   if (process.env.NODE_ENV !== 'production' || process.env.SEED_DEMO_DATA === 'true') {
     const { ensureDemoMediaPlatforms } = await import('./demo-media-platforms.js');
+    const { ensureDemoMonitorPlatforms } = await import('./demo-monitor-platforms.js');
+    const { ensureDemoFinance } = await import('./demo-finance.js');
     await ensureDemoMediaPlatforms();
+    await ensureDemoMonitorPlatforms();
+    await ensureDemoFinance();
   }
 
   const { ensurePlatformAccountBindings } = await import('../services/account-bind.service.js');
@@ -108,6 +117,20 @@ async function ensureMediaPlatformCatalogDefaults() {
   await prisma.systemConfig.create({
     data: {
       key: MEDIA_PLATFORM_CATALOG_CONFIG_KEY,
+      value: JSON.stringify(defaults),
+    },
+  });
+}
+
+async function ensureAiMonitorPlatformCatalogDefaults() {
+  const existing = await prisma.systemConfig.findUnique({
+    where: { key: AI_MONITOR_PLATFORM_CATALOG_CONFIG_KEY },
+  });
+  if (existing?.value?.trim()) return;
+  const defaults = buildDefaultAiMonitorPlatformCatalog();
+  await prisma.systemConfig.create({
+    data: {
+      key: AI_MONITOR_PLATFORM_CATALOG_CONFIG_KEY,
       value: JSON.stringify(defaults),
     },
   });

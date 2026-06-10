@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bot } from 'lucide-react';
+import { Bot, X } from 'lucide-react';
 import type { AgentTask, AgentTaskLog } from '../../types';
 import TaskStatusPill from '../../components/common/TaskStatusPill';
 import { useToast } from '../../context/ToastContext';
@@ -7,6 +7,7 @@ import { usePlatformFetch } from '../../hooks/usePlatformFetch';
 import { usePlatformRole, type PlatformRole } from '../../hooks/usePlatformRole';
 import { platformFetch } from '../../lib/platform-api';
 import HermesStatusBadge from '../../components/common/HermesStatusBadge';
+import OverlayDrawer from '../../components/common/OverlayDrawer';
 import PlatformLayout from './components/PlatformLayout';
 import type { PlatformView } from './types';
 import './platform-theme.css';
@@ -27,8 +28,10 @@ import PlatformPublisherAccountsView from './views/PlatformPublisherAccountsView
 import PlatformProviderAccountsView from './views/PlatformProviderAccountsView';
 import PlatformUsersView from './views/PlatformUsersView';
 import PlatformProvidersView from './views/PlatformProvidersView';
+import PlatformProviderIdentityView from './views/PlatformProviderIdentityView';
 import PlatformMenuAdminView from './views/PlatformMenuAdminView';
 import PlatformMediaPlatformsView from './views/PlatformMediaPlatformsView';
+import PlatformMonitorPlatformsView from './views/PlatformMonitorPlatformsView';
 import PlatformCustomPublishPlatformsView from './views/PlatformCustomPublishPlatformsView';
 import PlatformFilterBar from './components/PlatformFilterBar';
 import PlatformFilterField, { PlatformFilterDateRange } from './components/PlatformFilterField';
@@ -182,19 +185,22 @@ export default function PlatformApp() {
     load();
   };
 
-  const legacyDrawerOpen = Boolean(selectedTask);
-
   return (
     <>
     <PlatformLayout
       view={view}
       onNavigate={navigate}
-      drawerOpen={legacyDrawerOpen}
       drawer={(
         <>
         {selectedTask && view === 'agents' && (
-          <aside className="w-full lg:w-[440px] border-t lg:border-t-0 border-l overflow-y-auto p-4 space-y-4 shrink-0 max-h-[50vh] lg:max-h-none" style={{ borderColor: 'var(--neutral-divider-02)' }}>
-            <h3 className="font-semibold text-sm">{selectedTask.title}</h3>
+          <OverlayDrawer onClose={() => setSelectedTask(null)} width={440} panelClassName="border-l" panelStyle={{ background: 'var(--color-bg-card)', borderColor: 'var(--neutral-divider-02)' }}>
+            <div className="flex items-start justify-between gap-3 px-4 py-3 border-b shrink-0" style={{ borderColor: 'var(--neutral-divider-02)' }}>
+              <h3 className="font-semibold text-sm min-w-0 pr-2">{selectedTask.title}</h3>
+              <button type="button" onClick={() => setSelectedTask(null)} className="p-1 rounded hover:bg-[var(--color-bg)] shrink-0" aria-label="关闭">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
             <div className="flex gap-2 flex-wrap items-center">
               <TaskStatusPill status={selectedTask.status} userErrorMessage={selectedTask.userErrorMessage} output={selectedTask.output} />
               <span className="text-xs" style={{ color: 'var(--neutral-text-03)' }}>{selectedTask.type} · {selectedTask.executor}</span>
@@ -273,7 +279,8 @@ export default function PlatformApp() {
                 }}>取消</button>
               </div>
             </div>
-          </aside>
+            </div>
+          </OverlayDrawer>
         )}
         </>
       )}
@@ -293,10 +300,11 @@ export default function PlatformApp() {
           {view === 'role_permissions' && <PlatformRolesView section="permissions" />}
           {view === 'menu_admin' && <PlatformMenuAdminView />}
           {view === 'media_platforms' && <PlatformMediaPlatformsView />}
+          {view === 'monitor_platforms' && <PlatformMonitorPlatformsView />}
           {view === 'custom_publish_platforms' && <PlatformCustomPublishPlatformsView />}
           {view === 'publisher_accounts' && <PlatformPublisherAccountsView section="balances" />}
           {view === 'publisher_deposits' && <PlatformPublisherAccountsView section="deposits" />}
-          {view === 'provider_accounts' && <PlatformProviderAccountsView />}
+          {view === 'provider_accounts' && <PlatformProviderAccountsView onNavigate={navigate} />}
           {view === 'provider_settlement' && <PlatformFundsView section="settlement" />}
           {view === 'provider_withdrawals' && <PlatformFundsView section="withdrawals" />}
           {view === 'funds' && <PlatformFundsView section="settlement" />}
@@ -305,7 +313,7 @@ export default function PlatformApp() {
             <PlatformFulfillmentRatingView />
           )}
           {view === 'reports' && isPlatformViewEnabled('reports') && <PlatformReportsView />}
-          {view === 'merchants' && <PlatformMerchantsView />}
+          {view === 'merchants' && <PlatformMerchantsView onNavigate={navigate} />}
           {view === 'orders' && <PlatformOrdersView />}
           {view === 'website' && <PlatformWebsiteOpsView />}
           {view === 'org_certs' && <PlatformOrgCertsView />}
@@ -408,7 +416,9 @@ export default function PlatformApp() {
             </div>
           )}
 
-          {view === 'providers' && <PlatformProvidersView />}
+          {view === 'providers' && <PlatformProvidersView onNavigate={navigate} />}
+
+          {view === 'provider_identity' && <PlatformProviderIdentityView onNavigate={navigate} />}
 
           {view === 'audit' && (
             <div className="space-y-3">

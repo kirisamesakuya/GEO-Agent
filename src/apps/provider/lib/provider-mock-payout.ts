@@ -22,6 +22,43 @@ interface MockProviderPayoutStore {
   payout?: MockProviderPayoutAccount;
 }
 
+/** 与 server/db/demo-provider-finance-fixtures 对齐的接单端本地 Mock（API 未落库时兜底） */
+const DEMO_PAYOUT_BY_PROVIDER_NAME: Record<string, MockProviderPayoutStore> = {
+  晨光传媒: {
+    identity: {
+      verified: true,
+      realName: '张晨',
+      idNumberMask: '320***********1234',
+    },
+    payout: {
+      payoutChannel: 'alipay',
+      payoutAccountName: '张晨',
+      payoutAccountDetail: '13812348888',
+      payoutAccountLabel: '13812348888',
+    },
+  },
+  蓝海内容: {
+    identity: {
+      verified: true,
+      realName: '李蓝',
+      idNumberMask: '310***********5678',
+    },
+    payout: {
+      payoutChannel: 'alipay',
+      payoutAccountName: '李蓝',
+      payoutAccountDetail: 'lanhai_content@qq.com',
+      payoutAccountLabel: 'lanhai_content@qq.com',
+    },
+  },
+  北辰工作室: {
+    identity: {
+      verified: true,
+      realName: '王北辰',
+      idNumberMask: '110***********9012',
+    },
+  },
+};
+
 function storageKey(providerId: string) {
   return `provider_mock_payout_${providerId}`;
 }
@@ -38,6 +75,19 @@ function readStore(providerId: string): MockProviderPayoutStore {
 
 function writeStore(providerId: string, store: MockProviderPayoutStore) {
   localStorage.setItem(storageKey(providerId), JSON.stringify(store));
+}
+
+/** 演示接单方：若本地无 Mock 且服务端未落库，写入预设实名/提现账户 */
+export function ensureDemoProviderMockStore(providerId: string, providerName?: string | null) {
+  if (!providerName) return;
+  const preset = DEMO_PAYOUT_BY_PROVIDER_NAME[providerName];
+  if (!preset) return;
+  const current = readStore(providerId);
+  if (current.identity?.verified && (current.payout || !preset.payout)) return;
+  writeStore(providerId, {
+    identity: current.identity?.verified ? current.identity : preset.identity,
+    payout: current.payout ?? preset.payout,
+  });
 }
 
 export function loadMockProviderIdentity(providerId: string): MockProviderIdentity | null {

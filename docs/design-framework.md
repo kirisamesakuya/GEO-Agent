@@ -84,3 +84,23 @@
 接单端中性色使用 `text-provider-*`、`border-provider`、`provider-card`，禁止新增 Tailwind `gray-*`。
 
 在浏览器打开 `docs/ui-design-preview.html` 可对照 token 与组件样例。
+
+## 8. 滚动策略（主区单滚动条）
+
+**原则**：整页只在 `App.tsx` 的 `<main class="geo-layout-scroll">` 出现可见滚动条；各业务模块随主区自然增高，禁止再套一层 `h-full overflow-y-auto` 形成「模块内大滚动条」。
+
+| 类名 | 用途 |
+|---|---|
+| `.geo-layout-scroll` | 主内容区：细滚动条、`scrollbar-gutter: stable` |
+| `.geo-scroll-hide` | 侧栏列表、抽屉正文、sticky 辅栏：可滚轮滚动但隐藏滚动条 |
+| `.geo-page-tab-sticky` | 嵌入页 Tab 条吸顶（随主区滚动） |
+
+**布局约定**
+
+1. 主区 `<main class="geo-layout-scroll">` 不要用 `flex flex-col` 包裹页面（否则子项默认 `flex-shrink:1` 会被压扁）；页面根节点禁止 `h-full overflow-hidden`。
+2. Flex 纵向链：`min-h-0` 只用于 Header 下壳层；品牌工作台等长表单用 `.geo-brand-workspace` 随主区增高，侧栏 `sticky` + `geo-scroll-hide`。
+3. 左右分栏：主列随主区滚动；侧栏 `sticky top-0 self-start` + `geo-scroll-hide` + `max-h: calc(100vh - var(--layout-header-height))`。
+4. 弹窗 / 抽屉内局部滚动：用 `geo-scroll-hide`，不用默认粗滚动条。
+5. 代码块、日志等小区域 `max-h-* overflow-y-auto` 可保留，同样建议加 `geo-scroll-hide`。
+
+实现参考：`GeoReportHistoryView`、`GeoQuickStartView`、`RightPreviewPanel`、`Sidebar` 导航区。

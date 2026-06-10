@@ -482,11 +482,60 @@ export function fixtureForGeoTaskType(type: string, input: Record<string, unknow
       return fixtureGeoPlatformOptimizer(input);
     case 'geo_report_pdf':
       return fixtureGeoAudit({ ...input, modules: ['audit'] });
-    case 'geo_compare':
+    case 'geo_compare': {
+      const brand = brandFromInput(input);
+      const base = fixtureGeoAudit(input);
+      const baselineSnap = input.baselineReport as Record<string, unknown> | undefined;
+      const currentSnap = input.currentReport as Record<string, unknown> | undefined;
+      const baselineScore = Number(baselineSnap?.totalScore ?? 21);
+      const currentScore = Number(currentSnap?.totalScore ?? base.audit.totalScore ?? 58);
+      const baselineMention = Number(baselineSnap?.mentionRate ?? 18);
+      const currentMention = Number(currentSnap?.mentionRate ?? base.metrics?.mentionRate ?? 42);
+      const mentionDelta = currentMention - baselineMention;
+      const scoreDelta = currentScore - baselineScore;
+      const compareMd = `# ${brand} · GEO 月度对比报告
+
+| 指标 | 基线（起点） | 当前 | 变化 |
+|------|-------------|------|------|
+| 总分 | ${baselineScore} | ${currentScore} | ${scoreDelta >= 0 ? '+' : ''}${scoreDelta} |
+| 提及率 | ${baselineMention}% | ${currentMention}% | ${mentionDelta >= 0 ? '+' : ''}${mentionDelta}% |
+| 内容缺口 | ${baselineSnap?.gapsFound ?? 8} 项 | ${currentSnap?.gapsFound ?? 4} 项 | 改善 |
+
+## 结论摘要
+相较基线，${brand} 在 DeepSeek、豆包场景的提及稳定性提升；Kimi 与长尾问答仍有补位空间。
+
+## 建议下一步
+1. 对仍落后的平台继续发内容任务包
+2. 14 天后复测排名监控采样
+3. 将本报告 PDF 发给客户做月度复盘`;
       return {
-        ...fixtureGeoAudit(input),
-        audit: { ...fixtureGeoAudit(input).audit, reportType: 'compare', delta: { totalScore: +5 } },
+        ...base,
+        summary: compareMd,
+        audit: {
+          ...base.audit,
+          reportType: 'compare',
+          baselineTotalScore: baselineScore,
+          delta: { totalScore: scoreDelta, mentionRate: mentionDelta, gapsFound: -4 },
+        },
+        data: {
+          ...base.data,
+          brandMentionSummary: `相较基线，提及率 ${mentionDelta >= 0 ? '提升' : '下降'} ${Math.abs(mentionDelta)} 个百分点，总分 ${scoreDelta >= 0 ? '提升' : '下降'} ${Math.abs(scoreDelta)} 分。`,
+          platformDelta: [
+            { platform: 'DeepSeek', mentionDelta: 15, note: '引用门店 FAQ 增加' },
+            { platform: '豆包', mentionDelta: 10, note: '探店笔记被收录' },
+            { platform: 'Kimi', mentionDelta: 4, note: '仍低于竞品' },
+          ],
+        },
+        artifacts: [
+          {
+            id: 'compare-monthly-md',
+            type: 'markdown',
+            name: 'MONTHLY-COMPARE.md',
+            preview: compareMd,
+          },
+        ],
       };
+    }
     default:
       return fixtureGeoAudit(input);
   }

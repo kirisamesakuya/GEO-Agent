@@ -550,7 +550,7 @@ export default function GenerateArticleView({
   }, [authorizedPublishAccounts, selectedAccountId]);
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div>
       <div className="geo-page-content max-w-7xl space-y-4">
         <PageHeaderWithBrand
           title="生成 GEO 文章"

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import {
   User,
   Sparkles,
@@ -22,6 +22,7 @@ import {
 import {
   applyMockProviderIdentity,
   applyMockProviderPayoutAccount,
+  ensureDemoProviderMockStore,
   loadMockProviderIdentity,
   loadMockProviderPayoutAccount,
 } from '../lib/provider-mock-payout';
@@ -91,9 +92,10 @@ export default function ProviderProfileView({
       .then((d) => {
         const p = d.provider;
         if (!p) return;
+        ensureDemoProviderMockStore(providerId, p.name ?? provider.name);
         setIndustryTags(parseJsonArray(p.industryTags));
         setPlatforms(parseJsonArray(p.platforms));
-        const channel = (p.payoutChannel as PayoutChannel) || 'bank';
+        const channel = (p.payoutChannel as PayoutChannel) || 'alipay';
         const mockIdentity = loadMockProviderIdentity(providerId);
         const mockPayout = loadMockProviderPayoutAccount(providerId);
         const identityVerified = Boolean(p.identityVerifiedAt) || Boolean(mockIdentity?.verified);
@@ -319,12 +321,7 @@ export default function ProviderProfileView({
     );
   }
 
-  const payoutDetailPlaceholder =
-    payoutForm.payoutChannel === 'bank'
-      ? '如：招商银行储蓄卡 ****8821'
-      : payoutForm.payoutChannel === 'alipay'
-        ? '如：138****5678 或支付宝账号'
-        : '如：微信昵称或绑定手机号';
+  const payoutDetailPlaceholder = '支付宝登录手机号或邮箱，如 13812348888';
 
   if (payoutPanelOpen && approved) {
     return (
@@ -345,7 +342,7 @@ export default function ProviderProfileView({
           <p className="text-xs text-provider-muted mt-1">
             {payoutPanelStep === 'identity'
               ? '绑定提现账户前需完成基础身份证实名认证。'
-              : '平台审核通过后将打款至以下账户，账户实名须与身份证一致。'}
+              : '当前仅支持支付宝收款；平台审核通过后将线下打款至以下账户，账户实名须与身份证一致。'}
           </p>
         </div>
 
@@ -466,7 +463,7 @@ export default function ProviderProfileView({
                 className="w-full p-2.5 border border-provider rounded-xl text-xs outline-none focus:border-brand"
               />
               <p className="text-[10px] text-provider-muted mt-1.5">
-                银行卡请填写开户行与卡号后四位；支付宝/微信填写常用收款账号。
+                填写支付宝登录手机号或邮箱，财务将据此线下转账。
               </p>
             </div>
 

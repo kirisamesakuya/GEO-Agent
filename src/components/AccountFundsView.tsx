@@ -142,7 +142,7 @@ export default function AccountFundsView({ brandName, embedded }: Props) {
       className={
         embedded
           ? 'p-6 max-w-3xl mx-auto space-y-4'
-          : 'geo-page-content max-w-3xl space-y-4 overflow-y-auto h-full'
+          : 'geo-page-content max-w-3xl space-y-4'
       }
     >
       <div className="flex flex-wrap gap-2">

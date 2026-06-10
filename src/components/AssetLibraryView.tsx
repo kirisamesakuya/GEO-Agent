@@ -62,7 +62,7 @@ export default function AssetLibraryView({ brandName, embedded }: Props) {
   };
 
   return (
-    <div className={`overflow-y-auto h-full space-y-4 ${embedded ? 'p-6' : 'geo-page-content'}`}>
+    <div className={`space-y-4 ${embedded ? 'p-6' : 'geo-page-content'}`}>
       <div className="flex items-center justify-between">
         <div>
           {!embedded && <h2 className="text-lg font-bold">图片素材库</h2>}

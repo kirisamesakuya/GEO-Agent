@@ -147,7 +147,7 @@ export default function TaskOrderDetailView({ orderId, onNavigate, onBack }: Pro
   };
 
   return (
-    <div className="geo-page-content h-full overflow-y-auto space-y-4">
+    <div className="geo-page-content space-y-4">
       <button
         type="button"
         className="geo-btn-secondary geo-btn-sm flex items-center gap-2"

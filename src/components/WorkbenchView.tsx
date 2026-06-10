@@ -56,7 +56,7 @@ export default function WorkbenchView({ brandName, onBrandChange, onNavigate, on
 
   if (loading && !data) {
     return (
-      <div className="geo-page-content overflow-y-auto h-full space-y-4">
+      <div className="geo-page-content space-y-4">
         <PageHeaderWithBrand
           title="工作台"
           titleClassName="text-lg font-bold"
@@ -69,7 +69,7 @@ export default function WorkbenchView({ brandName, onBrandChange, onNavigate, on
   }
 
   return (
-    <div className="geo-page-content overflow-y-auto h-full space-y-4">
+    <div className="geo-page-content space-y-4">
       <PageHeaderWithBrand
         title="工作台"
         titleClassName="text-lg font-bold"

@@ -113,7 +113,7 @@ export default function UserCenterView() {
     certStatus === 'rejected';
 
   return (
-    <div className="geo-page-content max-w-2xl space-y-4 overflow-y-auto h-full">
+    <div className="geo-page-content max-w-2xl space-y-4">
       <div className="flex flex-wrap gap-2">
         <button
           type="button"

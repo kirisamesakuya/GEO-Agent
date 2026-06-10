@@ -106,7 +106,7 @@ export default function OnboardingConsoleView({ brandName, taskId, onNavigate }:
 
   if (error && !status) {
     return (
-      <div className="geo-page-content overflow-y-auto h-full p-6">
+      <div className="geo-page-content p-6">
         <div className="geo-card p-6 max-w-3xl mx-auto space-y-3">
           <h2 className="text-lg font-bold">检测任务暂时不可用</h2>
           <p className="text-sm text-[var(--neutral-text-03)]">{error}</p>
@@ -126,7 +126,7 @@ export default function OnboardingConsoleView({ brandName, taskId, onNavigate }:
     displayTaskStatus === 'failed';
 
   return (
-    <div className="geo-page-content overflow-y-auto h-full space-y-4">
+    <div className="geo-page-content space-y-4">
       <div className="max-w-3xl mx-auto space-y-4 pb-4">
         {!hasTask ? (
           <div className="geo-card p-6 space-y-3">

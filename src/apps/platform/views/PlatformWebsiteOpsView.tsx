@@ -6,6 +6,8 @@ import {
   resolveWebsiteLeadFields,
   type WebsiteLeadSource,
 } from '../../../../lib/website-lead-intake';
+import WebsiteRequirementLeadDetail from '../../../components/delivery/WebsiteRequirementLeadDetail';
+import { hasWebsiteGeoAnalysisNotes } from '../../../lib/website-requirement-nav';
 import { WEBSITE_PAGE_TYPES } from '../../../../lib/website-order-flow';
 import { useToast } from '../../../context/ToastContext';
 import { platformApiFetch } from '../../../lib/platform-api';
@@ -28,6 +30,7 @@ interface WebsiteRequestRow extends WebsiteLeadSource {
   status: string;
   createdAt: string;
   orders?: Array<{ id: string; status: string }>;
+  attachments?: Array<{ name: string; url: string; mimeType?: string }>;
 }
 
 interface WebsiteOrderRow {
@@ -355,27 +358,9 @@ export default function PlatformWebsiteOpsView() {
     load();
   };
 
-  const renderLeadFields = (source: WebsiteLeadSource) => {
-    const fields = resolveWebsiteLeadFields(source);
-    return (
-      <div className="space-y-2 text-sm">
-        <p><span className="text-[var(--platform-text-tertiary)]">页面类型：</span>{fields.pageType}</p>
-        {fields.referenceUrl && (
-          <p>
-            <span className="text-[var(--platform-text-tertiary)]">官网链接：</span>
-            <a href={fields.referenceUrl} target="_blank" rel="noreferrer" className="geo-link text-xs break-all">
-              {fields.referenceUrl}
-            </a>
-          </p>
-        )}
-        <p><span className="text-[var(--platform-text-tertiary)]">目标关键词：</span>{fields.keywords || '—'}</p>
-        {fields.notes && (
-          <p><span className="text-[var(--platform-text-tertiary)]">参考说明：</span>{fields.notes}</p>
-        )}
-        <p><span className="text-[var(--platform-text-tertiary)]">联系方式：</span>{fields.contact || '—'}</p>
-      </div>
-    );
-  };
+  const renderLeadFields = (source: WebsiteRequestRow | WebsiteLeadSource) => (
+    <WebsiteRequirementLeadDetail source={source} variant="platform" />
+  );
 
   const pendingOrders = orders.filter(
     (o) => o.status === 'pending' || o.status === 'in_progress' || o.status === 'pending_review'
@@ -478,6 +463,18 @@ export default function PlatformWebsiteOpsView() {
                 render: (r) => (
                   <span className="max-w-[180px] truncate block">{formatWebsiteLeadListLabel(r)}</span>
                 ),
+              },
+              {
+                key: 'analysis',
+                header: '分析报告',
+                render: (r) =>
+                  hasWebsiteGeoAnalysisNotes(resolveWebsiteLeadFields(r).notes) ? (
+                    <span className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium bg-blue-50 text-blue-700">
+                      含分析
+                    </span>
+                  ) : (
+                    <span className="text-[var(--platform-text-tertiary)]">—</span>
+                  ),
               },
               {
                 key: 'contact',

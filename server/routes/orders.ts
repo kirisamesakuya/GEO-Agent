@@ -1,7 +1,6 @@
 import type { Express } from 'express';
 import { requireBrandName } from '../middleware/require-publisher.js';
 import { ensureTaskOrderScope } from '../lib/publisher-scope.js';
-import { requireBrandName } from '../middleware/require-publisher.js';
 import { getAuthMode } from '../middleware/request-context.js';
 import {
   listPublishedOrders,
@@ -12,6 +11,8 @@ import {
   requestRevision,
   openDispute,
   listProviders,
+  withdrawPublisherTaskOrder,
+  type ListOrdersByBrandOptions,
 } from '../services/order.service.js';
 import {
   approveArticleDraft,
@@ -19,15 +20,59 @@ import {
 } from '../services/article-delivery.service.js';
 import { checkBudget, freezeBudget } from '../services/budget.service.js';
 import { validateTaskLobbyPublish } from '../services/gate.service.js';
+import { countTaskOrdersByStage } from '../services/article-delivery-list.service.js';
+import type { ArticleDeliveryStageFilter } from '../lib/article-delivery-stage.js';
+
+const STAGE_FILTERS = new Set<ArticleDeliveryStageFilter>([
+  'all',
+  'pending_provider',
+  'writing',
+  'draft_review',
+  'draft_revision',
+  'pending_publish',
+  'published',
+  'pending_acceptance',
+  'completed',
+  'cancelled',
+]);
+
+function parseListOrdersOptions(query: Record<string, unknown>): ListOrdersByBrandOptions {
+  const opts: ListOrdersByBrandOptions = {};
+  if (query.articleOnly === 'true' || query.articleOnly === '1') {
+    opts.articleOnly = true;
+  }
+  if (typeof query.status === 'string' && query.status.trim()) {
+    opts.status = query.status.trim();
+  }
+  if (typeof query.stage === 'string' && STAGE_FILTERS.has(query.stage as ArticleDeliveryStageFilter)) {
+    const stage = query.stage as ArticleDeliveryStageFilter;
+    if (stage !== 'all') opts.stage = stage;
+  }
+  if (typeof query.platform === 'string' && query.platform.trim()) {
+    opts.platform = query.platform.trim();
+  }
+  return opts;
+}
 
 export function registerOrderRoutes(app: Express) {
+  app.get('/api/orders/stats', async (req, res) => {
+    const brandName = await requireBrandName(req, res);
+    if (!brandName) return;
+
+    const articleOnly = req.query.articleOnly !== 'false';
+    const statusCounts = await countTaskOrdersByStage(brandName, articleOnly);
+    res.json({ statusCounts });
+  });
+
   app.get('/api/orders', async (req, res) => {
     const brandName = await requireBrandName(req, res);
     if (brandName) {
-      return res.json({ orders: await listOrdersByBrand(brandName) });
+      const options = parseListOrdersOptions(req.query as Record<string, unknown>);
+      return res.json({ orders: await listOrdersByBrand(brandName, options) });
     }
     if (getAuthMode() === 'session') return;
-    res.json({ orders: await listPublishedOrders() });
+    const platform = typeof req.query.platform === 'string' ? req.query.platform : undefined;
+    res.json({ orders: await listPublishedOrders(platform) });
   });
 
   app.get('/api/orders/:id', async (req, res) => {
@@ -73,6 +118,16 @@ export function registerOrderRoutes(app: Express) {
     if (!freeze.ok) return res.status(400).json({ error: freeze.error });
 
     res.status(201).json({ order });
+  });
+
+  app.post('/api/orders/:id/withdraw', async (req, res) => {
+    if (!(await ensureTaskOrderScope(req, res, req.params.id))) return;
+    const { reason } = req.body ?? {};
+    try {
+      res.json({ order: await withdrawPublisherTaskOrder(req.params.id, reason) });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '撤回失败' });
+    }
   });
 
   app.post('/api/orders/:id/acceptance', async (req, res) => {

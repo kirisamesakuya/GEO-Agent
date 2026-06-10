@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { resolveWebsiteLeadFields } from '../../../lib/website-lead-intake';
+import WebsiteRequirementLeadDetail from './WebsiteRequirementLeadDetail';
 import type { ViewType } from '../../types';
 import TaskStatusPill from '../common/TaskStatusPill';
 import {
   deriveWebsiteRequirementStatus,
+  parseGeoReportIdFromWebsiteNotes,
   WEBSITE_REQUIREMENT_STATUS_LABEL,
   type WebsiteRequirementRow,
 } from '../../lib/website-requirement-nav';
@@ -37,10 +38,10 @@ export default function WebPageRequirementDetailView({
 
   const displayStatus = req ? deriveWebsiteRequirementStatus(req) : 'pending';
   const order = req?.orders?.[0];
-  const fields = req ? resolveWebsiteLeadFields(req) : null;
+  const linkedReportId = req ? parseGeoReportIdFromWebsiteNotes(req.notes) : undefined;
 
   return (
-    <div className="geo-page-content h-full overflow-y-auto space-y-4">
+    <div className="geo-page-content space-y-4">
       <button
         type="button"
         className="geo-btn-secondary geo-btn-sm flex items-center gap-2"
@@ -50,13 +51,13 @@ export default function WebPageRequirementDetailView({
         返回网页需求
       </button>
 
-      {!req || !fields ? (
+      {!req ? (
         <p className="text-sm text-[var(--neutral-text-03)]">加载需求…</p>
       ) : (
         <>
           <div className="geo-card p-4 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h1 className="text-lg font-bold text-[var(--color-title)]">{fields.pageType}</h1>
+              <h1 className="text-lg font-bold text-[var(--color-title)]">{req.pageType}</h1>
               <p className="text-xs text-[var(--neutral-text-03)] mt-1">
                 提交于 {new Date(req.createdAt).toLocaleString('zh-CN')}
               </p>
@@ -85,6 +86,20 @@ export default function WebPageRequirementDetailView({
               <p className="text-xs text-[var(--neutral-text-03)]">目标关键词</p>
               <p className="mt-1">{fields.keywords || '—'}</p>
             </div>
+            {linkedReportId && onNavigate && (
+              <div>
+                <p className="text-xs text-[var(--neutral-text-03)]">关联 GEO 报告</p>
+                <button
+                  type="button"
+                  className="geo-link text-sm mt-1"
+                  onClick={() =>
+                    onNavigate('geo_analysis', `report:${linkedReportId}`)
+                  }
+                >
+                  查看分析报告
+                </button>
+              </div>
+            )}
             {fields.notes && (
               <div>
                 <p className="text-xs text-[var(--neutral-text-03)]">参考说明</p>

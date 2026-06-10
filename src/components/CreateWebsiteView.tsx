@@ -6,6 +6,7 @@ import WebsiteRequestsHistoryView, { type WebsiteRequest } from './WebsiteReques
 import { History, ChevronRight } from 'lucide-react';
 import type { ViewType } from '../types';
 import { resolveWebsiteLeadFields } from '../../lib/website-lead-intake';
+import { consumeGeoAssetWebsitePrefill } from '../lib/geo-asset-website-prefill';
 import { WEBSITE_PHASE1_DESCRIPTION, WEBSITE_PHASE1_TITLE } from '../../lib/website-order-flow';
 
 interface Props {
@@ -36,7 +37,9 @@ export default function CreateWebsiteView({
     new URLSearchParams(window.location.search).get('websiteHistory') === '1' ? 'history' : 'create'
   );
   const [draftKey, setDraftKey] = useState(0);
-  const [prefill, setPrefill] = useState<ReturnType<typeof resolveWebsiteLeadFields> | undefined>();
+  const [prefill, setPrefill] = useState<ReturnType<typeof resolveWebsiteLeadFields> | undefined>(
+    () => consumeGeoAssetWebsitePrefill(brandName)
+  );
 
   const openHistory = () => {
     setPageMode('history');
@@ -88,7 +91,7 @@ export default function CreateWebsiteView({
 
   if (embedded) {
     return (
-      <div className="flex-1 min-h-0 overflow-y-auto geo-page-content space-y-4 max-w-3xl">
+      <div className="geo-page-content space-y-4 max-w-3xl">
         <div className="flex justify-end">{historyButton}</div>
         <div className="geo-card p-4">{formCard}</div>
       </div>
@@ -96,7 +99,7 @@ export default function CreateWebsiteView({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-col">
       <div className="shrink-0 px-6 pt-4 pb-3 geo-page-content-section">
         <PageHeaderWithBrand
           title="创建网页需求"
@@ -105,7 +108,7 @@ export default function CreateWebsiteView({
           actions={historyButton}
         />
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto geo-page-content max-w-2xl">
+      <div className="geo-page-content max-w-2xl pb-8">
         {formCard}
       </div>
     </div>

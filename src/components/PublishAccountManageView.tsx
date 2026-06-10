@@ -11,6 +11,7 @@ import {
   validateCustomPlatformInput,
 } from '../../lib/custom-publish-platform';
 import type { MediaPlatformCatalogEntry } from '../lib/media-platform-catalog';
+import OverlayDrawer from './common/OverlayDrawer';
 import PlatformLogoUpload from './common/PlatformLogoUpload';
 import { fetchPlatformAuthConfig, getBundledPlatformAuthConfig } from '../lib/platform-auth-client';
 import {
@@ -317,7 +318,7 @@ export default function PublishAccountManageView({ brandName, onBrandChange, onN
   };
 
   return (
-    <div className="geo-page-content geo-page-content--flush flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="geo-page-content geo-page-content--flush flex min-h-0 flex-col">
       <div
         className="shrink-0 geo-page-content-section py-4 border-b"
         style={{ borderColor: 'var(--neutral-divider-02)', background: 'var(--color-bg-card)' }}
@@ -330,7 +331,7 @@ export default function PublishAccountManageView({ brandName, onBrandChange, onN
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto geo-page-content-section py-[var(--geo-content-block)] space-y-4">
+      <div className="flex-1 min-h-0 geo-page-content-section py-[var(--geo-content-block)] space-y-4">
         {!scopeBrand ? (
           <p className="text-sm" style={{ color: 'var(--neutral-text-02)' }}>请在上方选择具体品牌，再配置本机发布账号。</p>
         ) : (
@@ -435,9 +436,11 @@ export default function PublishAccountManageView({ brandName, onBrandChange, onN
       </div>
 
       {drawer && (
-        <div
-          className="fixed inset-y-0 right-0 z-30 w-full max-w-md shadow-xl border-l flex flex-col"
-          style={{ background: 'var(--color-bg-card)', borderColor: 'var(--neutral-divider-02)' }}
+        <OverlayDrawer
+          onClose={() => setDrawer(null)}
+          width="min(28rem, 100vw)"
+          panelClassName="border-l"
+          panelStyle={{ background: 'var(--color-bg-card)', borderColor: 'var(--neutral-divider-02)' }}
         >
           <div
             className="flex items-center justify-between px-4 py-3 border-b shrink-0"
@@ -451,7 +454,7 @@ export default function PublishAccountManageView({ brandName, onBrandChange, onN
               <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 text-xs space-y-5">
+          <div className="flex-1 min-h-0 overflow-y-auto geo-scroll-hide p-4 text-xs space-y-5">
             <section>
               <h4 className="font-semibold mb-2" style={{ color: 'var(--neutral-text-01)' }}>登录指引</h4>
               <ol className="list-decimal list-inside space-y-1" style={{ color: 'var(--neutral-text-02)' }}>
@@ -526,7 +529,7 @@ export default function PublishAccountManageView({ brandName, onBrandChange, onN
               {renderActions(drawer.binding)}
             </div>
           </div>
-        </div>
+        </OverlayDrawer>
       )}
 
       {showAddPlatform && (

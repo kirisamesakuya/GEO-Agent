@@ -9,7 +9,7 @@ interface Props {
 /** 兼容旧路由；主入口为文章结果 → 发布记录 */
 export default function PublishRecordsView({ brandName, onBrandChange }: Props) {
   return (
-    <div className="geo-page-content overflow-y-auto h-full space-y-4">
+    <div className="geo-page-content space-y-4">
       <PageHeaderWithBrand
         title="发布记录"
         brandName={brandName}

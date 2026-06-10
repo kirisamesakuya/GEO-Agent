@@ -46,7 +46,10 @@ import {
   listPlatformMerchants,
   setMerchantStatus,
   getMerchantDetail,
+  listPlatformProviderIdentities,
   listPlatformContentGovernance,
+  platformRedispatchPublishRecord,
+  platformFlagPublishRecordManual,
   listPlatformRiskTickets,
   listProviderResourcesForReview,
   reviewProviderPlatformResource,
@@ -99,6 +102,7 @@ import {
 import { cancelAgentTask, retryAgentTask } from '../agent/worker.js';
 import { enqueueAgentTask } from '../agent/worker.js';
 import { registerPlatformMediaPlatformAdminRoutes } from './media-platforms.js';
+import { registerPlatformMonitorPlatformAdminRoutes } from './monitor-platforms.js';
 
 export function registerPlatformRoutes(app: Express) {
   const publicPaths = new Set(['/role-permissions', '/role-switch']);
@@ -117,6 +121,18 @@ export function registerPlatformRoutes(app: Express) {
     if (!requirePlatformPermission(req, res, 'providers')) return;
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
     res.json({ providers: await listAllProvidersForPlatform(status) });
+  });
+
+  app.get('/api/platform/provider-identities', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'providers')) return;
+    const statusRaw = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const status =
+      statusRaw === 'verified' || statusRaw === 'unverified' ? statusRaw : undefined;
+    const providerName = typeof req.query.providerName === 'string' ? req.query.providerName : undefined;
+    const realName = typeof req.query.realName === 'string' ? req.query.realName : undefined;
+    res.json({
+      identities: await listPlatformProviderIdentities({ status, providerName, realName }),
+    });
   });
 
   app.get('/api/platform/dashboard', async (req, res) => {
@@ -357,6 +373,11 @@ export function registerPlatformRoutes(app: Express) {
     if (!requirePlatformPermission(req, res, 'website')) return;
     const brandName = typeof req.query.brandName === 'string' ? req.query.brandName : undefined;
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const { isDemoPublisherSnapshotEnabled } = await import('../db/demo-publisher-snapshot.js');
+    if (isDemoPublisherSnapshotEnabled()) {
+      const { ensureDemoWebsiteOrders } = await import('../db/demo-orders.js');
+      await ensureDemoWebsiteOrders(brandName ?? '云杉口腔');
+    }
     res.json({ requests: await listWebsiteRequests({ brandName, status }) });
   });
 
@@ -814,6 +835,26 @@ export function registerPlatformRoutes(app: Express) {
     res.json(await listPlatformContentGovernance({ brandName, platform, status, tab }));
   });
 
+  app.post('/api/platform/publish-records/:id/redispatch', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'content_governance')) return;
+    const { reason } = req.body ?? {};
+    try {
+      res.json(await platformRedispatchPublishRecord(req.params.id, reason));
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '重新派发失败' });
+    }
+  });
+
+  app.post('/api/platform/publish-records/:id/manual-flag', async (req, res) => {
+    if (!requirePlatformPermission(req, res, 'content_governance')) return;
+    const { reason } = req.body ?? {};
+    try {
+      res.json(await platformFlagPublishRecordManual(req.params.id, reason ?? ''));
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '操作失败' });
+    }
+  });
+
   app.get('/api/platform/risk-tickets', async (req, res) => {
     if (!requirePlatformPermission(req, res, 'risk_center')) return;
     const level = typeof req.query.level === 'string' ? req.query.level : undefined;
@@ -914,4 +955,5 @@ export function registerPlatformRoutes(app: Express) {
   });
 
   registerPlatformMediaPlatformAdminRoutes(app, requirePlatformPermission);
+  registerPlatformMonitorPlatformAdminRoutes(app, requirePlatformPermission);
 }

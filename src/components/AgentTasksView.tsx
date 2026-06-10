@@ -103,7 +103,7 @@ export default function AgentTasksView({
   }
 
   return (
-    <div className="flex h-full overflow-hidden geo-page-content gap-4 flex-col">
+    <div className="flex geo-page-content gap-4 flex-col pb-8">
       <PageHeaderWithBrand
         title="运行日志"
         brandName={brandName}

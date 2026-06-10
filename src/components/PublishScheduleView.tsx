@@ -191,7 +191,7 @@ export default function PublishScheduleView({ brandName, onBrandChange }: Props)
   };
 
   return (
-    <div className="geo-page-content overflow-y-auto h-full space-y-4">
+    <div className="geo-page-content space-y-4">
       <PageHeaderWithBrand
         title="多项目发布排程"
         brandName={brandName}

@@ -135,7 +135,7 @@ export default function BrandConfirmView({
   };
 
   return (
-    <div className="geo-page-content overflow-y-auto h-full">
+    <div className="geo-page-content">
       <div className="geo-card p-6 max-w-4xl mx-auto">
         <h2 className="text-lg font-bold mb-1">确认品牌资料</h2>
         <p className="text-sm text-[var(--neutral-text-03)] mb-6">

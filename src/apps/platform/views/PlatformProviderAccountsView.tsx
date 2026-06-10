@@ -7,6 +7,7 @@ import PlatformFilterField from '../components/PlatformFilterField';
 import PlatformStatSummary from '../components/PlatformStatSummary';
 import PlatformStatusTag from '../components/PlatformStatusTag';
 import { PlatformTableAction, PlatformTableActions } from '../components/PlatformTableActions';
+import type { PlatformView } from '../types';
 
 interface ProviderAccountRow {
   providerId: string;
@@ -17,6 +18,11 @@ interface ProviderAccountRow {
   payoutAccountName: string | null;
   payoutAccountLabel: string | null;
   hasPayoutAccount: boolean;
+  identityVerified: boolean;
+  identityRealName: string | null;
+  identityIdNumberMask: string | null;
+  identityVerifiedAt: string | null;
+  nameMatch: boolean | null;
   pendingWithdrawal: number;
   extractable: number;
   frozen: number;
@@ -36,7 +42,11 @@ function money(n: number) {
   return `¥${n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export default function PlatformProviderAccountsView() {
+interface Props {
+  onNavigate?: (view: PlatformView) => void;
+}
+
+export default function PlatformProviderAccountsView({ onNavigate }: Props) {
   const [accounts, setAccounts] = useState<ProviderAccountRow[]>([]);
   const [stats, setStats] = useState({
     total: 0,
@@ -92,11 +102,27 @@ export default function PlatformProviderAccountsView() {
     { key: 'frozen', header: '待结算', render: (r: ProviderAccountRow) => money(r.frozen) },
     { key: 'withdrawn', header: '已提现', render: (r: ProviderAccountRow) => money(r.withdrawn) },
     {
-      key: 'payout',
-      header: '提现账户',
+      key: 'identity',
+      header: '实名',
+      render: (r: ProviderAccountRow) => (
+        <PlatformStatusTag
+          label={r.identityVerified ? '已认证' : '未认证'}
+          kind={r.identityVerified ? 'success' : 'warning'}
+        />
+      ),
+    },
+    {
+      key: 'payoutName',
+      header: '账户实名',
+      render: (r: ProviderAccountRow) =>
+        r.hasPayoutAccount ? (r.payoutAccountName ?? '—') : '—',
+    },
+    {
+      key: 'payoutAccount',
+      header: '收款账号',
       render: (r: ProviderAccountRow) =>
         r.hasPayoutAccount ? (
-          <span className="text-xs">{r.payoutAccountLabel}</span>
+          <span className="font-mono text-xs">{r.payoutAccountLabel ?? '—'}</span>
         ) : (
           <PlatformStatusTag label="未绑定" kind="warning" />
         ),
@@ -178,6 +204,32 @@ export default function PlatformProviderAccountsView() {
               <p>提现占用：{money(selected.reserved)}</p>
               <p>累计已提现：{money(selected.withdrawn)}</p>
               <p>累计收益（扣平台费后）：{money(selected.accumulatedIncome)}</p>
+            </section>
+
+            <section>
+              <h4 className="text-xs font-semibold mb-2">身份证实名</h4>
+              {selected.identityVerified ? (
+                <>
+                  <p>姓名：{selected.identityRealName ?? '—'}</p>
+                  <p>证件号：{selected.identityIdNumberMask ?? '—'}</p>
+                  <p>
+                    认证时间：
+                    {selected.identityVerifiedAt
+                      ? new Date(selected.identityVerifiedAt).toLocaleString('zh-CN')
+                      : '—'}
+                  </p>
+                  {selected.hasPayoutAccount && selected.nameMatch === false && (
+                    <p className="mt-2 text-xs text-amber-700">提现账户姓名与身份证实名不一致</p>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-[var(--platform-text-tertiary)]">尚未完成身份证实名认证</p>
+              )}
+              {onNavigate && (
+                <button type="button" className="geo-btn-secondary geo-btn-xs mt-2" onClick={() => onNavigate('provider_identity')}>
+                  查看实名认证列表
+                </button>
+              )}
             </section>
 
             <section>

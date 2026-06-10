@@ -349,12 +349,15 @@ export default function BrandProfileView({ brandName, onBrandNameChange, onNavig
   };
 
   return (
-    <div className="flex h-full min-h-0 overflow-hidden text-left" style={{ padding: 'var(--sp-xl)' }}>
+    <div className="geo-brand-profile-page text-left" style={{ padding: 'var(--sp-xl)' }}>
       <div
-        className={`geo-brand-workspace flex-1 min-h-0 transition-opacity duration-150 ${profileReady ? 'opacity-100' : 'opacity-60 pointer-events-none'}`}
+        className={`geo-brand-workspace transition-opacity duration-150 ${profileReady ? 'opacity-100' : 'opacity-60 pointer-events-none'}`}
       >
-      <div className="geo-brand-main geo-card flex flex-col overflow-hidden min-h-0">
-        <div className="p-6 border-b shrink-0" style={{ borderColor: 'var(--neutral-divider-02)' }}>
+      <div className="geo-brand-main geo-card flex flex-col">
+        <div
+          className="geo-brand-main__head p-6 border-b shrink-0"
+          style={{ borderColor: 'var(--neutral-divider-02)', background: 'var(--color-bg-card)' }}
+        >
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-base font-semibold flex items-center gap-2" style={{ color: 'var(--color-title)' }}>
               <span>完善品牌多维度资料</span>
@@ -538,7 +541,7 @@ export default function BrandProfileView({ brandName, onBrandNameChange, onNavig
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="geo-brand-main__body p-6 space-y-5">
           <div className="grid grid-cols-2 gap-5 text-left">
             <div>
               <FieldLimitLabel label="品牌名称 / 别名" className="block mb-1" />
@@ -698,7 +701,10 @@ export default function BrandProfileView({ brandName, onBrandNameChange, onNavig
 
         </div>
 
-        <div className="p-5 border-t shrink-0 flex gap-3" style={{ borderColor: 'var(--neutral-divider-02)', background: 'var(--neutral-bg-03)' }}>
+        <div
+          className="geo-brand-main__foot p-5 border-t shrink-0 flex gap-3"
+          style={{ borderColor: 'var(--neutral-divider-02)', background: 'var(--neutral-bg-03)' }}
+        >
           <button type="button" onClick={restoreDefaultProfile} className="geo-btn-secondary geo-btn-sm flex-1">
             恢复默认
           </button>

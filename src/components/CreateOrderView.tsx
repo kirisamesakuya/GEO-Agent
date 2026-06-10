@@ -10,6 +10,8 @@ import {
   parseCreateOrderModeFromUrl,
   parseGeoReportIdFromUrl,
   parseGeoReportIdFromHint,
+  parseCampaignPlanIdFromHint,
+  parseCampaignPlanIdFromUrl,
   resolveCustomTaskKind,
   isWebsiteOrderContext,
 } from '../lib/create-order-nav';
@@ -33,6 +35,8 @@ export default function CreateOrderView({
   viewHint,
 }: Props) {
   const geoReportId = initialGeoReportId ?? parseGeoReportIdFromUrl() ?? undefined;
+  const campaignPlanId =
+    parseCampaignPlanIdFromHint(viewHint) ?? parseCampaignPlanIdFromUrl() ?? undefined;
   const [mode, setMode] = useState<CreateOrderMode>(
     () => initialMode ?? parseCreateOrderModeFromUrl() ?? 'ai'
   );
@@ -70,7 +74,7 @@ export default function CreateOrderView({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-col">
       <div
         className="shrink-0 px-6 pt-4 pb-0 border-b"
         style={{ borderColor: 'var(--neutral-divider-02)', background: 'var(--neutral-bg-03)' }}
@@ -109,7 +113,7 @@ export default function CreateOrderView({
         )}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex flex-col min-w-0">
         {CUSTOM_PUBLISH_ENABLED && mode === 'custom' ? (
           <CustomOrderView
             brandName={brandName}
@@ -124,8 +128,9 @@ export default function CreateOrderView({
             onNavigate={onNavigate}
             lockedMode="ai"
             embedded
-            initialGeoReportId={geoReportId}
-            autoGenerateFromGeo={Boolean(geoReportId)}
+            initialGeoReportId={campaignPlanId ? undefined : geoReportId}
+            initialCampaignPlanId={campaignPlanId}
+            autoGenerateFromGeo={Boolean(geoReportId) && !campaignPlanId}
             indexingGapHint={viewHint}
           />
         )}

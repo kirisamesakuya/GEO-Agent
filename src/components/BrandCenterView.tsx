@@ -39,7 +39,7 @@ export default function BrandCenterView({
   }, [initialTab, brandName]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="geo-page-frame flex min-h-0 h-full flex-col">
       <div
         className="shrink-0 flex flex-col gap-2 px-6 pt-4 pb-2 border-b"
         style={{ borderColor: 'var(--neutral-divider-02)', background: 'var(--neutral-bg-03)' }}
@@ -73,7 +73,7 @@ export default function BrandCenterView({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="geo-page-frame__body flex min-h-0 flex-col min-w-0">
         {tab === 'profile' && (
           <BrandProfileView
             brandName={brandName}

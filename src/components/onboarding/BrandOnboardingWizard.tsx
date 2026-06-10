@@ -135,7 +135,7 @@ export default function BrandOnboardingWizard({
   const displayBrand = workspaceBrand || draftBrandName;
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div>
       {step !== 'console' && (
         <div className="geo-page-content pt-4 pb-2">
           <button

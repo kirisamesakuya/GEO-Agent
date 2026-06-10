@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Copy } from 'lucide-react';
 import { useToast } from '../../../context/ToastContext';
 import { usePlatformRole } from '../../../hooks/usePlatformRole';
 import { platformFetch, platformApiFetch } from '../../../lib/platform-api';
@@ -11,6 +12,7 @@ import PlatformStatSummary from '../components/PlatformStatSummary';
 import PlatformStatusTag from '../components/PlatformStatusTag';
 import PlatformTabBar from '../components/PlatformTabBar';
 import { PlatformTableAction, PlatformTableActions } from '../components/PlatformTableActions';
+import { payoutChannelLabel } from '../../../../lib/provider-payout';
 
 interface WithdrawalRow {
   id: string;
@@ -27,6 +29,15 @@ interface WithdrawalRow {
   paidAt: string | null;
   provider?: { id: string; name: string };
   walletSnapshot?: { extractable: number };
+  payoutChannel?: string | null;
+  payoutChannelLabel?: string | null;
+  payoutAccountName?: string | null;
+  payoutAccountLabel?: string | null;
+  payoutBrief?: string;
+  identityRealName?: string | null;
+  identityIdNumberMask?: string | null;
+  identityVerified?: boolean;
+  payoutNameMatch?: boolean | null;
 }
 
 const WITHDRAWAL_STATUS: Record<string, { label: string; kind: 'pending' | 'warning' | 'success' | 'danger' }> = {
@@ -171,7 +182,20 @@ export default function PlatformFundsView({ section = 'settlement' }: ViewProps)
   const withdrawalColumns = [
     { key: 'provider', header: '接单方', render: (r: WithdrawalRow) => r.provider?.name ?? r.providerId },
     { key: 'amount', header: '金额', render: (r: WithdrawalRow) => `¥${r.amount.toLocaleString('zh-CN')}` },
-    { key: 'channel', header: '渠道', render: (r: WithdrawalRow) => r.channelLabel ?? r.channel },
+    {
+      key: 'payoutName',
+      header: '账户实名',
+      render: (r: WithdrawalRow) => r.payoutAccountName ?? r.identityRealName ?? '—',
+    },
+    {
+      key: 'payoutAccount',
+      header: '收款账号',
+      render: (r: WithdrawalRow) => {
+        const account = r.payoutAccountLabel ?? r.channelLabel ?? '—';
+        if (account === '—') return account;
+        return <span className="font-mono text-xs">{account}</span>;
+      },
+    },
     {
       key: 'status',
       header: '状态',
@@ -207,6 +231,15 @@ export default function PlatformFundsView({ section = 'settlement' }: ViewProps)
     setPaidVoucher('');
   };
 
+  const copyPayoutAccount = async (account: string) => {
+    try {
+      await navigator.clipboard.writeText(account);
+      toast('收款账号已复制', 'success');
+    } catch {
+      toast('复制失败，请手动选择复制', 'error');
+    }
+  };
+
   const renderWithdrawalActions = (w: WithdrawalRow) => (
     <PlatformTableActions>
       <PlatformTableAction label="详情" variant="primary" onClick={() => openWithdrawal(w)} />
@@ -231,7 +264,7 @@ export default function PlatformFundsView({ section = 'settlement' }: ViewProps)
           </h2>
           <p className="text-xs text-[var(--platform-text-tertiary)] mt-1">
             {isWithdrawalsOnly
-              ? '审核接单方提现申请、确认线下打款并查询历史记录。账户余额请至「接单端账户余额」。'
+              ? '审核接单方提现申请、确认线下打款并查询历史记录。列表展示完整收款账号，详情可复制打款信息。当前 MVP 仅支持支付宝收款。'
               : '按批次确认订单结算并入账至接单方可提现余额。提现审核请至「接单端提现管理」。'}
           </p>
         </div>
@@ -448,15 +481,76 @@ export default function PlatformFundsView({ section = 'settlement' }: ViewProps)
             ) : undefined
           }
         >
-          <div className="space-y-2 text-sm">
+          <div className="space-y-4 text-sm">
+            <section className="rounded-lg border border-[var(--platform-border-subtle)] bg-[var(--platform-surface-subtle)] p-3 space-y-2">
+              <h4 className="text-xs font-semibold text-[var(--platform-text-title)]">线下打款信息</h4>
+              <p>
+                <span className="text-[var(--platform-text-tertiary)]">渠道：</span>
+                {selectedWithdrawal.payoutChannelLabel ??
+                  payoutChannelLabel(selectedWithdrawal.payoutChannel ?? selectedWithdrawal.channel)}
+              </p>
+              <p>
+                <span className="text-[var(--platform-text-tertiary)]">账户实名：</span>
+                {selectedWithdrawal.payoutAccountName ?? selectedWithdrawal.identityRealName ?? '—'}
+              </p>
+              <p>
+                <span className="text-[var(--platform-text-tertiary)]">收款账号：</span>
+                <span className="font-mono text-[var(--platform-text-title)] break-all">
+                  {selectedWithdrawal.payoutAccountLabel ?? selectedWithdrawal.channelLabel ?? '—'}
+                </span>
+                {(selectedWithdrawal.payoutAccountLabel ?? selectedWithdrawal.channelLabel) && (
+                  <button
+                    type="button"
+                    className="ml-2 inline-flex items-center gap-1 text-xs text-[var(--platform-primary)] hover:underline"
+                    onClick={() =>
+                      void copyPayoutAccount(
+                        selectedWithdrawal.payoutAccountLabel ?? selectedWithdrawal.channelLabel ?? ''
+                      )
+                    }
+                  >
+                    <Copy className="w-3 h-3" />
+                    复制
+                  </button>
+                )}
+              </p>
+              {selectedWithdrawal.identityVerified && (
+                <>
+                  <p>
+                    <span className="text-[var(--platform-text-tertiary)]">身份证实名：</span>
+                    {selectedWithdrawal.identityRealName ?? '—'}
+                    {selectedWithdrawal.identityIdNumberMask
+                      ? ` · ${selectedWithdrawal.identityIdNumberMask}`
+                      : ''}
+                  </p>
+                  <p>
+                    <span className="text-[var(--platform-text-tertiary)]">姓名一致：</span>
+                    {selectedWithdrawal.payoutNameMatch === true ? (
+                      <PlatformStatusTag label="一致" kind="success" />
+                    ) : selectedWithdrawal.payoutNameMatch === false ? (
+                      <PlatformStatusTag label="不一致，请核对" kind="warning" />
+                    ) : (
+                      '—'
+                    )}
+                  </p>
+                </>
+              )}
+              {selectedWithdrawal.payoutNameMatch === false && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2">
+                  提现账户实名与身份证不一致，打款前请与接单方确认。
+                </p>
+              )}
+            </section>
+
+            <section className="space-y-1">
+              <h4 className="text-xs font-semibold text-[var(--platform-text-title)] mb-1">申请信息</h4>
             <p><span className="text-[var(--platform-text-tertiary)]">金额：</span>¥{selectedWithdrawal.amount.toLocaleString('zh-CN')}</p>
-            <p><span className="text-[var(--platform-text-tertiary)]">渠道：</span>{selectedWithdrawal.channelLabel ?? selectedWithdrawal.channel}</p>
             <p><span className="text-[var(--platform-text-tertiary)]">可提现余额：</span>¥{(selectedWithdrawal.walletSnapshot?.extractable ?? 0).toLocaleString('zh-CN')}</p>
             <p><span className="text-[var(--platform-text-tertiary)]">申请时间：</span>{new Date(selectedWithdrawal.createdAt).toLocaleString('zh-CN')}</p>
             {selectedWithdrawal.reviewedAt && <p><span className="text-[var(--platform-text-tertiary)]">审核时间：</span>{new Date(selectedWithdrawal.reviewedAt).toLocaleString('zh-CN')}</p>}
             {selectedWithdrawal.paidAt && <p><span className="text-[var(--platform-text-tertiary)]">打款确认：</span>{new Date(selectedWithdrawal.paidAt).toLocaleString('zh-CN')}</p>}
             {selectedWithdrawal.paidNote && <p><span className="text-[var(--platform-text-tertiary)]">打款备注：</span>{selectedWithdrawal.paidNote}</p>}
             {selectedWithdrawal.note && <p><span className="text-[var(--platform-text-tertiary)]">驳回原因：</span>{selectedWithdrawal.note}</p>}
+            </section>
           </div>
         </PlatformDetailDrawer>
       )}

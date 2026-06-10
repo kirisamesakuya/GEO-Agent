@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import {
   CheckCircle2,
   HelpCircle,
@@ -15,6 +15,7 @@ import {
   hasRealEarningsData,
 } from '../lib/provider-mock-earnings';
 import {
+  ensureDemoProviderMockStore,
   hasMockProviderPayoutReady,
   loadMockProviderPayoutAccount,
 } from '../lib/provider-mock-payout';
@@ -111,6 +112,7 @@ export default function ProviderEarningView({ providerId }: Props) {
       .then((r) => r.json())
       .then((d) => {
         const label = d.provider?.payoutAccountLabel as string | undefined;
+        ensureDemoProviderMockStore(providerId, d.provider?.name as string | undefined);
         if (label?.trim()) {
           setBankName(label.trim());
           setHasPayoutAccount(true);

@@ -13,6 +13,7 @@ import {
 import { type OrderTypeFilter } from '../lib/order-delivery-filters';
 import {
   deriveWebsiteRequirementStatus,
+  hasWebsiteGeoAnalysisNotes,
   WEBSITE_REQUIREMENT_STATUS_TABS,
   WEBSITE_REQUIREMENT_STATUS_LABEL,
   type WebsiteRequirementRow,
@@ -270,6 +271,7 @@ export default function OrderDeliveryView({
                   <tr>
                     <th>页面类型</th>
                     <th>目标关键词</th>
+                    <th>分析报告</th>
                     <th>状态</th>
                     <th>提交时间</th>
                     <th className="geo-table__actions">操作</th>
@@ -280,6 +282,15 @@ export default function OrderDeliveryView({
                       <tr key={r.id}>
                         <td className="font-medium text-sm">{r.pageType}</td>
                         <td className="text-xs max-w-xs truncate">{formatWebsiteLeadListLabel(r)}</td>
+                        <td className="text-xs">
+                          {hasWebsiteGeoAnalysisNotes(r.notes) ? (
+                            <span className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium bg-[var(--color-primary-light)] text-[var(--color-primary)]">
+                              含分析
+                            </span>
+                          ) : (
+                            <span className="text-[var(--neutral-text-04)]">—</span>
+                          )}
+                        </td>
                         <td className="text-xs">{displayWebsiteStatus(r)}</td>
                         <td className="text-xs tabular-nums">
                           {new Date(r.createdAt).toLocaleString('zh-CN', {

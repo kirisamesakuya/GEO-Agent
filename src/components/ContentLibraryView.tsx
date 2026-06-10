@@ -117,6 +117,7 @@ export default function ContentLibraryView({
   const [page, setPage] = useState(1);
   const [showFullContent, setShowFullContent] = useState(false);
   const [geoContentLoading, setGeoContentLoading] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const PAGE_SIZE = 20;
 
   const platformFilterOptions = useMemo(
@@ -129,6 +130,12 @@ export default function ContentLibraryView({
       setFilterPlatform('');
     }
   }, [filterPlatform, platformFilterOptions]);
+
+  useEffect(() => {
+    if (selectedBatch || selectedItem) setInspectorOpen(true);
+  }, [selectedBatch?.id, selectedItem?.id]);
+
+  const closeArticleInspector = () => setInspectorOpen(false);
 
   const loadBatches = async () => {
     setLoading(true);
@@ -858,15 +865,8 @@ export default function ContentLibraryView({
             void publishChecked(onlyItemId);
           }}
         />
-        <div
-          className={`grid h-full min-h-0 overflow-hidden ${
-            detailViaNavigation ? 'grid-cols-1' : 'grid-cols-[minmax(0,1fr)_360px]'
-          }`}
-        >
-          <main
-            className={`min-w-0 min-h-0 flex flex-col ${detailViaNavigation ? '' : 'border-r'}`}
-            style={detailViaNavigation ? undefined : { borderColor: 'var(--neutral-divider-02)' }}
-          >
+        <div className="grid grid-cols-1 items-start">
+          <main className="min-w-0 min-h-0 flex flex-col">
             <div className="shrink-0 px-4 py-3 border-b" style={{ borderColor: 'var(--neutral-divider-02)' }}>
               <h3 className="text-sm font-bold text-[var(--color-title)]">文章列表</h3>
               <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -1027,170 +1027,170 @@ export default function ContentLibraryView({
           </main>
 
           {!detailViaNavigation && (
-          <aside className="min-w-0 min-h-0 flex flex-col bg-white">
-            <div className="shrink-0 px-4 py-3 border-b" style={{ borderColor: 'var(--neutral-divider-02)' }}>
-              <h3 className="text-sm font-bold text-[var(--color-title)]">文章操作</h3>
-            </div>
-
-            <div className="flex-1 min-h-0 overflow-auto p-4">
-              {!selectedItem || !selectedStatus ? (
-                <div className="h-full grid place-items-center text-center text-sm text-[var(--neutral-text-03)]">
-                  选择一篇文章后，可预览、编辑和发布
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-medium ${articleStatusClass(selectedStatus)}`}>
-                      {articleStatusDisplay(selectedStatus)}
-                    </span>
-                    <button
-                      type="button"
-                      className="geo-btn-secondary geo-btn-xs inline-flex items-center gap-1 shrink-0"
-                      onClick={() => setShowFullContent(true)}
+          <RightPreviewPanel
+            open={inspectorOpen && Boolean(selectedItem)}
+            onClose={closeArticleInspector}
+            title="文章操作"
+            panelWidth={360}
+            footer={
+              selectedItem ? (
+                <div className="space-y-2">
+                  {publishAccounts.length > 0 && (
+                    <select
+                      className="geo-input w-full text-xs mb-1"
+                      value={selectedAccountId}
+                      onChange={(e) => setSelectedAccountId(e.target.value)}
                     >
-                      预览
-                      <ExternalLink className="w-3 h-3" />
-                    </button>
-                  </div>
-
-                  <p className="text-sm font-bold leading-relaxed text-[var(--color-title)]">{selectedItem.title}</p>
-
-                  <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
-                    <div>
-                      <dt className="text-[var(--neutral-text-03)]">平台</dt>
-                      <dd className="mt-0.5 font-medium">{selectedItem.platform}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-[var(--neutral-text-03)]">生成时间</dt>
-                      <dd className="mt-0.5 font-medium tabular-nums">
-                        {new Date(selectedItem.createdAt).toLocaleString('zh-CN', {
-                          year: 'numeric',
-                          month: '2-digit',
-                          day: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          hour12: false,
-                        })}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[var(--neutral-text-03)]">字数</dt>
-                      <dd className="mt-0.5 font-medium">{wordCount} 字</dd>
-                    </div>
-                    <div>
-                      <dt className="text-[var(--neutral-text-03)]">所属项目</dt>
-                      <dd className="mt-0.5 font-medium line-clamp-2">{projectTitle ?? '—'}</dd>
-                    </div>
-                  </dl>
-
-                  <section>
-                    <p className="text-[11px] font-semibold text-[var(--neutral-text-02)] mb-2">内容预览（摘要）</p>
-                    {isEditing || showFullContent ? (
-                      <textarea
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        readOnly={!isEditing}
-                        className="w-full min-h-[200px] p-3 text-sm resize-y outline-none rounded-lg border leading-relaxed"
-                        style={{
-                          borderColor: 'var(--neutral-divider-02)',
-                          color: 'var(--neutral-text-01)',
-                          background: 'var(--color-bg-card)',
-                        }}
-                      />
-                    ) : (
-                      <p className="text-sm leading-relaxed text-[var(--neutral-text-02)] line-clamp-6 whitespace-pre-wrap">
-                        {selectedItem.previewText || editContent.slice(0, 280) || '（暂无摘要）'}
-                      </p>
-                    )}
-                    {!isEditing && !showFullContent && (
+                      {publishAccounts.map((account) => (
+                        <option key={account.id} value={account.id} disabled={!isPublishReady(account.status)}>
+                          {account.accountName} · {account.status}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {isEditing ? (
+                    <div className="flex gap-2">
+                      <button type="button" className="geo-btn-primary geo-btn-sm flex-1" onClick={() => void saveItem()}>
+                        保存
+                      </button>
                       <button
                         type="button"
-                        className="mt-2 text-xs text-[var(--color-accent)] hover:underline"
-                        onClick={() => setShowFullContent(true)}
+                        className="geo-btn-secondary geo-btn-sm flex-1"
+                        onClick={() => {
+                          setEditContent(selectedItem.fullContent);
+                          setIsEditing(false);
+                        }}
                       >
-                        查看全文
+                        取消
                       </button>
-                    )}
-                  </section>
-                </div>
-              )}
-            </div>
-
-            {selectedItem && (
-              <div className="shrink-0 border-t p-4 space-y-2" style={{ borderColor: 'var(--neutral-divider-02)' }}>
-                {publishAccounts.length > 0 && (
-                  <select
-                    className="geo-input w-full text-xs mb-1"
-                    value={selectedAccountId}
-                    onChange={(e) => setSelectedAccountId(e.target.value)}
-                  >
-                    {publishAccounts.map((account) => (
-                      <option key={account.id} value={account.id} disabled={!isPublishReady(account.status)}>
-                        {account.accountName} · {account.status}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {isEditing ? (
-                  <div className="flex gap-2">
-                    <button type="button" className="geo-btn-primary geo-btn-sm flex-1" onClick={() => void saveItem()}>
-                      保存
-                    </button>
-                    <button
-                      type="button"
-                      className="geo-btn-secondary geo-btn-sm flex-1"
-                      onClick={() => {
-                        setEditContent(selectedItem.fullContent);
-                        setIsEditing(false);
-                      }}
-                    >
-                      取消
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      className="geo-btn-secondary geo-btn-sm w-full"
-                      onClick={() => {
-                        setShowFullContent(true);
-                        setIsEditing(true);
-                      }}
-                    >
-                      <Pencil className="w-3.5 h-3.5 inline mr-1" />
-                      编辑
-                    </button>
-                    <button
-                      type="button"
-                      className="geo-btn-primary geo-btn-sm w-full"
-                      disabled={publishing}
-                      onClick={() => requestPublish(selectedItem.id)}
-                    >
-                      立即发布
-                    </button>
-                    {onNavigate && (
+                    </div>
+                  ) : (
+                    <>
                       <button
                         type="button"
                         className="geo-btn-secondary geo-btn-sm w-full"
-                        onClick={() => onNavigate('self_account_publish', 'schedule')}
+                        onClick={() => {
+                          setShowFullContent(true);
+                          setIsEditing(true);
+                        }}
                       >
-                        加入排程
+                        <Pencil className="w-3.5 h-3.5 inline mr-1" />
+                        编辑
                       </button>
-                    )}
+                      <button
+                        type="button"
+                        className="geo-btn-primary geo-btn-sm w-full"
+                        disabled={publishing}
+                        onClick={() => requestPublish(selectedItem.id)}
+                      >
+                        立即发布
+                      </button>
+                      {onNavigate && (
+                        <button
+                          type="button"
+                          className="geo-btn-secondary geo-btn-sm w-full"
+                          onClick={() => onNavigate('self_account_publish', 'schedule')}
+                        >
+                          加入排程
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="geo-btn-secondary geo-btn-sm w-full text-red-600 border-red-200 hover:bg-red-50"
+                        disabled={bulkWorking}
+                        onClick={() => void deleteCurrentArticle()}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 inline mr-1" />
+                        删除文章
+                      </button>
+                    </>
+                  )}
+                </div>
+              ) : undefined
+            }
+          >
+            {!selectedItem || !selectedStatus ? (
+              <div className="text-center text-sm text-[var(--neutral-text-03)] py-8">
+                选择一篇文章后，可预览、编辑和发布
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-2">
+                  <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-medium ${articleStatusClass(selectedStatus)}`}>
+                    {articleStatusDisplay(selectedStatus)}
+                  </span>
+                  <button
+                    type="button"
+                    className="geo-btn-secondary geo-btn-xs inline-flex items-center gap-1 shrink-0"
+                    onClick={() => setShowFullContent(true)}
+                  >
+                    预览
+                    <ExternalLink className="w-3 h-3" />
+                  </button>
+                </div>
+
+                <p className="text-sm font-bold leading-relaxed text-[var(--color-title)]">{selectedItem.title}</p>
+
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+                  <div>
+                    <dt className="text-[var(--neutral-text-03)]">平台</dt>
+                    <dd className="mt-0.5 font-medium">{selectedItem.platform}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[var(--neutral-text-03)]">生成时间</dt>
+                    <dd className="mt-0.5 font-medium tabular-nums">
+                      {new Date(selectedItem.createdAt).toLocaleString('zh-CN', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false,
+                      })}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[var(--neutral-text-03)]">字数</dt>
+                    <dd className="mt-0.5 font-medium">{wordCount} 字</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[var(--neutral-text-03)]">所属项目</dt>
+                    <dd className="mt-0.5 font-medium line-clamp-2">{projectTitle ?? '—'}</dd>
+                  </div>
+                </dl>
+
+                <section>
+                  <p className="text-[11px] font-semibold text-[var(--neutral-text-02)] mb-2">内容预览（摘要）</p>
+                  {isEditing || showFullContent ? (
+                    <textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      readOnly={!isEditing}
+                      className="w-full min-h-[200px] p-3 text-sm resize-y outline-none rounded-lg border leading-relaxed"
+                      style={{
+                        borderColor: 'var(--neutral-divider-02)',
+                        color: 'var(--neutral-text-01)',
+                        background: 'var(--color-bg-card)',
+                      }}
+                    />
+                  ) : (
+                    <p className="text-sm leading-relaxed text-[var(--neutral-text-02)] line-clamp-6 whitespace-pre-wrap">
+                      {selectedItem.previewText || editContent.slice(0, 280) || '（暂无摘要）'}
+                    </p>
+                  )}
+                  {!isEditing && !showFullContent && (
                     <button
                       type="button"
-                      className="geo-btn-secondary geo-btn-sm w-full text-red-600 border-red-200 hover:bg-red-50"
-                      disabled={bulkWorking}
-                      onClick={() => void deleteCurrentArticle()}
+                      className="mt-2 text-xs text-[var(--color-accent)] hover:underline"
+                      onClick={() => setShowFullContent(true)}
                     >
-                      <Trash2 className="w-3.5 h-3.5 inline mr-1" />
-                      删除文章
+                      查看全文
                     </button>
-                  </>
-                )}
+                  )}
+                </section>
               </div>
             )}
-          </aside>
+          </RightPreviewPanel>
           )}
         </div>
       </>
@@ -1216,10 +1216,10 @@ export default function ContentLibraryView({
         void publishChecked(onlyItemId);
       }}
     />
-    <div className="geo-split-layout flex h-full min-h-0 min-w-0 overflow-hidden">
+    <div className="flex items-start min-w-0">
       {/* 文章结果：生成批次 + 单篇文章 */}
       <aside
-        className="shrink-0 flex flex-col border-r min-h-0"
+        className="shrink-0 sticky top-0 self-start flex flex-col border-r geo-scroll-hide max-h-[calc(100vh-var(--layout-header-height))]"
         style={{
           width: EXPLORER_WIDTH,
           borderColor: 'var(--neutral-divider-02)',
@@ -1321,7 +1321,7 @@ export default function ContentLibraryView({
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto text-xs">
+        <div className="flex-1 min-h-0 text-xs">
           {loading ? (
             <p className="p-4" style={{ color: 'var(--neutral-text-03)' }}>
               加载中…
@@ -1507,6 +1507,15 @@ export default function ContentLibraryView({
                 {selectedItem.title}
               </h3>
               <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {selectedBatch && !inspectorOpen && (
+                  <button
+                    type="button"
+                    className="geo-btn-secondary geo-btn-xs"
+                    onClick={() => setInspectorOpen(true)}
+                  >
+                    文章操作
+                  </button>
+                )}
                 {!isEditing ? (
                   <button
                     type="button"
@@ -1576,8 +1585,14 @@ export default function ContentLibraryView({
         )}
       </main>
 
-      {/* 检查器：元信息 + 发布 */}
-      <RightPreviewPanel title="文章操作" panelWidth={INSPECTOR_WIDTH} footer={publishFooter}>
+      {/* 检查器：元信息 + 发布（蒙层抽屉） */}
+      <RightPreviewPanel
+        open={inspectorOpen && Boolean(selectedBatch)}
+        onClose={closeArticleInspector}
+        title="文章操作"
+        panelWidth={INSPECTOR_WIDTH}
+        footer={publishFooter}
+      >
         {selectedBatch ? (
           <div className="space-y-4 text-xs">
             <section>

@@ -64,8 +64,11 @@ export default function GeoAnalysisView({ brandName, onBrandChange, onNavigate }
 
   return (
     <HermesSubmitGuardProvider onNavigate={onNavigate}>
-      <div className="flex flex-col h-full min-h-0 overflow-hidden">
-        <div className="shrink-0 px-6 pt-4 pb-0 border-b" style={{ borderColor: 'var(--neutral-divider-02)' }}>
+      <div className="flex flex-col min-h-0">
+        <div
+          className="geo-page-tab-sticky shrink-0 px-6 pt-4 pb-0 border-b"
+          style={{ borderColor: 'var(--neutral-divider-02)' }}
+        >
           <div className="mb-3">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <h2 className="text-sm font-bold text-[var(--color-title)]">GEO 分析</h2>
@@ -80,7 +83,7 @@ export default function GeoAnalysisView({ brandName, onBrandChange, onNavigate }
           <GeoAnalysisTabs tab={pageTab} onTabChange={(t) => switchGeoTab(t)} />
         </div>
 
-        <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="flex flex-col min-w-0">
           {pageTab === 'smart_check' && (
             <GeoQuickStartView
               brandName={brandName}

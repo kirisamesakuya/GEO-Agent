@@ -9,6 +9,7 @@ import { isArticleContentOrder } from './task-order-flow';
 export type ArticleDeliverySource = 'ai_generated' | 'manual_order' | 'imported';
 
 export type ArticleDeliveryStage =
+  | 'pending_provider'
   | 'writing'
   | 'draft_review'
   | 'draft_revision'
@@ -19,7 +20,8 @@ export type ArticleDeliveryStage =
   | 'pending_acceptance'
   | 'final_revision'
   | 'completed'
-  | 'disputed';
+  | 'disputed'
+  | 'cancelled';
 
 export interface ArticleDeliveryRow {
   id: string;
@@ -43,13 +45,15 @@ export interface ArticleDeliveryRow {
 
 export type ArticleDeliveryStatusFilter =
   | 'all'
+  | 'pending_provider'
   | 'writing'
   | 'draft_review'
   | 'draft_revision'
   | 'pending_publish'
   | 'published'
   | 'pending_acceptance'
-  | 'completed';
+  | 'completed'
+  | 'cancelled';
 
 export type ArticleDeliverySourceFilter = 'all' | ArticleDeliverySource;
 
@@ -58,6 +62,7 @@ export const ARTICLE_DELIVERY_STATUS_TABS: {
   label: string;
 }[] = [
   { id: 'all', label: '全部文章' },
+  { id: 'pending_provider', label: '待接单' },
   { id: 'writing', label: '写作中' },
   { id: 'draft_review', label: '待审稿' },
   { id: 'draft_revision', label: '审稿返修' },
@@ -65,6 +70,7 @@ export const ARTICLE_DELIVERY_STATUS_TABS: {
   { id: 'published', label: '已发布' },
   { id: 'pending_acceptance', label: '待验收' },
   { id: 'completed', label: '已完成' },
+  { id: 'cancelled', label: '已撤回' },
 ];
 
 export const ARTICLE_DELIVERY_SOURCE_OPTIONS: { id: ArticleDeliverySourceFilter; label: string }[] = [
@@ -126,6 +132,7 @@ export function channelToSourceFilter(
 }
 
 export const ARTICLE_DELIVERY_STAGE_LABEL: Record<ArticleDeliveryStage, string> = {
+  pending_provider: '待接单',
   writing: '写作中',
   draft_review: '待审稿',
   draft_revision: '审稿返修',
@@ -137,13 +144,17 @@ export const ARTICLE_DELIVERY_STAGE_LABEL: Record<ArticleDeliveryStage, string> 
   final_revision: '最终返修',
   completed: '已完成',
   disputed: '争议中',
+  cancelled: '已撤回',
 };
 
 export function articleDeliveryStageClass(stage: ArticleDeliveryStage): string {
   if (stage === 'published' || stage === 'completed') return 'bg-emerald-50 text-emerald-700';
-  if (stage === 'pending_publish' || stage === 'publishing') return 'bg-sky-50 text-sky-700';
+  if (stage === 'pending_provider' || stage === 'pending_publish' || stage === 'publishing') {
+    return 'bg-sky-50 text-sky-700';
+  }
   if (stage === 'draft_review' || stage === 'pending_acceptance') return 'bg-amber-50 text-amber-700';
   if (stage === 'draft_revision' || stage === 'final_revision') return 'bg-orange-50 text-orange-700';
+  if (stage === 'cancelled') return 'bg-[var(--neutral-bg-03)] text-[var(--neutral-text-03)]';
   if (stage === 'publish_failed' || stage === 'disputed') return 'bg-red-50 text-red-700';
   return 'bg-[var(--neutral-bg-03)] text-[var(--neutral-text-02)]';
 }
@@ -199,7 +210,7 @@ function mapAiItemStage(
 export function mapManualOrderStage(status: string): ArticleDeliveryStage {
   switch (status) {
     case 'published':
-      return 'writing';
+      return 'pending_provider';
     case 'in_progress':
       return 'writing';
     case 'draft_review':
@@ -216,6 +227,8 @@ export function mapManualOrderStage(status: string): ArticleDeliveryStage {
       return 'completed';
     case 'disputed':
       return 'disputed';
+    case 'cancelled':
+      return 'cancelled';
     default:
       return 'writing';
   }
@@ -253,11 +266,14 @@ function publishResultForAi(
 }
 
 function publishResultForManual(status: ArticleDeliveryStage): string {
+  if (status === 'pending_provider') return '大厅招募中';
+  if (status === 'writing') return '撰写中';
   if (status === 'draft_review') return '草稿待审';
   if (status === 'pending_publish') return '待回填链接';
   if (status === 'pending_acceptance') return '待验收';
   if (status === 'completed') return '已验收';
   if (status === 'disputed') return '争议处理中';
+  if (status === 'cancelled') return '已撤回';
   return '—';
 }
 
@@ -422,6 +438,7 @@ export function filterArticleDeliveryRows(
   const q = opts.search.trim().toLowerCase();
   return rows.filter((row) => {
     if (opts.status !== 'all') {
+      if (opts.status === 'pending_provider' && row.stage !== 'pending_provider') return false;
       if (opts.status === 'writing' && row.stage !== 'writing') return false;
       if (opts.status === 'draft_review' && row.stage !== 'draft_review') return false;
       if (opts.status === 'draft_revision' && row.stage !== 'draft_revision') return false;
@@ -437,6 +454,7 @@ export function filterArticleDeliveryRows(
       if (opts.status === 'published' && row.stage !== 'published') return false;
       if (opts.status === 'pending_acceptance' && row.stage !== 'pending_acceptance') return false;
       if (opts.status === 'completed' && row.stage !== 'completed') return false;
+      if (opts.status === 'cancelled' && row.stage !== 'cancelled') return false;
     }
     if (opts.source !== 'all' && row.source !== opts.source) return false;
     if (opts.platform && row.platform !== opts.platform) return false;
@@ -454,6 +472,7 @@ export function countArticleDeliveryByStatus(
 ): Record<ArticleDeliveryStatusFilter, number> {
   const counts: Record<ArticleDeliveryStatusFilter, number> = {
     all: rows.length,
+    pending_provider: 0,
     writing: 0,
     draft_review: 0,
     draft_revision: 0,
@@ -461,8 +480,10 @@ export function countArticleDeliveryByStatus(
     published: 0,
     pending_acceptance: 0,
     completed: 0,
+    cancelled: 0,
   };
   for (const row of rows) {
+    if (row.stage === 'pending_provider') counts.pending_provider += 1;
     if (row.stage === 'writing') counts.writing += 1;
     if (row.stage === 'draft_review') counts.draft_review += 1;
     if (row.stage === 'draft_revision') counts.draft_revision += 1;
@@ -472,6 +493,7 @@ export function countArticleDeliveryByStatus(
     if (row.stage === 'published') counts.published += 1;
     if (row.stage === 'pending_acceptance') counts.pending_acceptance += 1;
     if (row.stage === 'completed') counts.completed += 1;
+    if (row.stage === 'cancelled') counts.cancelled += 1;
   }
   return counts;
 }
@@ -521,4 +543,14 @@ export function parseArticleDeliveryStatusFromUrl(): ArticleDeliveryStatusFilter
     return s as ArticleDeliveryStatusFilter;
   }
   return 'all';
+}
+
+/** 发单后跳转等内容交付时，将 hint 映射为列表阶段筛选 */
+export function articleDeliveryStatusFromHint(hint?: string): ArticleDeliveryStatusFilter | null {
+  if (!hint) return null;
+  if (hint === 'pending_provider' || hint === 'manual') return 'pending_provider';
+  if (ARTICLE_DELIVERY_STATUS_TABS.some((t) => t.id === hint)) {
+    return hint as ArticleDeliveryStatusFilter;
+  }
+  return null;
 }

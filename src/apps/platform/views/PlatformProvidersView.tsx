@@ -11,7 +11,7 @@ import PlatformStatSummary from '../components/PlatformStatSummary';
 import PlatformStatusTag from '../components/PlatformStatusTag';
 import PlatformTabBar from '../components/PlatformTabBar';
 import { PlatformTableAction, PlatformTableActions } from '../components/PlatformTableActions';
-import type { PlatformStatusKind } from '../types';
+import type { PlatformStatusKind, PlatformView } from '../types';
 
 interface ReviewLog {
   id: string;
@@ -38,6 +38,10 @@ interface ProviderRow {
   caseLinks?: string | null;
   capabilities?: string | null;
   reviewNote?: string | null;
+  identityRealName?: string | null;
+  identityIdNumberMask?: string | null;
+  identityVerifiedAt?: string | null;
+  payoutAccountName?: string | null;
   createdAt: string;
   updatedAt: string;
   reviewLogs?: ReviewLog[];
@@ -76,7 +80,7 @@ function parseApplicationPayload(raw?: string): Record<string, unknown> | null {
   }
 }
 
-export default function PlatformProvidersView() {
+export default function PlatformProvidersView({ onNavigate }: { onNavigate?: (view: PlatformView) => void }) {
   const { toast } = useToast();
   const { role } = usePlatformRole();
   const [tab, setTab] = useState('submitted');
@@ -179,9 +183,14 @@ export default function PlatformProvidersView() {
             { key: 'name', header: '名称', render: (r) => <span className="font-medium">{r.name}</span> },
             { key: 'type', header: '类型', render: (r) => r.type },
             {
-              key: 'contact',
+              key: 'contactName',
               header: '联系人',
-              render: (r) => `${r.contactName ?? '—'} · ${r.phone ?? '—'}`,
+              render: (r) => r.contactName ?? '—',
+            },
+            {
+              key: 'phone',
+              header: '手机号',
+              render: (r) => r.phone ?? '—',
             },
             { key: 'city', header: '城市', render: (r) => r.city ?? '—' },
             {
@@ -272,7 +281,11 @@ export default function PlatformProvidersView() {
             </p>
             <p>
               <span className="text-[var(--platform-text-tertiary)]">联系人：</span>
-              {selected.contactName ?? '—'} · {selected.phone ?? '—'}
+              {selected.contactName ?? '—'}
+            </p>
+            <p>
+              <span className="text-[var(--platform-text-tertiary)]">手机号：</span>
+              {selected.phone ?? '—'}
             </p>
             {selected.email && (
               <p>
@@ -284,6 +297,23 @@ export default function PlatformProvidersView() {
               <span className="text-[var(--platform-text-tertiary)]">城市：</span>
               {selected.city ?? '—'}
             </p>
+            <div className="rounded-lg border border-[var(--platform-border-subtle)] bg-[var(--platform-surface-subtle)] p-3 text-xs space-y-1">
+              <p className="font-semibold text-[var(--platform-text-secondary)]">身份证实名</p>
+              {selected.identityVerifiedAt ? (
+                <>
+                  <p>姓名：{selected.identityRealName ?? '—'}</p>
+                  <p>证件号：{selected.identityIdNumberMask ?? '—'}</p>
+                  <p>认证时间：{new Date(selected.identityVerifiedAt).toLocaleString('zh-CN')}</p>
+                </>
+              ) : (
+                <p className="text-[var(--platform-text-tertiary)]">尚未完成实名认证</p>
+              )}
+              {onNavigate && selected.applicationStatus === 'approved' && (
+                <button type="button" className="geo-btn-secondary geo-btn-xs mt-2" onClick={() => onNavigate('provider_identity')}>
+                  实名认证列表
+                </button>
+              )}
+            </div>
             <p>
               <span className="text-[var(--platform-text-tertiary)]">可接单平台：</span>
               {selected.platforms ?? '—'}

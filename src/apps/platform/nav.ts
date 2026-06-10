@@ -4,6 +4,8 @@ import {
 
   BriefcaseBusiness,
 
+  Cpu,
+
   CreditCard,
 
   BarChart3,
@@ -19,6 +21,8 @@ import {
   Menu,
 
   ShieldAlert,
+
+  BadgeCheck,
 
   Star,
 
@@ -62,6 +66,8 @@ export const PLATFORM_NAV_ICONS: Record<PlatformView, LucideIcon> = {
 
   providers: Users,
 
+  provider_identity: BadgeCheck,
+
   resource_review: Users,
 
   fulfillment_rating: Star,
@@ -86,6 +92,8 @@ export const PLATFORM_NAV_ICONS: Record<PlatformView, LucideIcon> = {
 
   menu_admin: Menu,
   media_platforms: Layers3,
+
+  monitor_platforms: Cpu,
 
   custom_publish_platforms: Megaphone,
 
@@ -114,7 +122,9 @@ export function platformNavPermission(view: PlatformView): string {
   }
 
   if (view === 'media_platforms') return 'media_platforms';
+  if (view === 'monitor_platforms') return 'monitor_platforms';
   if (view === 'custom_publish_platforms') return 'custom_publish_platforms';
+  if (view === 'provider_identity') return 'providers';
 
   if (
     view === 'publisher_accounts' ||
@@ -162,7 +172,7 @@ export const PLATFORM_NAV_GROUPS: PlatformNavGroup[] = [
 
       { id: 'publisher_users', label: '注册用户' },
 
-      { id: 'merchants', label: '品牌与商家' },
+      { id: 'merchants', label: '品牌资料' },
 
       { id: 'org_certs', label: '企业认证审核' },
 
@@ -185,6 +195,8 @@ export const PLATFORM_NAV_GROUPS: PlatformNavGroup[] = [
       { id: 'provider_users', label: '注册用户' },
 
       { id: 'providers', label: '接单方主体' },
+
+      { id: 'provider_identity', label: '实名认证' },
 
       // 本期隐藏，见 platform-feature-flags.ts
 
@@ -253,6 +265,8 @@ export const PLATFORM_NAV_GROUPS: PlatformNavGroup[] = [
     items: [
 
       { id: 'media_platforms', label: '媒体平台字典' },
+
+      { id: 'monitor_platforms', label: '监测平台字典' },
 
       { id: 'custom_publish_platforms', label: '品牌自定义渠道' },
 
@@ -329,6 +343,8 @@ export const PLATFORM_PERMISSION_LABELS: Record<string, string> = {
   menu_admin: '后台菜单',
 
   media_platforms: '媒体平台字典',
+
+  monitor_platforms: '监测平台字典',
 
   custom_publish_platforms: '品牌自定义渠道',
 

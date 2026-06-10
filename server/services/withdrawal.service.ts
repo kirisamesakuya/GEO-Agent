@@ -1,6 +1,11 @@
 import { prisma } from '../db/client.js';
 import { appendAuditLog } from './audit.service.js';
 import { createProviderNotification } from './notification.service.js';
+import {
+  formatProviderPayoutBrief,
+  payoutChannelLabel,
+  providerPayoutNameMatch,
+} from '../../lib/provider-payout.js';
 
 /**
  * DEMO_ONLY:
@@ -90,9 +95,44 @@ export async function listWithdrawalRequests(options?: {
     orderBy: { createdAt: 'desc' },
     take: limit,
     include: {
-      provider: { select: { id: true, name: true } },
+      provider: {
+        select: {
+          id: true,
+          name: true,
+          payoutChannel: true,
+          payoutAccountName: true,
+          payoutAccountLabel: true,
+          identityRealName: true,
+          identityIdNumberMask: true,
+          identityVerifiedAt: true,
+        },
+      },
     },
   });
+}
+
+function mapWithdrawalRequestRow(
+  r: Awaited<ReturnType<typeof listWithdrawalRequests>>[number]
+) {
+  const p = r.provider;
+  const payoutBrief = p ? formatProviderPayoutBrief(p) : '—';
+  return {
+    ...r,
+    payoutChannel: p?.payoutChannel ?? r.channel,
+    payoutChannelLabel: p?.payoutChannel ? payoutChannelLabel(p.payoutChannel) : payoutChannelLabel(r.channel),
+    payoutAccountName: p?.payoutAccountName ?? null,
+    payoutAccountLabel: p?.payoutAccountLabel ?? null,
+    payoutBrief,
+    identityRealName: p?.identityRealName ?? null,
+    identityIdNumberMask: p?.identityIdNumberMask ?? null,
+    identityVerified: Boolean(p?.identityVerifiedAt),
+    payoutNameMatch: p ? providerPayoutNameMatch(p) : null,
+  };
+}
+
+export async function listWithdrawalRequestsMapped(options?: Parameters<typeof listWithdrawalRequests>[0]) {
+  const rows = await listWithdrawalRequests(options);
+  return rows.map(mapWithdrawalRequestRow);
 }
 
 export async function listPlatformProviderAccounts(options?: {
@@ -115,6 +155,9 @@ export async function listPlatformProviderAccounts(options?: {
       payoutChannel: true,
       payoutAccountName: true,
       payoutAccountLabel: true,
+      identityRealName: true,
+      identityIdNumberMask: true,
+      identityVerifiedAt: true,
     },
   });
 
@@ -125,6 +168,11 @@ export async function listPlatformProviderAccounts(options?: {
         where: { providerId: p.id, status: { in: ['pending', 'approved'] } },
       });
       const hasPayoutAccount = Boolean(p.payoutAccountLabel?.trim());
+      const identityVerified = Boolean(p.identityVerifiedAt);
+      const nameMatch =
+        identityVerified && p.identityRealName && p.payoutAccountName
+          ? p.identityRealName === p.payoutAccountName
+          : null;
       return {
         providerId: p.id,
         providerName: p.name,
@@ -134,6 +182,11 @@ export async function listPlatformProviderAccounts(options?: {
         payoutAccountName: p.payoutAccountName,
         payoutAccountLabel: p.payoutAccountLabel,
         hasPayoutAccount,
+        identityVerified,
+        identityRealName: p.identityRealName,
+        identityIdNumberMask: p.identityIdNumberMask,
+        identityVerifiedAt: p.identityVerifiedAt,
+        nameMatch,
         pendingWithdrawal,
         ...wallet,
       };
@@ -170,7 +223,7 @@ export async function listWithdrawalRequestsWithWallet(options?: {
   status?: string;
   limit?: number;
 }) {
-  const requests = await listWithdrawalRequests(options);
+  const requests = await listWithdrawalRequestsMapped(options);
   const walletByProvider = new Map<string, Awaited<ReturnType<typeof getProviderWalletSummary>>>();
   const enriched = await Promise.all(
     requests.map(async (r) => {
@@ -207,10 +260,10 @@ async function getTodayWithdrawalTotal(providerId: string) {
 export async function createWithdrawalRequest(input: {
   providerId: string;
   amount: number;
-  channel: string;
+  channel?: string;
   channelLabel?: string;
 }) {
-  const { providerId, amount, channel, channelLabel } = input;
+  const { providerId, amount } = input;
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error('提现金额必须大于 0');
   }
@@ -227,6 +280,9 @@ export async function createWithdrawalRequest(input: {
     throw new Error('请先在个人中心维护提现账户');
   }
 
+  const payoutChannel = provider.payoutChannel ?? 'alipay';
+  const payoutBrief = formatProviderPayoutBrief(provider);
+
   const wallet = await getProviderWalletSummary(providerId);
   if (amount > wallet.extractable) {
     throw new Error(`可提现余额不足，当前可提 ¥${wallet.extractable.toFixed(2)}`);
@@ -241,8 +297,8 @@ export async function createWithdrawalRequest(input: {
     data: {
       providerId,
       amount: Math.round(amount * 100) / 100,
-      channel,
-      channelLabel: channelLabel ?? channel,
+      channel: payoutChannel,
+      channelLabel: payoutBrief,
       status: 'pending',
     },
   });

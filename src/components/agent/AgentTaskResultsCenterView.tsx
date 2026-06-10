@@ -141,8 +141,7 @@ export default function AgentTaskResultsCenterView({
   }
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="geo-page-content max-w-7xl space-y-5 pb-8">
+    <div className="geo-page-content max-w-7xl space-y-5 pb-8">
         <PageHeaderWithBrand
           title="任务结果中心"
           titleClassName="text-xl font-bold text-[var(--color-title)]"
@@ -333,7 +332,6 @@ export default function AgentTaskResultsCenterView({
             </div>
           )}
         </div>
-      </div>
     </div>
   );
 }

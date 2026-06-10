@@ -91,25 +91,178 @@ async function seedDemoIndexPlan(brandId: string, keywordIds: string[]) {
   await prisma.indexResult.createMany({ data: results });
 }
 
-async function seedDemoGeoReport(brandName: string) {
-  await prisma.geoReport.create({
-    data: {
-      brandName,
-      title: `${brandName} · GEO 快速检测`,
+const DEMO_REPORT_MARKER = '【演示】';
+
+function demoFindings(brand: string, severity: 'high' | 'mid' | 'low') {
+  const base = [
+    {
+      id: 'f1',
+      level: 'critical',
+      title: '无统一官网',
+      impact: '品牌名易与同名植物混淆，AI 无法引用结构化信息',
+      suggestion: '建设品牌官网并配置 Schema / llms.txt',
+      owner: '市场部',
+    },
+    {
+      id: 'f2',
+      level: 'critical',
+      title: '无百度百科词条',
+      impact: 'DeepSeek / 豆包 / Kimi 权威背书不足',
+      suggestion: '创建或认领百科词条，补充资质与门店信息',
+      owner: '品牌运营',
+    },
+    {
+      id: 'f3',
+      level: 'high',
+      title: '问答场景覆盖不足',
+      impact: `「${brand} 怎么样」类问题提及率低`,
+      suggestion: '补充知乎问答与小红书探店内容',
+      owner: '内容团队',
+    },
+  ];
+  if (severity === 'high') return base;
+  if (severity === 'mid') return base.slice(0, 2).map((f) => ({ ...f, level: 'high' }));
+  return base.slice(0, 1).map((f) => ({ ...f, level: 'medium' }));
+}
+
+function demoScores(total: number) {
+  const ratio = total / 100;
+  return {
+    aiCitability: Math.round(40 * ratio + 10),
+    brandAuthority: Math.round(35 * ratio + 8),
+    contentEeat: Math.round(50 * ratio + 12),
+    technicalGeo: Math.round(45 * ratio + 15),
+    schema: Math.round(30 * ratio + 5),
+    platformOptimization: Math.round(48 * ratio + 10),
+  };
+}
+
+function demoArtifacts(brand: string, label: string) {
+  return [
+    {
+      id: `demo-md-${label}`,
+      type: 'markdown',
+      name: `${label}.md`,
+      preview: `# ${brand} · ${label}\n\n> 演示数据，用于体验报告历史与月度对比交互。\n\n## 核心指标\n- 提及率、缺口、分项得分见左侧列表\n\n## 建议动作\n1. 补齐官网与百科\n2. 按缺口发服务商任务包\n3. 30 天后设新报告并做月度对比`,
+    },
+  ];
+}
+
+async function ensureDemoGeoReportSuite(brandName: string) {
+  const suite: Array<{
+    title: string;
+    reportType: string;
+    isBaseline: boolean;
+    mentionRate: number;
+    rank: number;
+    gapsFound: number;
+    totalScore: number;
+    createdAt: Date;
+    brandMentionSummary: string;
+    contentGap: string;
+    optimizationSuggestions: string;
+    severity: 'high' | 'mid' | 'low';
+  }> = [
+    {
+      title: `${DEMO_REPORT_MARKER}${brandName} · 3月基线体检（对比起点）`,
+      reportType: 'audit',
+      isBaseline: true,
+      mentionRate: 18,
+      rank: 8,
+      gapsFound: 8,
+      totalScore: 21,
+      createdAt: daysAgo(62),
+      brandMentionSummary: `${brandName} 基线阶段：多数 AI 平台未稳定提及，缺少可引用官网与百科。`,
+      contentGap: '无官网；无百科；儿童齿科 FAQ 缺失；价格信息不透明。',
+      optimizationSuggestions: '优先建设官网 Schema、百科词条，并发布 3 篇种草内容补位。',
+      severity: 'high',
+    },
+    {
+      title: `${DEMO_REPORT_MARKER}${brandName} · 4月中期复检`,
+      reportType: 'audit',
+      isBaseline: false,
+      mentionRate: 28,
+      rank: 6,
+      gapsFound: 6,
+      totalScore: 35,
+      createdAt: daysAgo(32),
+      brandMentionSummary: `${brandName} 提及率较基线提升，DeepSeek 已开始引用门店信息。`,
+      contentGap: '百科已创建但内容单薄；知乎问答仍不足。',
+      optimizationSuggestions: '继续补 FAQ 与探店笔记，并启动排名监控。',
+      severity: 'mid',
+    },
+    {
+      title: `${DEMO_REPORT_MARKER}${brandName} · 5月快速检测`,
       reportType: 'quick_start',
+      isBaseline: false,
+      mentionRate: 35,
+      rank: 5,
+      gapsFound: 5,
+      totalScore: 48,
+      createdAt: daysAgo(14),
+      brandMentionSummary: `${brandName} 在豆包、DeepSeek 提及改善，Kimi 仍有缺口。`,
+      contentGap: '缺少「隐形矫正价格」相关问答覆盖。',
+      optimizationSuggestions: '针对缺口关键词生成 2 篇文章并发布到知乎/小红书。',
+      severity: 'mid',
+    },
+    {
+      title: `${DEMO_REPORT_MARKER}${brandName} · 6月最新审计`,
+      reportType: 'audit',
+      isBaseline: false,
       mentionRate: 42,
       rank: 4,
-      gapsFound: 5,
+      gapsFound: 4,
       totalScore: 58,
-      platformsJson: JSON.stringify(['DeepSeek', '豆包', 'Kimi']),
-      keywordsJson: JSON.stringify(DEMO_KEYWORDS),
-      brandMentionSummary: `${brandName} 在 DeepSeek、豆包已出现提及，Kimi 场景仍有缺口。`,
-      competitorAnalysis: '竞品「北辰口腔」在问答场景中提及频率更高。',
-      contentGap: '缺少「儿童齿科」相关 FAQ 与价格透明说明。',
-      optimizationSuggestions: '建议补充 3 篇小红书种草稿与 2 条知乎问答，覆盖缺口关键词。',
       createdAt: daysAgo(3),
+      brandMentionSummary: `${brandName} 在 DeepSeek、豆包已稳定提及，可进入月度对比复盘。`,
+      contentGap: '竞品「北辰口腔」在部分长尾词仍领先。',
+      optimizationSuggestions: '建议与 3 月基线生成月度对比报告，评估投放 ROI。',
+      severity: 'low',
     },
-  });
+  ];
+
+  for (const spec of suite) {
+    const exists = await prisma.geoReport.findFirst({
+      where: { brandName, title: spec.title },
+    });
+    if (exists) continue;
+    const scores = demoScores(spec.totalScore);
+    await prisma.geoReport.create({
+      data: {
+        brandName,
+        title: spec.title,
+        reportType: spec.reportType,
+        isBaseline: spec.isBaseline,
+        mentionRate: spec.mentionRate,
+        rank: spec.rank,
+        gapsFound: spec.gapsFound,
+        totalScore: spec.totalScore,
+        platformsJson: JSON.stringify(['DeepSeek', '豆包', 'Kimi', '腾讯元宝']),
+        keywordsJson: JSON.stringify(DEMO_KEYWORDS),
+        brandMentionSummary: spec.brandMentionSummary,
+        competitorAnalysis: '竞品「北辰口腔」在问答场景中提及频率更高，需持续补位。',
+        contentGap: spec.contentGap,
+        optimizationSuggestions: spec.optimizationSuggestions,
+        scoresJson: JSON.stringify(scores),
+        findingsJson: JSON.stringify(demoFindings(brandName, spec.severity)),
+        artifactsJson: JSON.stringify(demoArtifacts(brandName, spec.title.split('·').pop()?.trim() ?? '报告')),
+        createdAt: spec.createdAt,
+      },
+    });
+  }
+
+  const baselineTitle = suite[0].title;
+  const baselineRow = await prisma.geoReport.findFirst({ where: { brandName, title: baselineTitle } });
+  if (baselineRow && !baselineRow.isBaseline) {
+    await prisma.geoReport.updateMany({
+      where: { brandName, isBaseline: true },
+      data: { isBaseline: false },
+    });
+    await prisma.geoReport.update({
+      where: { id: baselineRow.id },
+      data: { isBaseline: true },
+    });
+  }
 }
 
 async function seedDemoContent(brandName: string) {
@@ -195,8 +348,8 @@ export async function ensureDemoPublisherSnapshot(brandName: string): Promise<vo
   }
 
   const reportCount = await prisma.geoReport.count({ where: { brandName: brand.name } });
-  if (reportCount === 0) {
-    await seedDemoGeoReport(brand.name);
+  if (reportCount < 4) {
+    await ensureDemoGeoReportSuite(brand.name);
   }
 
   const batchCount = await prisma.contentBatch.count({ where: { brandName: brand.name } });

@@ -2,7 +2,7 @@ import { prisma } from './client.js';
 
 const DEMO_PREFIX = '[演示]';
 const CONFIG_KEY = 'demo_task_orders_v';
-const CONFIG_VERSION = '3';
+const CONFIG_VERSION = '4';
 
 type DemoTaskSpec = {
   title: string;
@@ -398,6 +398,16 @@ const DEMO_TASK_SPECS: DemoTaskSpec[] = [
     providerName: '晨光传媒',
     revisions: [{ reason: '[争议] 结案数据与承诺曝光量差异较大，申请平台介入。', status: 'dispute' }],
   },
+  {
+    title: `${DEMO_PREFIX} 已撤回 · 暑期矫正推文`,
+    type: '文章',
+    platform: '公众号',
+    budget: 2800,
+    deliverable: '暑期隐形矫正活动推文 1 篇',
+    acceptance: '截图证明 / 链接回传',
+    status: 'cancelled',
+    description: '发布方在接单前撤回发单，预算已释放。',
+  },
 ];
 
 async function resolveProvider(name: string) {
@@ -473,29 +483,79 @@ export async function ensureDemoTaskOrders(brandName: string) {
 
 const DEMO_WEB_PREFIX = '[演示]';
 
+function buildDemoGeoWebsiteAnalysisNotes(input: {
+  reportId?: string;
+  reportTitle?: string;
+  referenceUrl?: string;
+  summary: string;
+}) {
+  return [
+    '来源：网站 GEO 资产 · 网站优化方案',
+    input.reportId ? `关联报告：${input.reportId}` : '',
+    input.reportTitle ? `报告标题：${input.reportTitle}` : '',
+    input.referenceUrl ? `官网：${input.referenceUrl}` : '',
+    '分析范围：技术基础、AI 爬虫访问、Schema、llms.txt',
+    `分析摘要：\n${input.summary}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 export async function ensureDemoWebsiteOrders(brandName: string) {
   const key = 'demo_website_orders_v';
-  const version = '2';
+  const version = '3';
   const cfg = await prisma.systemConfig.findUnique({ where: { key } });
   if (cfg?.value === version) return;
 
-  const { createWebsiteLeadRequest } = await import('../services/website.service.js');
+  const { ensureDemoPublisherSnapshot, isDemoPublisherSnapshotEnabled } = await import(
+    './demo-publisher-snapshot.js'
+  );
+  if (isDemoPublisherSnapshotEnabled()) {
+    await ensureDemoPublisherSnapshot(brandName);
+  }
 
-  const specs = [
+  const latestAudit = await prisma.geoReport.findFirst({
+    where: { brandName, title: { contains: '【演示】' }, reportType: 'audit' },
+    orderBy: { createdAt: 'desc' },
+  });
+  const baselineAudit =
+    (await prisma.geoReport.findFirst({
+      where: { brandName, isBaseline: true },
+      orderBy: { createdAt: 'asc' },
+    })) ?? latestAudit;
+
+  const { createWebsiteLeadRequest, updateWebsiteRequestAttachments } = await import(
+    '../services/website.service.js'
+  );
+
+  type DemoWebsiteSpec = {
+    pageType: string;
+    keywords: string;
+    contact: string;
+    notes: string;
+    referenceUrl?: string;
+    status: 'pending' | 'revision' | 'completed';
+    revisionReason?: string;
+    previewUrl?: string;
+    deliveryNote?: string;
+    attachments?: Array<{ name: string; url: string; mimeType?: string }>;
+  };
+
+  const specs: DemoWebsiteSpec[] = [
     {
       pageType: '活动落地页',
       keywords: `${DEMO_WEB_PREFIX} 暑期矫正活动`,
       contact: '13800001001',
       notes: '突出暑期优惠与预约入口',
       referenceUrl: 'https://www.yunshan-dental.cn/summer',
-      status: 'pending' as const,
+      status: 'pending',
     },
     {
       pageType: '品牌介绍页',
       keywords: `${DEMO_WEB_PREFIX} 门店升级`,
       contact: '微信 yunshan_ops',
       notes: '参考同城竞品首页结构',
-      status: 'revision' as const,
+      status: 'revision',
       revisionReason: '请补充门店实景照片与医生资质',
     },
     {
@@ -503,9 +563,88 @@ export async function ensureDemoWebsiteOrders(brandName: string) {
       keywords: `${DEMO_WEB_PREFIX} 种植牙专题`,
       contact: '13800001001',
       notes: '需 FAQ 与案例模块',
-      status: 'completed' as const,
+      status: 'completed',
       previewUrl: 'https://www.yunshan-dental.cn/implant-demo',
       deliveryNote: '已上线，请验收。',
+    },
+    {
+      pageType: '官网 GEO 改造',
+      keywords: `${DEMO_WEB_PREFIX} 官网 GEO 改造`,
+      contact: '13800001001',
+      referenceUrl: 'https://www.yunshan-dental.cn',
+      notes: buildDemoGeoWebsiteAnalysisNotes({
+        reportId: latestAudit?.id,
+        reportTitle: latestAudit?.title ?? undefined,
+        referenceUrl: 'https://www.yunshan-dental.cn',
+        summary: [
+          '技术基础：首页缺少完整 Organization / LocalBusiness Schema，AI 难以结构化识别门店信息。',
+          'AI 爬虫：robots.txt 未声明 GPTBot、Google-Extended 访问策略，存在误拦风险。',
+          'llms.txt：站点根目录未发现 llms.txt，大模型抓取指引缺失。',
+          '建议：补全 JSON-LD、上传 llms.txt、合并 robots 补丁后安排线下部署验收。',
+        ].join('\n'),
+      }),
+      status: 'pending',
+      attachments: latestAudit
+        ? [
+            {
+              name: 'GEO 分析报告',
+              url: `/api/geo-reports/${latestAudit.id}`,
+              mimeType: 'application/json',
+            },
+          ]
+        : undefined,
+    },
+    {
+      pageType: '品牌官网新建',
+      keywords: `${DEMO_WEB_PREFIX} 品牌官网新建`,
+      contact: '微信 yunshan_ops',
+      notes: buildDemoGeoWebsiteAnalysisNotes({
+        reportId: baselineAudit?.id,
+        reportTitle: baselineAudit?.title ?? undefined,
+        summary: [
+          '基线体检显示品牌暂无统一官网，AI 平台难以引用结构化门店与服务信息。',
+          '竞品页面已配置 Schema 与 FAQ，提及率领先。',
+          '建议：新建品牌官网，并随需求一并交付 Schema、llms.txt 与 robots 配置。',
+        ].join('\n'),
+      }),
+      status: 'pending',
+      attachments: baselineAudit
+        ? [
+            {
+              name: 'GEO 基线报告',
+              url: `/api/geo-reports/${baselineAudit.id}`,
+              mimeType: 'application/json',
+            },
+          ]
+        : undefined,
+    },
+    {
+      pageType: '服务落地页 GEO 优化',
+      keywords: `${DEMO_WEB_PREFIX} 种植牙落地页 GEO`,
+      contact: '13800001001',
+      referenceUrl: 'https://www.yunshan-dental.cn/implant',
+      notes: buildDemoGeoWebsiteAnalysisNotes({
+        reportId: latestAudit?.id,
+        reportTitle: latestAudit?.title ?? undefined,
+        referenceUrl: 'https://www.yunshan-dental.cn/implant',
+        summary: [
+          '页面正文可引用性一般，缺少价格区间与服务流程的结构化 FAQ。',
+          'Schema：建议补充 MedicalBusiness + FAQPage JSON-LD。',
+          '已按方案完成草稿，待接单方合并进落地页并上线。',
+        ].join('\n'),
+      }),
+      status: 'completed',
+      previewUrl: 'https://www.yunshan-dental.cn/implant-geo',
+      deliveryNote: '已按 GEO 分析报告完成 Schema 与 llms.txt 部署，请验收。',
+      attachments: latestAudit
+        ? [
+            {
+              name: 'GEO 分析报告',
+              url: `/api/geo-reports/${latestAudit.id}`,
+              mimeType: 'application/json',
+            },
+          ]
+        : undefined,
     },
   ];
 
@@ -515,7 +654,7 @@ export async function ensureDemoWebsiteOrders(brandName: string) {
     });
     if (dup) continue;
 
-    const { order } = await createWebsiteLeadRequest({
+    const { order, request } = await createWebsiteLeadRequest({
       brandName,
       pageType: spec.pageType,
       referenceUrl: spec.referenceUrl,
@@ -523,6 +662,10 @@ export async function ensureDemoWebsiteOrders(brandName: string) {
       contact: spec.contact,
       notes: spec.notes,
     });
+
+    if (spec.attachments?.length) {
+      await updateWebsiteRequestAttachments(request.id, spec.attachments);
+    }
 
     if (spec.status === 'revision') {
       await prisma.websiteOrder.update({

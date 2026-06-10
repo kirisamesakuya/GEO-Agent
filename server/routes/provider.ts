@@ -117,16 +117,14 @@ export function registerProviderRoutes(app: Express) {
   app.post('/api/provider/withdrawals', async (req, res) => {
     const providerId = requireProviderId(req, res);
     if (!providerId) return;
-    const { amount, channel, channelLabel } = req.body ?? {};
-    if (amount === undefined || !channel) {
-      return res.status(400).json({ error: '缺少 amount 或 channel' });
+    const { amount } = req.body ?? {};
+    if (amount === undefined) {
+      return res.status(400).json({ error: '缺少 amount' });
     }
     try {
       const request = await createWithdrawalRequest({
         providerId,
         amount: Number(amount),
-        channel,
-        channelLabel,
       });
       res.status(201).json({ request });
     } catch (err) {

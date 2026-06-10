@@ -3,6 +3,7 @@ import {
   maskIdCardNumber,
   validateProviderIdentityInput,
 } from '../../lib/provider-identity.js';
+import { isMvpPayoutChannel } from '../../lib/provider-payout.js';
 import { prisma } from '../db/client.js';
 import { appendAuditLog } from './audit.service.js';
 import { createProviderNotification } from './notification.service.js';
@@ -570,7 +571,11 @@ export async function listProviderOrdersPaginated(
           ? { in: ['revision'] }
           : status === 'completed'
             ? { in: ['completed'] }
-            : undefined;
+            : status === 'published'
+              ? { in: ['published'] }
+              : status === 'cancelled'
+                ? { in: ['cancelled'] }
+                : undefined;
 
   const where = {
     providerId,
@@ -759,6 +764,9 @@ export async function updateProviderPayoutAccount(
 
   if (!['bank', 'alipay', 'wechat'].includes(channel)) {
     throw new Error('请选择有效的提现渠道');
+  }
+  if (!isMvpPayoutChannel(channel)) {
+    throw new Error('当前仅支持绑定支付宝账户');
   }
   if (!accountName) throw new Error('请填写账户实名');
   if (!accountLabel) throw new Error('请填写账户信息');

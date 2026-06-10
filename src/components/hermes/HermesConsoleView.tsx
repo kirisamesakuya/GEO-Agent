@@ -104,7 +104,7 @@ export default function HermesConsoleView({ onNavigate, scrollHint }: Props) {
   const showAdvancedPanels = HERMES_CONCURRENCY_POLICY_UI_ENABLED || HERMES_QUEUE_MONITOR_ENABLED;
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="geo-page-content">
       <div className="geo-page-content max-w-6xl space-y-5 pb-8">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

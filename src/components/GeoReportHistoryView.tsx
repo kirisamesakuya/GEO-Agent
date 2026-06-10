@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Download, FileText, History, Search } from 'lucide-react';
+import { Download, FileText, GitCompare, History, Search, X } from 'lucide-react';
 import type { ViewType } from '../types';
 import PageHeaderWithBrand from './common/PageHeaderWithBrand';
 import GeoReportPrintLayout, {
@@ -18,16 +18,18 @@ import {
 import {
   REPORT_TYPE_LABELS,
   confirmGeoAuditAction,
-  setGeoReportBaseline,
   submitGeoCompare,
+  normalizeGeoAuditFindings,
+  normalizeGeoAuditScores,
+  filterDisplayableGeoArtifacts,
   type GeoAuditDetail,
   type GeoAuditArtifact,
 } from '../lib/geo-audit-client';
 import { isProspectBrandScope } from '../lib/brand-scope';
 import { EFFECT_JUDGMENT_LABEL } from '../lib/article-effect-nav';
 import { navigateToAgentTaskResult } from '../lib/agent-task-result-nav';
+import OverlayDrawer from './common/OverlayDrawer';
 import GeoArtifactPreview, { GeoArtifactList } from './geo/GeoArtifactPreview';
-import GeoWebsiteDeployChecklist from './geo/GeoWebsiteDeployChecklist';
 import GeoPreCrawlPanel, { extractPreCrawlFromAuditRaw } from './geo/GeoPreCrawlPanel';
 import { buildLoopNavigateHint, applyLoopNavigateUrl } from '../lib/geo-capability-loop';
 
@@ -38,6 +40,20 @@ interface Props {
   initialReportId?: string;
   /** 由 GEO 分析页嵌入时不重复品牌条 */
   embedded?: boolean;
+}
+
+function reportSelectLabel(r: GeoReportSummary) {
+  const title = formatGeoReportLabel(r).replace(/^【演示】/, '').trim();
+  const parts: string[] = [];
+  if (r.mentionRate != null) parts.push(`提及 ${r.mentionRate}%`);
+  if (r.totalScore != null) parts.push(`${r.totalScore} 分`);
+  return parts.length ? `${title}（${parts.join(' · ')}）` : title;
+}
+
+function formatDelta(value: number, suffix = '') {
+  if (value === 0) return `持平${suffix}`;
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value}${suffix}`;
 }
 
 function reportToPrintData(
@@ -60,8 +76,8 @@ function reportToPrintData(
       contentGap: audit?.contentGap ?? r.contentGap,
       optimizationSuggestions: audit?.optimizationSuggestions ?? r.optimizationSuggestions,
     },
-    scores: audit?.scores ?? null,
-    findings: audit?.findings,
+    scores: normalizeGeoAuditScores(audit?.scores),
+    findings: normalizeGeoAuditFindings(audit?.findings),
     actionPlan: audit?.actionPlan,
   };
 }
@@ -83,7 +99,7 @@ export default function GeoReportHistoryView({
   const [auditDetail, setAuditDetail] = useState<GeoAuditDetail | null>(null);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
   const [compareLoading, setCompareLoading] = useState(false);
-  const [brandWebsite, setBrandWebsite] = useState('');
+  const [compareTargetId, setCompareTargetId] = useState('');
   const [articleEffects, setArticleEffects] = useState<
     Array<{
       contentItemId: string;
@@ -93,6 +109,11 @@ export default function GeoReportHistoryView({
       verification?: { overallJudgment?: string; checkpoints?: Record<string, { brandMentionRate?: number; judgment?: string }> } | null;
     }>
   >([]);
+  const [toolsDrawerOpen, setToolsDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    if (selectedId) setToolsDrawerOpen(true);
+  }, [selectedId]);
 
   useEffect(() => {
     if (!brandName || brandName === '__all__' || isProspectBrandScope(brandName)) {
@@ -126,23 +147,71 @@ export default function GeoReportHistoryView({
   const selected = reports.find((r) => r.id === selectedId) ?? null;
   const selectedTitle = selected ? formatGeoReportLabel(selected) : '';
   const printData = selected ? reportToPrintData(selected, selectedTitle, auditDetail) : null;
-  const htmlReport = pickGeoReportHtmlArtifact(auditDetail?.artifacts);
+  const displayArtifacts = useMemo(
+    () => filterDisplayableGeoArtifacts(auditDetail?.artifacts),
+    [auditDetail?.artifacts]
+  );
+  const htmlReport = pickGeoReportHtmlArtifact(displayArtifacts);
+  const normalizedFindings = useMemo(
+    () => normalizeGeoAuditFindings(auditDetail?.findings),
+    [auditDetail?.findings]
+  );
   const preCrawlCtx = extractPreCrawlFromAuditRaw(auditDetail?.raw ?? null);
-  const baselineReport = reports.find((r) => (r as GeoReportSummary & { isBaseline?: boolean }).isBaseline);
+  const reportsDesc = useMemo(
+    () => [...reports].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [reports]
+  );
+
+  const compareBaseline = selected;
+  const compareTarget = reports.find((r) => r.id === compareTargetId) ?? null;
+  const otherReports = reports.filter((r) => r.id !== selectedId);
+  const canSubmitCompare = Boolean(
+    compareBaseline && compareTarget && compareTarget.id !== compareBaseline.id
+  );
+  const compareDeltaPreview =
+    compareBaseline && compareTarget && canSubmitCompare
+      ? {
+          mention: (compareTarget.mentionRate ?? 0) - (compareBaseline.mentionRate ?? 0),
+          score: (compareTarget.totalScore ?? 0) - (compareBaseline.totalScore ?? 0),
+          gaps: (compareTarget.gapsFound ?? 0) - (compareBaseline.gapsFound ?? 0),
+        }
+      : null;
 
   useEffect(() => {
-    if (!selected?.brandName) {
-      setBrandWebsite('');
+    if (!selectedId || !reports.length) {
+      setCompareTargetId('');
       return;
     }
-    void fetch(`/api/brand-profile?brandName=${encodeURIComponent(selected.brandName)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setBrandWebsite(String(d?.website ?? '')))
-      .catch(() => setBrandWebsite(''));
-  }, [selected?.brandName]);
+    setCompareTargetId((prev) => {
+      if (prev && prev !== selectedId && reports.some((r) => r.id === prev)) return prev;
+      return reportsDesc.find((r) => r.id !== selectedId)?.id ?? '';
+    });
+  }, [selectedId, reports, reportsDesc]);
 
-  const canCompare =
-    Boolean(selected && baselineReport && selected.id !== baselineReport.id && !selected.isBaseline);
+  const handleGenerateCompare = async () => {
+    if (!compareBaseline || !compareTarget || compareTarget.id === compareBaseline.id) return;
+
+    setCompareLoading(true);
+    try {
+      const profileRes = await fetch(
+        `/api/brand-profile?brandName=${encodeURIComponent(compareBaseline.brandName)}`
+      );
+      const profile = profileRes.ok ? await profileRes.json() : {};
+      const { task, error } = await submitGeoCompare({
+        brandName: compareBaseline.brandName,
+        baselineReportId: compareBaseline.id,
+        currentReportId: compareTarget.id,
+        brandUrl: profile?.website,
+      });
+      if (error || !task) throw new Error(error ?? '提交失败');
+      toast('对比报告已提交，请在任务结果查看交付物', 'success');
+      if (onNavigate) navigateToAgentTaskResult(onNavigate, task.id);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '对比失败', 'error');
+    } finally {
+      setCompareLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!selectedId) {
@@ -155,8 +224,9 @@ export default function GeoReportHistoryView({
       .then((d) => {
         const audit = d?.audit ?? null;
         setAuditDetail(audit);
-        const arts = (audit?.artifacts ?? []) as GeoAuditArtifact[];
-        setSelectedArtifactId(arts[0]?.id ?? null);
+        const arts = filterDisplayableGeoArtifacts(audit?.artifacts as GeoAuditArtifact[] | undefined);
+        const first = arts[0];
+        setSelectedArtifactId(first ? (first.id ?? `${first.type ?? 'artifact'}-${first.name ?? 0}`) : null);
       });
     void fetch(`/api/geo-reports/${selectedId}/article-effects`)
       .then((r) => (r.ok ? r.json() : { effects: [] }))
@@ -192,7 +262,7 @@ export default function GeoReportHistoryView({
   }
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+    <div className="flex flex-col min-h-0">
       {!embedded && (
         <div className="shrink-0 px-6 pt-3 pb-2">
           <PageHeaderWithBrand
@@ -203,9 +273,12 @@ export default function GeoReportHistoryView({
         </div>
       )}
 
-      <div className="flex flex-1 min-h-0 border-t" style={{ borderColor: 'var(--neutral-divider-02)' }}>
+      <div
+        className="flex items-start min-w-0 border-t"
+        style={{ borderColor: 'var(--neutral-divider-02)' }}
+      >
         <aside
-          className="w-72 shrink-0 flex flex-col border-r overflow-hidden"
+          className="w-72 shrink-0 sticky top-0 self-start flex flex-col border-r geo-scroll-hide max-h-[calc(100vh-var(--layout-header-height))]"
           style={{ borderColor: 'var(--neutral-divider-02)', background: 'var(--neutral-bg-03)' }}
         >
           <div className="p-3 space-y-2 shrink-0 border-b" style={{ borderColor: 'var(--neutral-divider-02)' }}>
@@ -226,7 +299,7 @@ export default function GeoReportHistoryView({
               />
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 min-h-0">
             {loading && (
               <p className="p-4 text-xs text-[var(--neutral-text-03)]">加载中…</p>
             )}
@@ -252,17 +325,16 @@ export default function GeoReportHistoryView({
               >
                 <p className="font-medium line-clamp-2 leading-snug">{formatGeoReportLabel(r)}</p>
                 <p className="mt-1 text-[10px] text-[var(--neutral-text-03)]">
-                  {(r as GeoReportSummary).reportType
-                    ? `${REPORT_TYPE_LABELS[(r as GeoReportSummary).reportType!] ?? '报告'} · `
-                    : ''}
+                  {r.reportType ? `${REPORT_TYPE_LABELS[r.reportType] ?? '报告'} · ` : ''}
                   提及 {r.mentionRate ?? '—'}% · 缺口 {r.gapsFound ?? '—'}
+                  {r.totalScore != null ? ` · ${r.totalScore}分` : ''}
                 </p>
               </button>
             ))}
           </div>
         </aside>
 
-        <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        <main className="flex-1 min-w-0 flex flex-col">
           {!selected ? (
             <div className="flex-1 flex items-center justify-center text-sm text-[var(--neutral-text-03)]">
               从左侧选择一份报告查看详情
@@ -276,11 +348,6 @@ export default function GeoReportHistoryView({
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-sm font-bold text-[var(--color-title)] truncate">{selectedTitle}</h2>
-                    {auditDetail?.isBaseline && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-accent-light)] text-[var(--color-accent)]">
-                        基线报告
-                      </span>
-                    )}
                   </div>
                   <p className="text-[10px] text-[var(--neutral-text-03)] mt-0.5">
                     编号 {selected.id.slice(0, 8)}…
@@ -293,6 +360,14 @@ export default function GeoReportHistoryView({
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="geo-btn-secondary geo-btn-sm inline-flex items-center gap-1.5"
+                    onClick={() => setToolsDrawerOpen(true)}
+                  >
+                    <GitCompare className="w-3.5 h-3.5" />
+                    复盘与工具
+                  </button>
                   <button
                     type="button"
                     className="geo-btn-primary geo-btn-sm inline-flex items-center gap-1.5"
@@ -315,8 +390,8 @@ export default function GeoReportHistoryView({
                 </div>
               </div>
 
-              <div className="flex-1 min-h-0 flex overflow-hidden">
-                <div className="flex-1 overflow-y-auto geo-report-document-shell p-6">
+              <div className="min-w-0">
+                <div className="geo-report-document-shell p-6 pb-10">
                   {htmlReport ? (
                     <div
                       className="geo-report-html-document mx-auto max-w-[820px] geo-card overflow-hidden"
@@ -328,7 +403,7 @@ export default function GeoReportHistoryView({
                         <GeoPreCrawlPanel
                           snapshot={preCrawlCtx.snapshot}
                           rulePreview={preCrawlCtx.rulePreview}
-                          findings={auditDetail?.findings}
+                          findings={normalizedFindings}
                           scoringSource={preCrawlCtx.scoringSource}
                         />
                       )}
@@ -371,55 +446,123 @@ export default function GeoReportHistoryView({
                     </section>
                   )}
                 </div>
+              </div>
 
+              {toolsDrawerOpen && (
+              <OverlayDrawer
+                onClose={() => setToolsDrawerOpen(false)}
+                width={320}
+                panelClassName="border-l"
+                panelStyle={{ background: 'var(--neutral-bg-03)', borderColor: 'var(--neutral-divider-02)' }}
+              >
                 <div
-                  className="w-80 shrink-0 border-l overflow-y-auto p-4 space-y-4"
-                  style={{ borderColor: 'var(--neutral-divider-02)', background: 'var(--neutral-bg-03)' }}
+                  className="flex items-center justify-between px-4 py-3 border-b shrink-0 bg-[var(--color-bg-card)]"
+                  style={{ borderColor: 'var(--neutral-divider-02)' }}
                 >
-                  {selected && (
-                    <GeoWebsiteDeployChecklist
-                      compact
-                      brandName={selected.brandName}
-                      reportId={selected.id}
-                      websiteUrl={brandWebsite}
-                      artifacts={auditDetail?.artifacts}
-                      preCrawl={preCrawlCtx.snapshot}
-                      onOpenAssets={
-                        onNavigate
-                          ? () => {
-                              const nav = buildLoopNavigateHint('assets', {
-                                brandName: selected.brandName,
-                              });
-                              if (nav.urlParams) applyLoopNavigateUrl(nav.urlParams);
-                              onNavigate(nav.view, nav.hint);
-                            }
-                          : undefined
-                      }
-                    />
-                  )}
+                  <h3 className="text-sm font-semibold text-[var(--color-title)]">复盘与工具</h3>
+                  <button type="button" onClick={() => setToolsDrawerOpen(false)} className="p-1 rounded hover:bg-[var(--color-bg)]">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+                  <div
+                    className="rounded-lg border p-3 space-y-3"
+                    style={{ borderColor: 'var(--neutral-divider-02)', background: 'var(--color-bg-card)' }}
+                  >
+                    <h3 className="text-xs font-semibold text-[var(--color-title)] flex items-center gap-1.5">
+                      <GitCompare className="w-3.5 h-3.5" />
+                      月度复盘
+                    </h3>
+
+                    <div>
+                      <label className="geo-label text-[10px]">对比报告</label>
+                      <select
+                        className="geo-input w-full text-xs mt-1"
+                        value={compareTargetId}
+                        onChange={(e) => setCompareTargetId(e.target.value)}
+                        disabled={!selected || otherReports.length === 0}
+                      >
+                        {!selected || otherReports.length === 0 ? (
+                          <option value="">需至少 2 份报告</option>
+                        ) : (
+                          otherReports.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {reportSelectLabel(r)}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+
+                    {compareDeltaPreview && (
+                      <div
+                        className="grid grid-cols-3 gap-1 rounded-lg px-2 py-2 text-center text-[10px]"
+                        style={{ background: 'var(--neutral-bg-02)' }}
+                      >
+                        <div>
+                          <p className="text-[var(--neutral-text-03)]">提及率</p>
+                          <p className="font-semibold text-[var(--color-title)]">
+                            {formatDelta(compareDeltaPreview.mention, '%')}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[var(--neutral-text-03)]">总分</p>
+                          <p className="font-semibold text-[var(--color-title)]">
+                            {formatDelta(compareDeltaPreview.score, '')}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[var(--neutral-text-03)]">缺口</p>
+                          <p className="font-semibold text-[var(--color-title)]">
+                            {formatDelta(compareDeltaPreview.gaps, '项')}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      className="geo-btn-primary geo-btn-xs w-full"
+                      disabled={!canSubmitCompare || compareLoading}
+                      onClick={() => void handleGenerateCompare()}
+                    >
+                      {compareLoading ? '生成中…' : '生成对比报告'}
+                    </button>
+
+                    {onNavigate && (
+                      <button
+                        type="button"
+                        className="geo-link text-[10px] text-left"
+                        onClick={() => onNavigate('agent_task_results')}
+                      >
+                        查看任务结果 →
+                      </button>
+                    )}
+                  </div>
+
                   {(preCrawlCtx.snapshot || preCrawlCtx.rulePreview) && (
                     <GeoPreCrawlPanel
                       compact
                       snapshot={preCrawlCtx.snapshot}
                       rulePreview={preCrawlCtx.rulePreview}
-                      findings={auditDetail?.findings}
+                      findings={normalizedFindings}
                       scoringSource={preCrawlCtx.scoringSource}
                     />
                   )}
-                  {(auditDetail?.artifacts?.length ?? 0) > 0 && (
+                  {displayArtifacts.length > 0 && (
                     <div>
                       <h3 className="text-xs font-semibold text-[var(--color-title)] mb-2">Artifacts</h3>
                       <GeoArtifactList
-                        artifacts={auditDetail!.artifacts!}
+                        artifacts={displayArtifacts}
                         selectedId={selectedArtifactId}
                         onSelect={setSelectedArtifactId}
                       />
-                      {selectedArtifactId && auditDetail?.artifacts && (
+                      {selectedArtifactId && (
                         <div className="mt-3">
                           <GeoArtifactPreview
                             artifact={
-                              auditDetail.artifacts.find((a) => a.id === selectedArtifactId) ??
-                              auditDetail.artifacts[0]
+                              displayArtifacts.find((a) => a.id === selectedArtifactId) ??
+                              displayArtifacts[0]
                             }
                             onRegenerateAsset={
                               onNavigate
@@ -442,7 +585,7 @@ export default function GeoReportHistoryView({
                   )}
 
                   <div>
-                    <h3 className="text-xs font-semibold text-[var(--color-title)] mb-2">下一步</h3>
+                    <h3 className="text-xs font-semibold text-[var(--color-title)] mb-2">整改与投放</h3>
                     <div className="flex flex-col gap-2">
                       {onNavigate && (
                         <>
@@ -512,55 +655,6 @@ export default function GeoReportHistoryView({
                           生成整改任务包（需确认）
                         </button>
                       )}
-                      <button
-                        type="button"
-                        className="geo-btn-secondary geo-btn-xs w-full"
-                        disabled={!canCompare || compareLoading}
-                        onClick={async () => {
-                          if (!selected || !baselineReport) return;
-                          setCompareLoading(true);
-                          try {
-                            const profileRes = await fetch(
-                              `/api/brand-profile?brandName=${encodeURIComponent(selected.brandName)}`
-                            );
-                            const profile = profileRes.ok ? await profileRes.json() : {};
-                            const { task, error } = await submitGeoCompare({
-                              brandName: selected.brandName,
-                              baselineReportId: baselineReport.id,
-                              currentReportId: selected.id,
-                              brandUrl: profile?.website,
-                            });
-                            if (error || !task) throw new Error(error ?? '提交失败');
-                            toast('月度对比任务已提交', 'success');
-                            if (onNavigate) navigateToAgentTaskResult(onNavigate, task.id);
-                          } catch (e) {
-                            toast(e instanceof Error ? e.message : '对比失败', 'error');
-                          } finally {
-                            setCompareLoading(false);
-                          }
-                        }}
-                      >
-                        {compareLoading
-                          ? '提交对比中…'
-                          : canCompare
-                            ? '对比基线报告（geo_compare）'
-                            : '需先设基线且选择非基线报告'}
-                      </button>
-                      <button
-                        type="button"
-                        className="geo-btn-secondary geo-btn-xs w-full"
-                        onClick={async () => {
-                          try {
-                            await setGeoReportBaseline(selected.id);
-                            setAuditDetail((d) => (d ? { ...d, isBaseline: true } : d));
-                            toast('已设为月度对比基线', 'success');
-                          } catch (e) {
-                            toast(e instanceof Error ? e.message : '设置失败', 'error');
-                          }
-                        }}
-                      >
-                        {auditDetail?.isBaseline ? '已是基线报告' : '设为基线'}
-                      </button>
                       {auditDetail?.taskId && onNavigate && (
                         <button
                           type="button"
@@ -636,7 +730,8 @@ export default function GeoReportHistoryView({
                     </p>
                   </div>
                 </div>
-              </div>
+              </OverlayDrawer>
+              )}
             </>
           )}
         </main>

@@ -153,7 +153,7 @@ export default function CustomOrderView({
   }
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto geo-page-content space-y-4 max-w-3xl">
+    <div className="geo-page-content space-y-4 max-w-3xl">
       <div className="geo-card p-5 space-y-4">
         <div>
           <label className="geo-label">任务类型</label>
@@ -292,7 +292,7 @@ export default function CustomOrderView({
             <button
               type="button"
               className="geo-btn-secondary text-sm"
-              onClick={() => onNavigate('content_delivery', 'manual')}
+              onClick={() => onNavigate('content_delivery', 'pending_provider')}
             >
               任务交付
             </button>

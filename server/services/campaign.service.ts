@@ -332,6 +332,14 @@ export async function getCampaignPlan(id: string) {
   return prisma.campaignPlan.findUnique({ where: { id }, include: { packages: true } });
 }
 
+export async function getCampaignPlanByTaskId(taskId: string) {
+  return prisma.campaignPlan.findFirst({
+    where: { taskId },
+    include: { packages: true },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
 export async function listCampaignPlans(brandName?: string) {
   return prisma.campaignPlan.findMany({
     where: brandName ? { brandName } : {},

@@ -22,14 +22,94 @@ export type GeoAuditFinding = {
   category?: string;
 };
 
+function mapFindingLevel(raw: unknown): string {
+  const value = String(raw ?? 'medium').toUpperCase();
+  if (value === 'P0' || value === 'CRITICAL') return 'critical';
+  if (value === 'P1' || value === 'HIGH') return 'high';
+  if (value === 'P2' || value === 'MEDIUM') return 'medium';
+  if (value === 'LOW' || value === 'P3') return 'low';
+  return String(raw ?? 'medium').toLowerCase();
+}
+
+function formatScoreDisplayValue(value: unknown): string {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    const row = value as Record<string, unknown>;
+    if (typeof row.score === 'number') {
+      const max = typeof row.max === 'number' ? ` / ${row.max}` : '';
+      const weight = row.weight ? ` · ${row.weight}` : '';
+      const note = row.note ? `（${row.note}）` : '';
+      return `${row.score}${max}${weight}${note}`;
+    }
+  }
+  return value == null ? '—' : String(value);
+}
+
+/** 兼容 Hermes / Mock 多种 findings 字段命名 */
+export function normalizeGeoAuditFindings(findings: unknown): GeoAuditFinding[] {
+  if (!Array.isArray(findings)) return [];
+  return findings.map((item, index) => {
+    const row = (item ?? {}) as Record<string, unknown>;
+    return {
+      id: String(row.id ?? `finding-${index}`),
+      level: mapFindingLevel(row.level ?? row.severity),
+      title: String(row.title ?? row.finding ?? row.issue ?? '未命名问题'),
+      impact: String(row.impact ?? ''),
+      suggestion: String(row.suggestion ?? row.recommendation ?? ''),
+      owner: row.owner ? String(row.owner) : undefined,
+      evidence: row.evidence ? String(row.evidence) : undefined,
+      source: row.source ? String(row.source) : undefined,
+      category: row.category ? String(row.category) : undefined,
+    };
+  });
+}
+
+/** 兼容分项评分为 number 或 { score, max, weight } 结构 */
+export function normalizeGeoAuditScores(scores: unknown): Record<string, string> {
+  if (!scores || typeof scores !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(scores as Record<string, unknown>).map(([key, value]) => [
+      key,
+      formatScoreDisplayValue(value),
+    ])
+  );
+}
+
 export type GeoAuditArtifact = {
-  id: string;
-  type: string;
-  name: string;
+  id?: string;
+  type?: string;
+  name?: string;
   mimeType?: string;
   preview?: string;
+  content?: string;
   url?: string;
 };
+
+/** 旧版/契约占位产物仅有 type，无正文、链接或文件名，不应在侧栏展示 */
+export function isDisplayableGeoArtifact(artifact: GeoAuditArtifact): boolean {
+  const preview = artifact.preview?.trim();
+  const url = artifact.url?.trim();
+  const content = artifact.content?.trim();
+  if (!preview && !url && !content) return false;
+
+  if (preview?.includes('Mock 交付物')) return false;
+  if (preview) {
+    try {
+      const parsed = JSON.parse(preview) as { mock?: boolean };
+      if (parsed && typeof parsed === 'object' && parsed.mock === true) return false;
+    } catch {
+      // 非 JSON 预览，保留
+    }
+  }
+  return true;
+}
+
+export function filterDisplayableGeoArtifacts(
+  artifacts?: GeoAuditArtifact[] | null
+): GeoAuditArtifact[] {
+  return (artifacts ?? []).filter(isDisplayableGeoArtifact);
+}
 
 export type GeoAuditDetail = {
   id: string;

@@ -1,5 +1,6 @@
 import { platformApiFetch } from '../../../lib/platform-api';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useToast } from '../../../context/ToastContext';
 import PlatformDataTable from '../components/PlatformDataTable';
 import PlatformDetailDrawer from '../components/PlatformDetailDrawer';
 import PlatformFilterBar from '../components/PlatformFilterBar';
@@ -19,15 +20,24 @@ interface ContentRow {
   risk: string;
   publishedUrl?: string;
   errorCode?: string;
+  reviewCategory?: string | null;
   previewText?: string;
   executedAt?: string;
+  agentTaskId?: string | null;
+  publishJobId?: string | null;
+  canRedispatch?: boolean;
+  canManualFlag?: boolean;
 }
 
 function statusKind(status: string): PlatformStatusKind {
-  if (status === 'published') return 'success';
+  if (status === 'published' || status === 'succeeded') return 'success';
   if (status === 'failed') return 'danger';
   if (status === 'pending' || status === 'running') return 'pending';
   return 'muted';
+}
+
+function canOperate(row: ContentRow): boolean {
+  return Boolean(row.canRedispatch || row.canManualFlag || row.status === 'failed');
 }
 
 const TABS = [
@@ -41,32 +51,90 @@ const TABS = [
 ];
 
 export default function PlatformContentGovernanceView() {
+  const { toast } = useToast();
   const [tab, setTab] = useState('all');
   const [stats, setStats] = useState({ library: 0, pending: 0, publishing: 0, failed: 0, published: 0, risky: 0 });
   const [items, setItems] = useState<ContentRow[]>([]);
   const [selected, setSelected] = useState<ContentRow | null>(null);
   const [brandName, setBrandName] = useState('');
   const [platform, setPlatform] = useState('');
+  const [acting, setActing] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     const q = new URLSearchParams();
     if (brandName) q.set('brandName', brandName);
     if (platform) q.set('platform', platform);
     if (tab !== 'all' && tab !== 'library' && tab !== 'risky') q.set('tab', tab);
     if (tab === 'risky') q.set('status', 'failed');
-    platformApiFetch(`/api/platform/content-governance?${q}`)
+    return platformApiFetch(`/api/platform/content-governance?${q}`)
       .then((r) => r.json())
       .then((d) => {
         setStats(d.stats ?? { library: 0, pending: 0, publishing: 0, failed: 0, published: 0, risky: 0 });
-        let rows = d.items ?? [];
-        if (tab === 'risky') rows = rows.filter((r: ContentRow) => r.risk !== '正常');
+        let rows = (d.items ?? []) as ContentRow[];
+        if (tab === 'risky') rows = rows.filter((r) => r.risk !== '正常');
         setItems(rows);
+        setSelected((prev) => (prev ? rows.find((r) => r.id === prev.id) ?? null : null));
       });
   }, [tab, brandName, platform]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const redispatch = async (row: ContentRow) => {
+    if (acting) return;
+    setActing(true);
+    try {
+      const res = await platformApiFetch(`/api/platform/publish-records/${row.id}/redispatch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: '平台运营重新派发' }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok || data.error) {
+        toast(data.error ?? '重新派发失败', 'error');
+        return;
+      }
+      toast('已重新派发到商家本机 Hermes，非平台代发', 'success');
+      await load();
+    } catch {
+      toast('重新派发失败', 'error');
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const flagManual = async (row: ContentRow) => {
+    if (acting) return;
+    const reason = window.prompt('请填写转人工原因（将通知商家在发布端跟进）');
+    if (!reason?.trim()) return;
+    setActing(true);
+    try {
+      const res = await platformApiFetch(`/api/platform/publish-records/${row.id}/manual-flag`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason.trim() }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok || data.error) {
+        toast(data.error ?? '操作失败', 'error');
+        return;
+      }
+      toast('已标记为需人工处理，已通知商家', 'success');
+      await load();
+    } catch {
+      toast('操作失败', 'error');
+    } finally {
+      setActing(false);
+    }
+  };
 
   return (
     <div className="flex min-h-0 flex-1">
       <div className="flex-1 space-y-4">
+        <p className="text-xs text-[var(--platform-text-tertiary)] leading-relaxed">
+          内容与发布监管用于查看发布记录、失败原因与风险标记。平台不代商家直接发布，异常时可重新派发到商家本机 Hermes 或标记人工跟进。
+        </p>
         <PlatformStatSummary
           items={[
             { label: '内容库', value: stats.library },
@@ -104,10 +172,14 @@ export default function PlatformContentGovernanceView() {
           renderActions={(r) => (
             <PlatformTableActions>
               <PlatformTableAction label="详情" variant="primary" onClick={() => setSelected(r)} />
-              {(r.status === 'failed' || r.status === 'partial') && (
+              {canOperate(r) && (
                 <>
-                  <PlatformTableAction label="重试" variant="primary" onClick={() => setSelected(r)} />
-                  <PlatformTableAction label="转人工" onClick={() => setSelected(r)} />
+                  <PlatformTableAction
+                    label="重新派发"
+                    variant="primary"
+                    onClick={() => void redispatch(r)}
+                  />
+                  <PlatformTableAction label="转人工" onClick={() => void flagManual(r)} />
                 </>
               )}
             </PlatformTableActions>
@@ -121,10 +193,31 @@ export default function PlatformContentGovernanceView() {
           statusKind={statusKind(selected.status)}
           onClose={() => setSelected(null)}
           footer={
-            <div className="flex gap-2">
-              <button type="button" className="geo-btn-primary text-sm flex-1">重试发布</button>
-              <button type="button" className="geo-btn-secondary text-sm flex-1">转人工</button>
-            </div>
+            canOperate(selected) ? (
+              <div className="space-y-2">
+                <p className="text-[10px] text-[var(--platform-text-tertiary)] leading-relaxed">
+                  平台不代商家发布；「重新派发」将向商家本机 Hermes 下发任务。
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="geo-btn-primary text-sm flex-1"
+                    disabled={acting}
+                    onClick={() => void redispatch(selected)}
+                  >
+                    重新派发
+                  </button>
+                  <button
+                    type="button"
+                    className="geo-btn-secondary text-sm flex-1"
+                    disabled={acting}
+                    onClick={() => void flagManual(selected)}
+                  >
+                    转人工
+                  </button>
+                </div>
+              </div>
+            ) : undefined
           }
         >
           <div className="space-y-3 text-sm">
@@ -141,6 +234,9 @@ export default function PlatformContentGovernanceView() {
             )}
             {selected.errorCode && (
               <p className="text-xs text-[var(--platform-danger)]">错误：{selected.errorCode}</p>
+            )}
+            {selected.reviewCategory && (
+              <p className="text-xs text-amber-700">监管标记：{selected.reviewCategory}</p>
             )}
           </div>
         </PlatformDetailDrawer>

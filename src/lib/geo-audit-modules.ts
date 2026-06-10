@@ -7,6 +7,15 @@ export type AuditModuleSpec = {
   skill: string;
 };
 
+/** 网站 GEO 资产页：一次分析覆盖的技术模块 */
+export const WEBSITE_GEO_ANALYSIS_MODULE_IDS = ['technical', 'crawlers', 'schema', 'llmstxt'] as const;
+
+export function websiteGeoAnalysisModuleLabels(): string[] {
+  return WEBSITE_GEO_ANALYSIS_MODULE_IDS.map(
+    (id) => AUDIT_MODULE_SPECS.find((m) => m.id === id)?.label ?? id
+  );
+}
+
 export const AUDIT_MODULE_SPECS: AuditModuleSpec[] = [
   { id: 'audit', label: '总审计', taskType: 'geo_audit', skill: 'geo-audit' },
   { id: 'technical', label: '技术基础', taskType: 'geo_technical', skill: 'geo-technical' },

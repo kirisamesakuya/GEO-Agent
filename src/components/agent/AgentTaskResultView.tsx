@@ -9,6 +9,7 @@ import AgentTaskResultConfirmPanel from './AgentTaskResultConfirmPanel';
 import AgentTaskOutputPanel, { type TaskDeliverableView } from './AgentTaskOutputPanel';
 import HermesPublishResultPanel from './HermesPublishResultPanel';
 import GeoAssetResultPanel from './GeoAssetResultPanel';
+import CampaignPlanResultPanel from './CampaignPlanResultPanel';
 import AgentTaskResultSummary from './AgentTaskResultSummary';
 import GeoArtifactPreview, { GeoArtifactList } from '../geo/GeoArtifactPreview';
 import type { GeoAuditArtifact } from '../../lib/geo-audit-client';
@@ -49,6 +50,8 @@ export default function AgentTaskResultView({ taskId, brandName, onBack, onNavig
     device?: { deviceName: string; hermesVersion?: string | null } | null;
     artifacts?: GeoAuditArtifact[];
     deliverable?: TaskDeliverableView | null;
+    campaignPlanId?: string | null;
+    campaignPackageCount?: number | null;
   } | null>(null);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
 
@@ -165,7 +168,7 @@ export default function AgentTaskResultView({ taskId, brandName, onBack, onNavig
   const inProgress = IN_PROGRESS.has(task.status);
 
   return (
-    <div className="geo-page-content h-full overflow-y-auto space-y-4 pb-8 max-w-7xl">
+    <div className="geo-page-content space-y-4 pb-8 max-w-7xl">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <button type="button" className="geo-btn-secondary text-sm flex items-center gap-2" onClick={handleBack}>
           <ArrowLeft className="w-4 h-4" />
@@ -257,6 +260,13 @@ export default function AgentTaskResultView({ taskId, brandName, onBack, onNavig
       {showHermesPublishResult && <HermesPublishResultPanel task={task} onNavigate={onNavigate} />}
 
       {showGeoAssetResult && <GeoAssetResultPanel task={task} onNavigate={onNavigate} />}
+
+      <CampaignPlanResultPanel
+        task={task}
+        campaignPlanId={meta?.campaignPlanId}
+        campaignPackageCount={meta?.campaignPackageCount}
+        onNavigate={onNavigate}
+      />
 
       {geoReportPreview && (
         <div className="geo-card p-4 space-y-3">

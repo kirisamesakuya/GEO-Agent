@@ -55,7 +55,7 @@ export default function PublishRecordDetailView({ brandName, recordId, onNavigat
   }, [brandName, recordId]);
 
   return (
-    <div className="geo-page-content h-full overflow-y-auto space-y-4">
+    <div className="geo-page-content space-y-4">
       <button
         type="button"
         className="geo-btn-secondary geo-btn-sm flex items-center gap-2"

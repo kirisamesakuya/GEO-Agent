@@ -30,7 +30,13 @@ export function registerCampaignRoutes(app: Express) {
   app.get('/api/geo-reports', async (req, res) => {
     const brandName = await requireBrandName(req, res);
     if (!brandName) return;
-    res.json({ reports: await listGeoReports(brandName) });
+    const { ensureDemoPublisherSnapshot, isDemoPublisherSnapshotEnabled } = await import(
+      '../db/demo-publisher-snapshot.js'
+    );
+    if (isDemoPublisherSnapshotEnabled()) {
+      await ensureDemoPublisherSnapshot(brandName);
+    }
+    res.json({ reports: await listGeoReports(brandName, 50) });
   });
 
   app.get('/api/geo-reports/:id', async (req, res) => {

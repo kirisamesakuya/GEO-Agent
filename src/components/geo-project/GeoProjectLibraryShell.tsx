@@ -234,7 +234,7 @@ export default function GeoProjectLibraryShell({
       }}
       toolbar={section === 'articles' ? projectFilter : undefined}
     >
-      <div className="h-full min-h-0 geo-card overflow-hidden">
+      <div className="min-h-0 geo-card">
         {section === 'articles' ? (
           <ContentLibraryView
             brandName={brandName}

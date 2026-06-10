@@ -297,27 +297,27 @@ export async function handleTaskSuccess(
     });
   }
 
-  if (task.type === 'campaign_plan' && output.packages) {
-    const packages = output.packages as Array<Record<string, unknown>>;
-    const plan = await createCampaignPlan({
-      brandName: String(task.brandName ?? task.input.brand ?? ''),
-      goal: String(output.goal ?? task.input.goal ?? ''),
-      platforms: (task.input.platforms as string[]) ?? ['小红书'],
-      budgetMin: Number(task.input.budgetMin ?? 1000),
-      budgetMax: Number(task.input.budgetMax ?? 5000),
-      taskId: task.id,
-      packages: packages.map((p) => ({
-        name: String(p.name ?? '任务包'),
-        platform: String(p.platform ?? '小红书'),
-        payeeType: String(p.payeeType ?? '达人'),
-        quantity: Number(p.quantity ?? 1),
-        unitPrice: p.unitPrice != null ? Number(p.unitPrice) : undefined,
-        budget: Number(p.budget ?? 1000),
-        deliverable: String(p.deliverable ?? '内容交付'),
-        acceptance: String(p.acceptance ?? '截图证明'),
-      })),
-    });
-    await updateAgentTask(task.id, { output: { ...output, campaignPlanId: plan.id } });
+  if (task.type === 'campaign_plan') {
+    const { extractCampaignPackages, normalizeCampaignPackage } = await import(
+      '../../lib/campaign-package-output.js'
+    );
+    const rawPackages = extractCampaignPackages(output);
+    if (rawPackages.length) {
+      const planBlock =
+        output.plan && typeof output.plan === 'object' && !Array.isArray(output.plan)
+          ? (output.plan as Record<string, unknown>)
+          : {};
+      const plan = await createCampaignPlan({
+        brandName: String(task.brandName ?? task.input.brand ?? ''),
+        goal: String(output.goal ?? planBlock.goal ?? task.input.goal ?? 'GEO 投放方案'),
+        platforms: (task.input.platforms as string[]) ?? ['小红书'],
+        budgetMin: Number(task.input.budgetMin ?? 1000),
+        budgetMax: Number(task.input.budgetMax ?? 5000),
+        taskId: task.id,
+        packages: rawPackages.map((p) => normalizeCampaignPackage(p)),
+      });
+      await updateAgentTask(task.id, { output: { ...output, campaignPlanId: plan.id } });
+    }
   }
 
   if (task.type === 'account_verify' && task.input.accountId) {

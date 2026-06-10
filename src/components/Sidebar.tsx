@@ -132,7 +132,7 @@ export default function Sidebar({ activeView, onViewChange, onNewTaskClick, open
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 space-y-0.5">
+      <div className="flex-1 geo-scroll-hide px-3 space-y-0.5">
         {MAIN_NAV_ITEMS.map(({ view, label, icon: Icon }) => {
           if (view === 'create_order') {
             const active = isNavActive(activeView, view);

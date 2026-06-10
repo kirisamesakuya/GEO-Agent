@@ -47,7 +47,7 @@ export default function GeoListPageShell({
   children,
 }: Props) {
   return (
-    <div className="geo-page-content geo-page-content--flush flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="geo-page-content geo-page-content--flush flex min-h-0 flex-col">
       <div className={`shrink-0 space-y-4 geo-page-content-section ${hidePageHeader ? 'pt-2' : 'pt-4'}`}>
         {!hidePageHeader && (
         <PageHeaderWithBrand
@@ -125,7 +125,9 @@ export default function GeoListPageShell({
         )}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden geo-page-content-section pb-[var(--geo-content-block)] pt-3">{children}</div>
+      <div className="flex flex-col min-w-0 geo-page-content-section pb-[var(--geo-content-block)] pt-3">
+        {children}
+      </div>
     </div>
   );
 }

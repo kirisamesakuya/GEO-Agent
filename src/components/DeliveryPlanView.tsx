@@ -75,6 +75,7 @@ interface Props {
   lockedMode?: CreateMode;
   embedded?: boolean;
   initialGeoReportId?: string;
+  initialCampaignPlanId?: string;
   autoGenerateFromGeo?: boolean;
   indexingGapHint?: string;
 }
@@ -169,6 +170,7 @@ export default function DeliveryPlanView({
   lockedMode,
   embedded = false,
   initialGeoReportId,
+  initialCampaignPlanId,
   autoGenerateFromGeo = false,
   indexingGapHint,
 }: Props) {
@@ -248,19 +250,34 @@ export default function DeliveryPlanView({
     }
   }, [plan]);
 
-  const onComplete = useCallback(async (task: AgentTask) => {
-    setLoading(false);
-    const planId = task.output?.campaignPlanId as string | undefined;
-    if (planId) {
+  const loadCampaignPlanById = useCallback(
+    async (planId: string, successMessage = 'AI 投放方案已加载，可在下方修改后发布') => {
       const res = await fetch(`/api/campaign-plans/${planId}`);
       const data = await res.json();
       if (data.plan) {
         setPlan(data.plan);
-        toast('AI 投放方案已生成，可在下方修改后发布', 'success');
+        toast(successMessage, 'success');
+        return true;
       }
+      toast('投放方案不存在或已删除', 'error');
+      return false;
+    },
+    [toast]
+  );
+
+  const onComplete = useCallback(async (task: AgentTask) => {
+    setLoading(false);
+    const planId = task.output?.campaignPlanId as string | undefined;
+    if (planId) {
+      await loadCampaignPlanById(planId, 'AI 投放方案已生成，可在下方修改后发布');
     }
     loadPlans();
-  }, [toast]);
+  }, [loadCampaignPlanById]);
+
+  useEffect(() => {
+    if (!initialCampaignPlanId) return;
+    void loadCampaignPlanById(initialCampaignPlanId);
+  }, [initialCampaignPlanId, loadCampaignPlanById]);
 
   const generateFromGeo = useCallback(
     async (reportId?: string, userConfirmedExecution = false) => {
@@ -432,7 +449,7 @@ export default function DeliveryPlanView({
       return;
     }
     toast(`已发布 ${data.orders?.length ?? 0} 个任务到资源平台`, 'success');
-    if (onNavigate) onNavigate('content_delivery', 'manual');
+    if (onNavigate) onNavigate('content_delivery', 'pending_provider');
     loadPlans();
   };
 
@@ -852,8 +869,8 @@ export default function DeliveryPlanView({
   );
 
   if (embedded) {
-    return <div className="geo-page-content space-y-4 overflow-y-auto h-full">{body}</div>;
+    return <div className="geo-page-content space-y-4">{body}</div>;
   }
 
-  return <div className="geo-page-content space-y-4 overflow-y-auto h-full">{body}</div>;
+  return <div className="geo-page-content space-y-4">{body}</div>;
 }

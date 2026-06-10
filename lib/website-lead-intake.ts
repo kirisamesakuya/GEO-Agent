@@ -28,13 +28,23 @@ export function formatWebsiteLeadGoal(fields: Pick<WebsiteLeadFields, 'keywords'
 }
 
 export function parseWebsiteLeadGoal(goal: string): Pick<WebsiteLeadFields, 'keywords' | 'notes' | 'contact'> {
-  const lines = goal.split('\n').map((l) => l.trim()).filter(Boolean);
-  const keywords = lines[0] ?? '';
-  const notesLine = lines.find((l) => l.startsWith('参考说明：'));
-  const contactLine = lines.find((l) => l.startsWith('联系方式：'));
+  const lines = goal.split('\n');
+  const keywords = lines[0]?.trim() ?? '';
+  const notesIdx = lines.findIndex((l) => l.trim().startsWith('参考说明：'));
+  const contactIdx = lines.findIndex((l) => l.trim().startsWith('联系方式：'));
+
+  let notes = '';
+  if (notesIdx >= 0) {
+    const end = contactIdx >= 0 ? contactIdx : lines.length;
+    const chunk = lines.slice(notesIdx, end).map((l) => l.trim());
+    chunk[0] = chunk[0].replace(/^参考说明：/, '');
+    notes = chunk.filter(Boolean).join('\n').trim();
+  }
+
+  const contactLine = contactIdx >= 0 ? lines[contactIdx].trim() : '';
   return {
     keywords,
-    notes: notesLine ? notesLine.replace(/^参考说明：/, '') : '',
+    notes,
     contact: contactLine ? contactLine.replace(/^联系方式：/, '') : '',
   };
 }

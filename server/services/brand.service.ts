@@ -41,7 +41,7 @@ export interface BrandListItem {
   updatedAt: string;
 }
 
-function mapBrand(row: {
+export function mapBrand(row: {
   id: string;
   website: string;
   name: string;

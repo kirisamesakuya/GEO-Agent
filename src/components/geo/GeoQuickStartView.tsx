@@ -26,7 +26,6 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
-import GeoWebsiteDeployChecklist from './GeoWebsiteDeployChecklist';
 import { fetchOnboardingStatus } from '../../lib/onboarding-client';
 
 interface Props {
@@ -73,7 +72,7 @@ const DEPTH_CONFIG: Record<
     skill: 'geo-quick-start',
     titleSuffix: 'GEO 快速检测',
     cardTitle: 'GEO 快速检测',
-    cardDescription: '填写品牌资料，确认方案后检测 AI 平台提及与内容缺口。',
+    cardDescription: '补齐品牌资料后即可提交，检测 AI 平台提及与内容缺口。',
     submitLabel: '提交 Hermes 快速检测',
     completeToast: 'GEO 快速检测完成',
     outputs: QUICK_OUTPUTS,
@@ -84,7 +83,7 @@ const DEPTH_CONFIG: Record<
     skill: 'geo-audit',
     titleSuffix: 'GEO 深度分析',
     cardTitle: 'GEO 深度分析',
-    cardDescription: '填写品牌资料，确认方案后输出全模块 GEO 检测与技术资产建议。',
+    cardDescription: '补齐品牌资料后即可提交，输出全模块 GEO 检测与技术资产建议。',
     submitLabel: '提交 Hermes 深度分析',
     completeToast: 'GEO 深度分析完成',
     outputs: DEEP_OUTPUTS,
@@ -112,7 +111,6 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
   const [freeText, setFreeText] = useState('');
   const [platforms, setPlatforms] = useState<string[]>([...DEFAULT_GEO_AI_PLATFORMS, 'Kimi']);
   const [analysisDepth, setAnalysisDepth] = useState<AnalysisDepth>('quick');
-  const [planConfirmed, setPlanConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [taskTitle, setTaskTitle] = useState('');
@@ -127,7 +125,6 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
   useEffect(() => {
     if (!workspaceBrand) return;
 
-    setPlanConfirmed(false);
     setName(workspaceBrand.slice(0, BRAND_NAME_MAX));
     setProfileLoading(true);
     let cancelled = false;
@@ -213,35 +210,23 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
 
   const aiPlan = useMemo(() => {
     const missing = readinessChecklist.filter((item) => !item.done).map((item) => item.label);
-    const doneCount = readinessChecklist.filter((item) => item.done).length;
-    const modeLabel = analysisDepth === 'quick' ? '快速检测' : '深度分析';
 
     const questions =
       analysisDepth === 'quick'
         ? Math.max(6, Math.min(12, platforms.length * 2 + serviceList.length + evidenceCount + 3))
         : Math.max(12, Math.min(24, platforms.length * 3 + serviceList.length * 2 + evidenceCount * 2 + 4));
 
-    let summary: string;
-    if (missing.length === 0) {
-      summary =
-        analysisDepth === 'quick'
-          ? `关键信息已补齐。快速检测将覆盖 ${platforms.length} 个 AI 平台的提及与内容缺口，约 ${questions} 条问题。`
-          : `关键信息已补齐。深度分析将把 ${evidenceCount} 组材料拆成 ${questions} 条检测问题，并检查 ${platforms.length} 个 AI 平台及官网技术资产。`;
-    } else if (doneCount === 0) {
-      summary = `请逐步补齐以下信息，材料越完整，${modeLabel}结论越稳。`;
-    } else {
-      summary = `已填写 ${doneCount}/${readinessChecklist.length} 项，继续补充剩余项可提升分析质量。`;
-    }
-
     return {
       missing,
-      doneCount,
       readinessChecklist,
       questions,
       modules: depthConfig.modules,
-      summary,
     };
   }, [analysisDepth, depthConfig.modules, evidenceCount, platforms.length, readinessChecklist, serviceList.length]);
+
+  const formReady = aiPlan.missing.length === 0;
+  const submitBlocked = loading || isAgentTaskBlocking(taskId, taskStatus);
+  const canSubmit = formReady && !submitBlocked;
 
   const onComplete = (task: AgentTask) => {
     setLoading(false);
@@ -254,11 +239,9 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
 
   const switchAnalysisDepth = (depth: AnalysisDepth) => {
     setAnalysisDepth(depth);
-    setPlanConfirmed(false);
   };
 
   const togglePlatform = (p: string) => {
-    setPlanConfirmed(false);
     setPlatforms((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
   };
 
@@ -273,13 +256,11 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
       toast('该链接已添加', 'error');
       return;
     }
-    setPlanConfirmed(false);
     setReferenceLinks((prev) => [...prev, url]);
     setLinkDraft('');
   };
 
   const removeReferenceLink = (index: number) => {
-    setPlanConfirmed(false);
     setReferenceLinks((prev) => prev.filter((_, i) => i !== index));
   };
 
@@ -300,8 +281,8 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
       toast(`产品/服务不能超过 ${BRAND_DESCRIPTION_MAX} 字`, 'error');
       return;
     }
-    if (!planConfirmed) {
-      toast('请先确认 AI 拆解方案，再提交 Hermes', 'error');
+    if (!formReady) {
+      toast(`请补齐：${aiPlan.missing.join('、')}`, 'error');
       return;
     }
     const detectBrand = name.trim();
@@ -398,8 +379,7 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
   );
 
   return (
-    <div className="flex flex-1 min-h-0 overflow-hidden">
-      <div className="flex-1 min-h-0 overflow-y-auto geo-page-content space-y-4 max-w-4xl">
+    <div className="geo-page-content space-y-4 max-w-6xl pb-8">
         {activeOnboardingTaskId && !taskId && onNavigate && (
           <div className="rounded-xl border border-[var(--color-accent)]/30 bg-[var(--color-accent-light)]/40 p-4 flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -417,38 +397,12 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
             </button>
           </div>
         )}
+        <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+          <div className="flex-1 min-w-0">
         <AgentInputCard
           title={depthConfig.cardTitle}
           description={depthConfig.cardDescription}
           headerLeading={analysisDepthSwitcher}
-          footer={
-            <div className="flex flex-col gap-2 w-full sm:flex-row sm:justify-end sm:items-center">
-              <div className="flex flex-wrap gap-2 sm:ml-auto">
-                <button
-                  type="button"
-                  className="geo-btn-secondary text-sm"
-                  onClick={() => {
-                    setPlanConfirmed(true);
-                    toast('已确认检测方案', 'success');
-                  }}
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  确认 AI 拆解方案
-                </button>
-                <button
-                  type="button"
-                  className="geo-btn-primary text-sm"
-                  disabled={loading || isAgentTaskBlocking(taskId, taskStatus)}
-                  onClick={() => void submit()}
-                >
-                  {loading ? '分析中…' : depthConfig.submitLabel}
-                </button>
-              </div>
-              {!taskId && loading && (
-                <p className="text-xs text-[var(--neutral-text-03)] sm:w-full">正在创建任务…</p>
-              )}
-            </div>
-          }
         >
           <div className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-3">
@@ -464,7 +418,6 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
                     aria-readonly={Boolean(workspaceBrand)}
                     onChange={(e) => {
                       if (workspaceBrand) return;
-                      setPlanConfirmed(false);
                       setName(e.target.value.slice(0, BRAND_NAME_MAX));
                     }}
                   />
@@ -477,12 +430,11 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
                 )}
               </div>
               <div>
-                <label className="geo-label">城市 / 目标市场</label>
+                <label className="geo-label">城市 / 目标市场 *</label>
                 <input
                   className="geo-input w-full mt-1"
                   value={city}
                   onChange={(e) => {
-                    setPlanConfirmed(false);
                     setCity(e.target.value);
                   }}
                   placeholder="南京 / 中国"
@@ -492,14 +444,13 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
 
             <div className="grid sm:grid-cols-2 gap-3">
               <div>
-                <FieldLimitLabel label="产品 / 服务" className="block mb-1" />
+                <FieldLimitLabel label="产品 / 服务 *" className="block mb-1" />
                 <FieldCharLimitBox current={services.length} max={BRAND_DESCRIPTION_MAX}>
                   <input
                     className={`geo-input w-full ${fieldCharLimitInputClass()}`}
                     value={services}
                     maxLength={BRAND_DESCRIPTION_MAX}
                     onChange={(e) => {
-                      setPlanConfirmed(false);
                       setServices(e.target.value.slice(0, BRAND_DESCRIPTION_MAX));
                     }}
                     placeholder="种植牙, 隐形矫正"
@@ -512,7 +463,6 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
                   className="geo-input w-full mt-1"
                   value={websiteUrl}
                   onChange={(e) => {
-                    setPlanConfirmed(false);
                     setWebsiteUrl(e.target.value);
                   }}
                   placeholder="https://www.example.com"
@@ -522,9 +472,9 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
 
             <div className="rounded-lg bg-[var(--neutral-bg-03)] p-3 space-y-3">
               <div>
-                <p className="text-xs font-semibold text-[var(--color-title)]">输入材料（可选）</p>
+                <p className="text-xs font-semibold text-[var(--color-title)]">输入材料 *</p>
                 <p className="text-[11px] text-[var(--neutral-text-03)] mt-0.5">
-                  可添加多条参考链接或补充说明，提交时将自动带入检测任务。
+                  至少填写官网、一条参考链接或补充说明中的一项。
                 </p>
               </div>
 
@@ -601,7 +551,6 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
                     value={freeText}
                     maxLength={BRAND_DESCRIPTION_MAX}
                     onChange={(e) => {
-                      setPlanConfirmed(false);
                       setFreeText(e.target.value.slice(0, BRAND_DESCRIPTION_MAX));
                     }}
                     placeholder="品牌介绍、客户案例、页面文案或想检测的问题"
@@ -634,34 +583,21 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
             </div>
           </div>
         </AgentInputCard>
-
-        {taskId && (
-          <div className="mt-4">
-            <AgentTaskBackgroundCard
-              taskId={taskId}
-              taskTitle={taskTitle}
-              initialStatus={taskStatus}
-              queueHint={queueHint}
-              onNavigate={onNavigate}
-              onComplete={onComplete}
-              onStatusChange={setTaskStatus}
-            />
           </div>
-        )}
-      </div>
 
-      <aside className="hidden xl:block w-80 shrink-0 border-l p-4 text-xs space-y-4 overflow-y-auto" style={{ borderColor: 'var(--neutral-divider-02)' }}>
-        <div className="geo-card p-4 space-y-3">
+          <aside className="geo-card p-4 sm:p-5 flex flex-col gap-4 w-full lg:w-80 shrink-0 lg:sticky lg:top-4 lg:self-start">
           <div className="flex items-center gap-2">
             <span className="w-8 h-8 rounded-lg bg-[var(--color-primary)]/10 text-[var(--color-primary)] grid place-items-center">
               <Wand2 className="w-4 h-4" />
             </span>
             <div>
               <p className="font-semibold text-[var(--color-title)]">AI 拆解方案</p>
-              <p className="text-[11px] text-[var(--neutral-text-03)]">{planConfirmed ? '已确认，可提交执行' : '提交前请先确认'}</p>
+              <p className="text-[11px] text-[var(--neutral-text-03)]">
+                {formReady ? '资料已齐，可提交 Hermes 分析' : '补齐左侧必填项后自动更新方案'}
+              </p>
             </div>
           </div>
-          <p className="text-[var(--neutral-text-02)] leading-relaxed">{aiPlan.summary}</p>
+
           <ul className="space-y-1.5">
             {aiPlan.readinessChecklist.map((item) => (
               <li
@@ -678,70 +614,104 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
                   <Circle className="w-3.5 h-3.5 shrink-0 text-[var(--color-warning)]" />
                 )}
                 <span>{item.label}</span>
-                {item.done && (
+                {item.done ? (
                   <span className="ml-auto text-[10px] font-medium text-[var(--color-success)]">已填</span>
+                ) : (
+                  <span className="ml-auto text-[10px] font-medium text-[var(--color-warning)]">待填</span>
                 )}
               </li>
             ))}
           </ul>
-          {analysisDepth === 'deep' && workspaceBrand && (
-            <GeoWebsiteDeployChecklist
-              compact
-              brandName={workspaceBrand}
-              websiteUrl={websiteUrl}
-              preCrawl={null}
-            />
-          )}
-          <div>
-            <p className="font-medium text-[var(--neutral-text-02)] mb-2">分析模式</p>
-            <div className="rounded-lg border border-[var(--color-primary)]/25 bg-[var(--color-primary)]/5 p-3">
-              <p className="font-semibold text-[var(--color-title)]">{activeDepthOption.label}</p>
-              <p className="text-[10px] text-[var(--neutral-text-03)] mt-1 leading-relaxed">
-                {activeDepthOption.hint}
-              </p>
+
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-medium text-[var(--neutral-text-02)] mb-2">分析模式</p>
+              <div className="rounded-lg border border-[var(--color-primary)]/25 bg-[var(--color-primary)]/5 p-3">
+                <p className="font-semibold text-sm text-[var(--color-title)]">{activeDepthOption.label}</p>
+                <p className="text-[10px] text-[var(--neutral-text-03)] mt-1 leading-relaxed">
+                  {activeDepthOption.hint}
+                </p>
+              </div>
+            </div>
+            <div className="rounded-lg bg-[var(--neutral-bg-03)] p-3">
+              <span className="text-[10px] text-[var(--neutral-text-03)]">AI 分析数</span>
+              <p className="font-semibold text-[var(--color-title)]">{aiPlan.questions} 条</p>
             </div>
           </div>
-          <div className="rounded-lg bg-[var(--neutral-bg-03)] p-3">
-            <span className="text-[var(--neutral-text-03)]">AI 分析数</span>
-            <p className="font-semibold text-[var(--color-title)]">{aiPlan.questions} 条</p>
-          </div>
+
           <div>
-            <p className="font-medium text-[var(--neutral-text-02)] mb-2">将执行</p>
+            <p className="text-xs font-medium text-[var(--neutral-text-02)] mb-2">将执行</p>
             <ul className="space-y-1">
               {aiPlan.modules.map((m) => (
-                <li key={String(m)} className="flex items-center gap-2 text-[var(--neutral-text-03)]">
+                <li key={String(m)} className="flex items-center gap-2 text-xs text-[var(--neutral-text-03)]">
                   <Search className="w-3.5 h-3.5 text-[var(--color-primary)]" />
                   {m}
                 </li>
               ))}
             </ul>
           </div>
+
+          <div className="rounded-lg border border-[var(--neutral-divider-02)] p-3 space-y-2">
+            <p className="text-xs font-semibold text-[var(--color-title)]">预计产物</p>
+            <ul className="space-y-1 text-xs text-[var(--neutral-text-03)] list-disc pl-4">
+              {analysisDepth === 'quick' ? (
+                <>
+                  <li>AI 平台提及速检摘要</li>
+                  <li>内容缺口与优先修复建议</li>
+                </>
+              ) : (
+                <>
+                  <li>AI 平台提及矩阵与风险等级</li>
+                  <li>可引用内容缺口和修复建议</li>
+                  <li>官网技术基础与抓取建议</li>
+                  <li>Schema / llms.txt / 改写草稿</li>
+                </>
+              )}
+            </ul>
+            {onNavigate && taskId && (
+              <button type="button" className="geo-link text-[11px]" onClick={() => navigateToAgentTasks(onNavigate, taskId)}>
+                查看任务详情
+              </button>
+            )}
+          </div>
+
+          <div
+            className="pt-4 mt-auto border-t space-y-2"
+            style={{ borderColor: 'var(--neutral-divider-02)' }}
+          >
+            {!formReady && (
+              <p className="text-[11px] text-[var(--color-warning)] leading-relaxed">
+                提交前请补齐：{aiPlan.missing.join('、')}
+              </p>
+            )}
+            <button
+              type="button"
+              className="geo-btn-primary text-sm w-full"
+              disabled={!canSubmit}
+              onClick={() => void submit()}
+            >
+              {loading ? '分析中…' : depthConfig.submitLabel}
+            </button>
+            {!taskId && loading && (
+              <p className="text-[10px] text-center text-[var(--neutral-text-03)]">正在创建任务…</p>
+            )}
+          </div>
+          </aside>
         </div>
 
-        <div className="geo-card p-4 space-y-2">
-          <p className="font-semibold text-[var(--color-title)]">预计产物</p>
-          <ul className="space-y-1 text-[var(--neutral-text-03)] list-disc pl-4">
-            {analysisDepth === 'quick' ? (
-              <>
-                <li>AI 平台提及速检摘要</li>
-                <li>内容缺口与优先修复建议</li>
-              </>
-            ) : (
-              <>
-                <li>AI 平台提及矩阵与风险等级</li>
-                <li>可引用内容缺口和修复建议</li>
-                <li>官网技术基础与抓取建议</li>
-                <li>Schema / llms.txt / 改写草稿</li>
-              </>
-            )}
-          </ul>
-          {onNavigate && (
-            <button type="button" className="geo-link text-[11px]" onClick={() => navigateToAgentTasks(onNavigate, taskId)}>
-              查看任务详情
-            </button>
-          )}
-        </div>
-      </aside>
+        {taskId && (
+          <div className="mt-4">
+            <AgentTaskBackgroundCard
+              taskId={taskId}
+              taskTitle={taskTitle}
+              initialStatus={taskStatus}
+              queueHint={queueHint}
+              onNavigate={onNavigate}
+              onComplete={onComplete}
+              onStatusChange={setTaskStatus}
+            />
+          </div>
+        )}
     </div>
   );
 }

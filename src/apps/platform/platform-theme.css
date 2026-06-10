@@ -380,10 +380,3 @@
   margin-left: var(--platform-main-offset);
   transition: margin-left 200ms ease-out;
 }
-
-@media (max-width: 1023px) {
-  .platform-header-search,
-  .platform-header-date {
-    display: none;
-  }
-}

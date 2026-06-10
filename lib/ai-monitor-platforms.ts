@@ -1,7 +1,17 @@
-import { DEFAULT_INDEXING_PLATFORMS } from './media-platforms.js';
-
-/** GEO 监控默认采样的五平台（与排名采样技能一致） */
-export const AI_MONITOR_PLATFORMS = [...DEFAULT_INDEXING_PLATFORMS] as const;
+/** GEO 监测 / 排名采样默认平台（国内主流大模型对话产品） */
+export const AI_MONITOR_PLATFORMS = [
+  'DeepSeek',
+  '豆包',
+  '千问',
+  'Kimi',
+  '元宝',
+  '文心一言',
+  '智谱清言',
+  '讯飞星火',
+  'MiniMax',
+  '天工',
+  '阶跃星辰',
+] as const;
 
 export type AiMonitorPlatformLabel = (typeof AI_MONITOR_PLATFORMS)[number];
 
@@ -15,6 +25,12 @@ export const AI_MONITOR_LOGIN_URLS: Record<AiMonitorPlatformLabel, string> = {
   千问: 'https://tongyi.aliyun.com/qianwen/',
   Kimi: 'https://kimi.moonshot.cn/',
   元宝: 'https://yuanbao.tencent.com/',
+  文心一言: 'https://yiyan.baidu.com/',
+  智谱清言: 'https://chatglm.cn/',
+  讯飞星火: 'https://xinghuo.xfyun.cn/desk',
+  MiniMax: 'https://agent.minimaxi.com/',
+  天工: 'https://www.tiangong.cn/',
+  阶跃星辰: 'https://stepchat.cn/',
 };
 
 /** 平台登录说明（展示在监测平台 Tab） */
@@ -24,6 +40,12 @@ export const AI_MONITOR_LOGIN_HINTS: Record<AiMonitorPlatformLabel, string> = {
   千问: '使用阿里账号登录通义千问',
   Kimi: '打开 Kimi 对话页完成登录',
   元宝: '使用腾讯账号登录元宝',
+  文心一言: '使用百度账号登录文心一言',
+  智谱清言: '使用手机号或微信登录智谱清言',
+  讯飞星火: '使用讯飞账号登录星火认知大模型',
+  MiniMax: '使用手机号登录 MiniMax Agent',
+  天工: '使用手机号或微信登录天工 AI',
+  阶跃星辰: '使用手机号登录阶跃星辰 StepChat',
 };
 
 export interface AiMonitorPlatformCatalogEntry {

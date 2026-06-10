@@ -13,6 +13,7 @@ import {
   type MediaPlatformCategory,
 } from '../../../lib/media-platform-catalog';
 import PlatformDataTable from '../components/PlatformDataTable';
+import { PlatformTableAction, PlatformTableActions } from '../components/PlatformTableActions';
 import PlatformDetailDrawer from '../components/PlatformDetailDrawer';
 import PlatformFilterBar from '../components/PlatformFilterBar';
 import PlatformFilterField from '../components/PlatformFilterField';
@@ -161,6 +162,28 @@ export default function PlatformMediaPlatformsView() {
     setPlatforms(data.platforms ?? []);
   };
 
+  const toggleEnabled = async (entry: MediaPlatformCatalogEntry) => {
+    const next = platforms.map((item) =>
+      item.id === entry.id ? { ...item, enabled: !item.enabled } : item
+    );
+    setSaving(true);
+    const res = await platformFetch(role, '/api/platform/media-platforms', {
+      method: 'PUT',
+      body: JSON.stringify({
+        platforms: next,
+        reason: reason.trim() || `${entry.enabled ? '停用' : '启用'}平台 ${entry.label}`,
+      }),
+    });
+    const data = await res.json();
+    setSaving(false);
+    if (data.error) {
+      toast(data.error, 'error');
+      return;
+    }
+    toast(entry.enabled ? '已停用' : '已启用', 'success');
+    setPlatforms(data.platforms ?? next);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -267,6 +290,27 @@ export default function PlatformMediaPlatformsView() {
             ),
           },
         ]}
+        renderActions={(row) => (
+          <PlatformTableActions>
+            <PlatformTableAction label="编辑" variant="primary" onClick={() => openEdit(row)} />
+            {row.enabled ? (
+              <PlatformTableAction
+                label="停用"
+                variant="danger"
+                disabled={saving}
+                onClick={() => void toggleEnabled(row)}
+              />
+            ) : (
+              <PlatformTableAction
+                label="启用"
+                variant="primary"
+                disabled={saving}
+                onClick={() => void toggleEnabled(row)}
+              />
+            )}
+          </PlatformTableActions>
+        )}
+        clickHint="点击行或「编辑」打开详情；启用/停用将立即保存"
       />
 
       {selected && draft && (

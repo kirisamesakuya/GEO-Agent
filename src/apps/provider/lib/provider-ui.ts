@@ -1,4 +1,4 @@
-﻿export const ORDER_STATUS_LABEL: Record<string, string> = {
+export const ORDER_STATUS_LABEL: Record<string, string> = {
   published: '待接单',
   in_progress: '写作中',
   draft_review: '待发布方审稿',
@@ -107,16 +107,22 @@ export function formatTaskPublishedAt(iso?: string | null): string {
 export const DEFAULT_AVATAR =
   'https://api.dicebear.com/7.x/avataaars/svg?seed=geo-provider';
 
-export const PAYOUT_CHANNEL_OPTIONS = [
-  { value: 'bank', label: '银行卡' },
-  { value: 'alipay', label: '支付宝' },
-  { value: 'wechat', label: '微信' },
-] as const;
+export const PAYOUT_CHANNEL_OPTIONS = [{ value: 'alipay', label: '支付宝' }] as const;
+
+/** @deprecated 演示/历史数据可能仍为 bank/wechat，新绑定仅开放支付宝 */
+export const LEGACY_PAYOUT_CHANNEL_LABELS: Record<string, string> = {
+  bank: '银行卡',
+  wechat: '微信',
+};
 
 export type PayoutChannel = (typeof PAYOUT_CHANNEL_OPTIONS)[number]['value'];
 
 export function payoutChannelLabel(channel: string | null | undefined): string {
-  return PAYOUT_CHANNEL_OPTIONS.find((o) => o.value === channel)?.label ?? '未设置';
+  return (
+    PAYOUT_CHANNEL_OPTIONS.find((o) => o.value === channel)?.label ??
+    LEGACY_PAYOUT_CHANNEL_LABELS[channel ?? ''] ??
+    '未设置'
+  );
 }
 
 export function payoutLabelFromChannel(channel: string, detail: string): string {

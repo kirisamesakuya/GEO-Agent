@@ -134,7 +134,7 @@ export default function ArticleResultDetailView({ brandName, contentItemId, onNa
   };
 
   return (
-    <div className="geo-page-content h-full overflow-y-auto space-y-4">
+    <div className="geo-page-content space-y-4">
       <HermesWorkingOverlay
         open={hermesWork.open}
         progress={hermesWork.progress}
