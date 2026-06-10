@@ -34,9 +34,9 @@ const MAIN_NAV_ITEMS: { view: ViewType; label: string; icon: typeof LayoutDashbo
   { view: 'brand_list', label: '品牌管理', icon: Building },
   { view: 'geo_analysis', label: 'GEO 分析', icon: BarChart2 },
   { view: 'indexing_rank', label: 'GEO监控', icon: Radar },
-  { view: 'create_order', label: '发布任务', icon: ClipboardList },
+  { view: 'create_order', label: '服务商发单', icon: ClipboardList },
   { view: 'content_delivery', label: '内容交付', icon: Package },
-  { view: 'agent_task_results', label: '结果中心', icon: Inbox },
+  { view: 'agent_task_results', label: 'Hermes 日志', icon: Inbox },
 ];
 
 const ACCOUNT_NAV_ITEMS = [
@@ -128,7 +128,7 @@ export default function Sidebar({ activeView, onViewChange, onNewTaskClick, open
           title="选择功能起点，不会创建单独的项目档案"
         >
           <Plus className="w-4 h-4" />
-          快速发起项目
+          快速发起
         </button>
       </div>
 
@@ -221,7 +221,7 @@ export default function Sidebar({ activeView, onViewChange, onNewTaskClick, open
             </span>
             <span className="geo-sidebar-create-body">
               <span className="geo-sidebar-create-title">生成 GEO 文章</span>
-              <span className="geo-sidebar-create-desc">AI 撰写与入库</span>
+              <span className="geo-sidebar-create-desc">AI 撰写 · 自有账号发布</span>
             </span>
           </button>
         </div>

@@ -3,6 +3,7 @@ import { Sparkles, Plus, Trash2 } from 'lucide-react';
 import type { AgentTask, ViewType } from '../types';
 import { getResultConfirmUiStatus, isResultConfirmPending } from '../lib/agent-result-confirmation';
 import { navigateToAgentTaskResult } from '../lib/agent-task-result-nav';
+import { buildLoopNavigateHint, applyLoopNavigateUrl } from '../lib/geo-capability-loop';
 import TaskStatusPill from './common/TaskStatusPill';
 import AgentTaskResultConfirmPanel from './agent/AgentTaskResultConfirmPanel';
 
@@ -40,6 +41,14 @@ export default function KeywordLibraryView({
   const [mining, setMining] = useState(false);
   const [profile, setProfile] = useState<{ industry?: string; keywords?: string[] }>({});
   const [lastMiningTask, setLastMiningTask] = useState<AgentTask | null>(null);
+  const [allKeywords, setAllKeywords] = useState<Keyword[]>([]);
+
+  const loadAllKeywords = () => {
+    fetch(`/api/keywords?brandName=${encodeURIComponent(brandName)}`)
+      .then((r) => r.json())
+      .then((d) => setAllKeywords(d.keywords ?? []))
+      .catch(() => setAllKeywords([]));
+  };
 
   const load = () => {
     const params = new URLSearchParams({ brandName });
@@ -59,6 +68,10 @@ export default function KeywordLibraryView({
       })
       .catch(() => setLastMiningTask(null));
   };
+
+  useEffect(() => {
+    loadAllKeywords();
+  }, [brandName]);
 
   useEffect(() => {
     fetch(`/api/brand-profile?brandName=${encodeURIComponent(brandName)}`)
@@ -128,6 +141,31 @@ export default function KeywordLibraryView({
     <div className={`overflow-y-auto h-full space-y-4 ${embedded ? 'p-6' : 'geo-page-content'}`}>
       {!embedded && <h2 className="text-lg font-bold">关键词库</h2>}
       <p className="text-xs text-[var(--neutral-text-03)]">供文章生成、GEO 分析、收录查询共用</p>
+
+      {onNavigate && allKeywords.length > 0 && (
+        <div className="geo-card p-3 flex flex-wrap gap-2">
+          <span className="text-xs text-[var(--neutral-text-03)] w-full mb-1">词库已就绪 · 继续闭环</span>
+          {(['detect', 'monitor', 'write'] as const).map((step) => {
+            const nav = buildLoopNavigateHint(step, {
+              brandName,
+              keywordIds: allKeywords.slice(0, 20).map((k) => k.id),
+            });
+            return (
+              <button
+                key={step}
+                type="button"
+                className="geo-btn-secondary geo-btn-xs"
+                onClick={() => {
+                  if (nav.urlParams) applyLoopNavigateUrl(nav.urlParams);
+                  onNavigate(nav.view, nav.hint);
+                }}
+              >
+                {step === 'detect' ? 'GEO 检测' : step === 'monitor' ? '创建监测' : '生成文章'}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {GROUPS.map((g) => (
@@ -225,6 +263,7 @@ export default function KeywordLibraryView({
                     onUpdated={() => {
                       loadLastMiningTask();
                       load();
+                      loadAllKeywords();
                     }}
                     onNavigate={onNavigate}
                   />

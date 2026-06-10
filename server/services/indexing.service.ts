@@ -1,6 +1,7 @@
 import { parseIndexCitationUrls, type IndexCitationLink } from '../../lib/index-result-payload.js';
 import { prisma } from '../db/client.js';
 import { findBrandRow } from './brand.service.js';
+import { extractMonitoringPrompts } from '../lib/task-business-output.js';
 import { createAndEnqueueTask } from '../agent/worker.js';
 
 export type { IndexCitationLink };
@@ -280,17 +281,53 @@ export async function runIndexPlan(planId: string, brandName: string): Promise<I
   const entries = await prisma.keywordEntry.findMany({ where: { id: { in: kwIds } } });
   const keywords = entries.length ? entries.map((e) => e.term) : kwIds;
   const platforms = JSON.parse(plan.platforms || '[]') as string[];
+  let monitoringPrompts: string[] = [];
+  if (kwIds.length) {
+    const miningTask = await prisma.agentTask.findFirst({
+      where: {
+        brandName: brand.name,
+        type: 'keyword_mining',
+        status: { in: ['succeeded', 'partial'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (miningTask?.output) {
+      try {
+        monitoringPrompts = extractMonitoringPrompts(
+          JSON.parse(miningTask.output) as Record<string, unknown>
+        );
+      } catch {
+        monitoringPrompts = [];
+      }
+    }
+  }
+  let competitors: string[] = [];
+  try {
+    competitors = JSON.parse(brand.competitors || '[]') as string[];
+  } catch {
+    competitors = [];
+  }
 
   const task = await createAndEnqueueTask({
     type: 'index_sampling',
-    title: `收录查询：${plan.name}`,
+    title: `AI 监测采样：${plan.name}`,
     brandName: brand.name,
     input: {
       planId: plan.id,
       keywords,
+      ...(monitoringPrompts.length ? { monitoringPrompts } : {}),
       platforms,
+      brandUrl: brand.website?.trim() || undefined,
+      industry: brand.industry || undefined,
+      brandCity: brand.city || undefined,
+      brandDesc: brand.description || undefined,
+      competitors: competitors.length ? competitors : undefined,
       queryAt: plan.queryAt.toISOString(),
       scheduledAt: plan.scheduledAt?.toISOString(),
+      region: 'CN',
+      language: 'zh-Hans',
+      geoMarket: 'domestic',
+      samplingMode: 'live_browser',
     },
     businessRef: plan.id,
   });

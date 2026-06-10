@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: geo_agent_dev
       POSTGRES_DB: geo_agent_dev
     ports:
-      - "5434:5432"
+      - "5540:5432"
     volumes:
       - geo_agent_pgdata:/var/lib/postgresql/data
 

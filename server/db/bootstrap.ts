@@ -22,6 +22,8 @@ const DEFAULT_SKILL_ROUTE_ENTRIES: SkillRouteEntry[] = [
   { taskType: 'campaign_plan', skillName: 'geo.campaign.plan', executor: 'direct_model', enabled: true, priority: 1 },
   { taskType: 'website_preview', skillName: 'geo.website.preview', executor: 'direct_model', enabled: true, priority: 1 },
   { taskType: 'brand_extract', skillName: 'geo-brand-mentions', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'index_sampling', skillName: 'geo-platform-ranking-sampling', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'keyword_mining', skillName: 'geo-keyword-mining-web', executor: 'nous_hermes', enabled: true, priority: 1 },
   { taskType: 'hermes_publish', skillName: 'hermes.publish.auto', executor: 'hermes_gateway', enabled: true, priority: 2 },
   { taskType: 'account_verify', skillName: 'geo.account.verify', executor: 'direct_model', enabled: true, priority: 1 },
 ];

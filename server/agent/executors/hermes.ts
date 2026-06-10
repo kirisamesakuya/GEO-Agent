@@ -13,11 +13,16 @@ import {
   validateGeoWebOutput,
   type GeoWebArtifact,
 } from '../../lib/geo-web-output-contract.js';
+import {
+  extractPreCrawlFromTaskInput,
+  mergeGeoWebOutputWithRuleScore,
+} from '../../lib/geo-score-merge.js';
 import { allowsDirectModelGeoFixtureMock } from '../../lib/agent-status.js';
 import {
   extractKeywordSuggestions,
   normalizeTaskBusinessOutput,
 } from '../../lib/task-business-output.js';
+import { normalizeIndexSamplingOutput } from '../../lib/index-sampling-output.js';
 
 export const GEO_HERMES_SKILL_TASK_TYPES = new Set([
   'geo_quick_start',
@@ -152,9 +157,21 @@ function buildHermesRunPayload(task: AgentTask) {
   const skill = skillNameForTaskType(task.type);
   const payload = buildSkillPayloadForHermes(task);
   const website = resolveCanonicalWebsite(payload);
+  const preCrawl = payload.preCrawlSnapshot as Record<string, unknown> | undefined;
+  const ruleFindings = (payload.ruleScorePreview as { findings?: unknown[] } | undefined)?.findings;
   const userMessage = [
     `请使用 Hermes 技能「${skill}」完成以下 GEO 任务，并输出结构化 JSON（含 audit、data、metrics、findings、actionPlan；如有报告文件写入 artifacts）。`,
     buildGeoWebsiteConstraint(payload),
+    preCrawl
+      ? [
+          '',
+          '【服务端技术预检 · 硬性约束】',
+          '- 以下 preCrawlSnapshot 与 ruleScorePreview 已由服务端确定性抓取/打分',
+          '- 不得 contradict 带 evidence 的 rule findings（technical/schema/crawlers 类别）',
+          '- 你负责平台提及、内容缺口与解读；technical/schema/robots 分数以规则结果为准',
+          JSON.stringify({ preCrawlSnapshot: preCrawl, ruleFindings: ruleFindings ?? [] }, null, 2),
+        ].join('\n')
+      : '',
     '',
     `任务类型：${task.type}`,
     `任务标题：${task.title}`,
@@ -353,8 +370,17 @@ export class NousHermesExecutor implements AgentExecutor {
     if (GEO_HERMES_SKILL_TASK_TYPES.has(task.type)) {
       const runArtifacts = runData?.artifacts as GeoWebArtifact[] | undefined;
       const validation = validateGeoWebOutput(raw, runArtifacts);
+      const { snapshot, rulePreview } = extractPreCrawlFromTaskInput(task.input);
+      const merged =
+        task.type === 'geo_quick_start' || task.type === 'geo_audit'
+          ? mergeGeoWebOutputWithRuleScore(
+              validation.normalized as Record<string, unknown>,
+              rulePreview,
+              snapshot
+            )
+          : validation.normalized;
       return {
-        ...validation.normalized,
+        ...merged,
         missingFields: validation.missingFields,
       };
     }
@@ -399,6 +425,10 @@ export class NousHermesExecutor implements AgentExecutor {
         ...raw,
         suggestions: suggestions.length ? suggestions : raw.suggestions,
       });
+    }
+
+    if (task.type === 'index_sampling') {
+      return normalizeIndexSamplingOutput(raw);
     }
 
     return raw;

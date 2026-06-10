@@ -106,7 +106,15 @@ export async function createGeoReportFromTaskOutput(
       findingsJson: output.findings ? JSON.stringify(output.findings) : null,
       artifactsJson: output.artifacts ? JSON.stringify(output.artifacts) : null,
       actionPlanJson: output.actionPlan ? JSON.stringify(output.actionPlan) : null,
-      rawJson: JSON.stringify({ audit, asset: output.asset, questions: audit.questions, platformMatrix: audit.platformMatrix }),
+      rawJson: JSON.stringify({
+        audit,
+        asset: output.asset,
+        questions: audit.questions,
+        platformMatrix: audit.platformMatrix,
+        preCrawlSnapshot: output.preCrawlSnapshot ?? inp.preCrawlSnapshot ?? null,
+        ruleScorePreview: output.ruleScorePreview ?? inp.ruleScorePreview ?? null,
+        metrics: output.metrics ?? null,
+      }),
       createdAt,
     },
   });

@@ -14,6 +14,7 @@ import GeoArtifactPreview, { GeoArtifactList } from '../geo/GeoArtifactPreview';
 import type { GeoAuditArtifact } from '../../lib/geo-audit-client';
 import { getResultConfirmUiStatus, isResultConfirmPending } from '../../lib/agent-result-confirmation';
 import { navigateToAgentTaskResult } from '../../lib/agent-task-result-nav';
+import { agentTaskApiPath } from '../../lib/agent-task-api';
 
 const IN_PROGRESS = new Set([
   'pending',
@@ -26,11 +27,12 @@ const IN_PROGRESS = new Set([
 
 interface Props {
   taskId: string;
+  brandName?: string;
   onBack?: () => void;
   onNavigate?: (view: ViewType, hint?: string) => void;
 }
 
-export default function AgentTaskResultView({ taskId, onBack, onNavigate }: Props) {
+export default function AgentTaskResultView({ taskId, brandName, onBack, onNavigate }: Props) {
   const { toast } = useToast();
   const [task, setTask] = useState<AgentTask | null>(null);
   const [logs, setLogs] = useState<AgentTaskLog[]>([]);
@@ -50,9 +52,13 @@ export default function AgentTaskResultView({ taskId, onBack, onNavigate }: Prop
   } | null>(null);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
 
+  const [loadError, setLoadError] = useState<'not_found' | 'forbidden' | null>(null);
+
   const load = useCallback(async () => {
-    const res = await fetch(`/api/agent-tasks/${taskId}`);
+    setLoadError(null);
+    const res = await fetch(agentTaskApiPath(taskId, brandName));
     if (!res.ok) {
+      setLoadError(res.status === 403 ? 'forbidden' : 'not_found');
       setLoading(false);
       return;
     }
@@ -83,7 +89,7 @@ export default function AgentTaskResultView({ taskId, onBack, onNavigate }: Prop
     } else {
       setGeoReportPreview(null);
     }
-  }, [taskId, selectedArtifactId]);
+  }, [taskId, brandName, selectedArtifactId]);
 
   useEffect(() => {
     setLoading(true);
@@ -97,7 +103,7 @@ export default function AgentTaskResultView({ taskId, onBack, onNavigate }: Prop
   }, [task?.status, load]);
 
   const handleRetry = async () => {
-    await fetch(`/api/agent-tasks/${taskId}/retry`, { method: 'POST' });
+    await fetch(`${agentTaskApiPath(taskId, brandName)}/retry`, { method: 'POST' });
     toast('已提交重试', 'success');
     await load();
   };
@@ -125,7 +131,11 @@ export default function AgentTaskResultView({ taskId, onBack, onNavigate }: Prop
           <ArrowLeft className="w-4 h-4" />
           返回
         </button>
-        <p className="text-sm text-[var(--color-text-secondary)]">任务不存在或已删除</p>
+        <p className="text-sm text-[var(--color-text-secondary)]">
+          {loadError === 'forbidden'
+            ? '无权查看该品牌下的任务。请切换顶栏工作区品牌后重试。'
+            : '任务不存在或已删除'}
+        </p>
       </div>
     );
   }

@@ -1,0 +1,22 @@
+[
+  { "taskType": "geo_quick_start", "skillName": "geo-quick-start", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "geo_audit", "skillName": "geo-audit", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "brand_extract", "skillName": "geo-brand-mentions", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "geo_schema", "skillName": "geo-schema", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "geo_llmstxt", "skillName": "geo-llmstxt", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "geo_citability", "skillName": "geo-citability", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "geo_technical", "skillName": "geo-technical", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "geo_crawlers", "skillName": "geo-crawlers", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "geo_content", "skillName": "geo-content", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "geo_platform_optimizer", "skillName": "geo-platform-optimizer", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "geo_report_pdf", "skillName": "geo-report-pdf", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "geo_compare", "skillName": "geo-compare", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "geo_report", "skillName": "geo-report-web", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "geo_proposal", "skillName": "geo-proposal-web", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "geo_prospect", "skillName": "geo-prospect-web", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "keyword_mining", "skillName": "geo-keyword-mining-web", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "knowledge_extract", "skillName": "geo-knowledge-extract-web", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "index_sampling", "skillName": "geo-platform-ranking-sampling", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "article_generation", "skillName": "geo-article-generation-web", "executor": "nous_hermes", "enabled": true, "priority": 1 },
+  { "taskType": "article_rewrite", "skillName": "geo-article-rewrite-web", "executor": "nous_hermes", "enabled": true, "priority": 1 }
+]

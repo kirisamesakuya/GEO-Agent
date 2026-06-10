@@ -134,3 +134,29 @@ export async function getKeywordTerms(brandName: string, limit = 20): Promise<st
   const rows = await listKeywords(brandName);
   return rows.slice(0, limit).map((r) => r.term);
 }
+
+const GROUP_PRIORITY: Record<KeywordGroup, number> = {
+  longtail: 0,
+  geo: 1,
+  brand: 2,
+  industry: 3,
+  competitor: 4,
+};
+
+/** 长尾/地域词优先，供文章生成与检测使用 */
+export async function getWeightedKeywordTerms(brandName: string, limit = 15): Promise<string[]> {
+  const rows = await listKeywords(brandName);
+  const sorted = [...rows].sort(
+    (a, b) => (GROUP_PRIORITY[a.group] ?? 9) - (GROUP_PRIORITY[b.group] ?? 9)
+  );
+  const seen = new Set<string>();
+  const terms: string[] = [];
+  for (const row of sorted) {
+    const t = row.term.trim();
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    terms.push(t);
+    if (terms.length >= limit) break;
+  }
+  return terms;
+}

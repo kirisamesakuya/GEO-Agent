@@ -12,6 +12,7 @@ import {
 import type { ViewType } from '../types';
 import PageHeaderWithBrand from './common/PageHeaderWithBrand';
 import { useToast } from '../context/ToastContext';
+import { useHermesSubmitGuard } from './hermes/HermesSubmitGuard';
 import {
   buildContentItemEffectHint,
   buildIndexingGapHint,
@@ -21,6 +22,12 @@ import {
   DEFAULT_INDEXING_PLATFORMS,
   GEO_AI_PLATFORM_LABELS,
 } from '../../lib/media-platforms';
+import AiMonitorPlatformsPanel from './indexing/AiMonitorPlatformsPanel';
+import {
+  fetchAiMonitorSessions,
+  isAiMonitorSessionReady,
+  type AiMonitorSession,
+} from '../lib/ai-monitor-session-client';
 
 interface Plan {
   id: string;
@@ -73,6 +80,7 @@ interface Props {
 
 export default function IndexingRankView({ brandName, onBrandChange, onNavigate }: Props) {
   const { toast } = useToast();
+  const { ensureHermesReady } = useHermesSubmitGuard();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [keywords, setKeywords] = useState<Keyword[]>([]);
   const [brands, setBrands] = useState<BrandOption[]>([]);
@@ -96,8 +104,27 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
   const [gapCoverage, setGapCoverage] = useState<
     Record<string, { contentItemId: string; title: string; overallJudgment: string }>
   >({});
+  const [activeTab, setActiveTab] = useState<'monitor' | 'plans'>('monitor');
+  const [monitorNotReadyCount, setMonitorNotReadyCount] = useState(0);
+  const [modalMonitorSessions, setModalMonitorSessions] = useState<AiMonitorSession[]>([]);
 
   const selectedPlanRow = plans.find((p) => p.id === selectedPlan);
+
+  const loadMonitorSessionsForBrand = useCallback((name: string) => {
+    if (!name) {
+      setMonitorNotReadyCount(0);
+      return;
+    }
+    fetchAiMonitorSessions(name)
+      .then((d) => {
+        setMonitorNotReadyCount(d.notReadyCount);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadMonitorSessionsForBrand(brandName);
+  }, [brandName, loadMonitorSessionsForBrand]);
 
   const loadPlans = useCallback(() => {
     fetch(`/api/indexing/plans?brandName=${encodeURIComponent(brandName)}`)
@@ -134,6 +161,9 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
   useEffect(() => {
     if (!showCreateModal || !planBrand) return;
     loadKeywordsForBrand(planBrand);
+    fetchAiMonitorSessions(planBrand)
+      .then((d) => setModalMonitorSessions(d.sessions))
+      .catch(() => setModalMonitorSessions([]));
   }, [showCreateModal, planBrand, loadKeywordsForBrand]);
 
   const loadResults = (planId: string) => {
@@ -234,6 +264,8 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
 
   const runPlan = async (plan: Plan) => {
     const runBrand = plan.brandName || brandName;
+    const ready = await ensureHermesReady(runBrand);
+    if (!ready) return;
     await fetch(`/api/indexing/plans/${plan.id}/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -259,6 +291,17 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
   const togglePlatform = (p: string) => {
     setSelectedPlatforms((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
   };
+
+  const selectReadyPlatformsOnly = () => {
+    const ready = DEFAULT_INDEXING_PLATFORMS.filter((p) => {
+      const session = modalMonitorSessions.find((s) => s.platform === p);
+      return session ? isAiMonitorSessionReady(session.status) : false;
+    });
+    setSelectedPlatforms(ready.length ? [...ready] : []);
+  };
+
+  const modalSessionStatus = (platform: string) =>
+    modalMonitorSessions.find((s) => s.platform === platform)?.status ?? 'unknown';
 
   const filteredResults = results.filter((r) => {
     if (filterPlatform && r.platform !== filterPlatform) return false;
@@ -307,6 +350,57 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
           </button>
         }
       />
+
+      <div
+        className="flex gap-1 flex-wrap border-b -mb-px px-1"
+        style={{ borderColor: 'var(--neutral-divider-02)' }}
+      >
+        {[
+          { id: 'monitor' as const, label: '监测平台' },
+          { id: 'plans' as const, label: '查询计划' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
+              activeTab === tab.id
+                ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
+                : 'border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-title)]'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'monitor' && (
+        <AiMonitorPlatformsPanel
+          brandName={brandName}
+          onNavigate={onNavigate}
+          onSessionsChange={(_sessions, notReady) => setMonitorNotReadyCount(notReady)}
+        />
+      )}
+
+      {activeTab === 'plans' && monitorNotReadyCount > 0 && (
+        <div
+          className="geo-card px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-xs"
+          style={{ color: 'var(--neutral-text-02)' }}
+        >
+          <span>
+            {monitorNotReadyCount} 个监测平台未就绪，执行采样前建议先完成会话检测与登录。
+          </span>
+          <button type="button" className="geo-link" onClick={() => setActiveTab('monitor')}>
+            去监测平台配置
+          </button>
+        </div>
+      )}
+
+      {activeTab === 'plans' && (
+        <>
+      <p className="text-xs text-[var(--neutral-text-03)] px-1">
+        执行采样将调用本机 Hermes 技能 <code className="text-[11px]">geo-platform-ranking-sampling</code> 进行真机查询；部分平台可能需在本机浏览器登录。未就绪时将提示配置 Hermes。
+      </p>
 
       <div className="geo-table-wrap">
         <table className="geo-table">
@@ -580,6 +674,8 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
           </div>
         </div>
       )}
+        </>
+      )}
 
       {showCreateModal && (
         <div
@@ -662,18 +758,45 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
               </div>
 
               <div>
-                <p className="geo-label mb-2">AI 平台 *</p>
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <p className="geo-label mb-0">AI 平台 *</p>
+                  <button
+                    type="button"
+                    className="geo-link text-xs"
+                    onClick={selectReadyPlatformsOnly}
+                  >
+                    仅选已就绪
+                  </button>
+                  <button
+                    type="button"
+                    className="geo-link text-xs"
+                    onClick={() => {
+                      setShowCreateModal(false);
+                      setActiveTab('monitor');
+                    }}
+                  >
+                    去监测平台
+                  </button>
+                </div>
                 <div className="flex flex-wrap gap-2">
-                  {GEO_AI_PLATFORM_LABELS.map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => togglePlatform(p)}
-                      className={`text-xs px-2 py-1 rounded ${selectedPlatforms.includes(p) ? 'geo-nav-active' : 'geo-nav-item'}`}
-                    >
-                      {p}
-                    </button>
-                  ))}
+                  {DEFAULT_INDEXING_PLATFORMS.map((p) => {
+                    const ready = isAiMonitorSessionReady(modalSessionStatus(p));
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => togglePlatform(p)}
+                        className={`text-xs px-2 py-1 rounded inline-flex items-center gap-1 ${
+                          selectedPlatforms.includes(p) ? 'geo-nav-active' : 'geo-nav-item'
+                        }`}
+                      >
+                        <span className={ready ? 'text-emerald-600' : 'text-[var(--neutral-text-03)]'}>
+                          {ready ? '●' : '○'}
+                        </span>
+                        {p}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

@@ -33,6 +33,7 @@ export type ViewType =
   | 'team_settings'
   | 'notifications'
   | 'brand_confirm'
+  | 'brand_onboarding'
   | 'onboarding_console';
 
 export type AgentTaskStatus =

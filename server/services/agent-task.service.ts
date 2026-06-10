@@ -2,7 +2,28 @@ import { prisma } from '../db/client.js';
 import type { AgentTask, AgentTaskLog, CreateAgentTaskInput } from '../agent/types.js';
 import { paginatedResult, parsePagination } from '../lib/pagination.js';
 import { normalizeAgentTaskStatus, isHermesExecutorTask, isHermesLocalTaskType, isGeoAssetTaskType } from '../lib/agent-status.js';
-import { normalizeGeoSkillInput } from '../lib/hermes-geo-input.js';
+import { normalizeGeoSkillInput, resolveCanonicalWebsite } from '../lib/hermes-geo-input.js';
+import { scoreFromCrawlSnapshot } from '../lib/geo-score-engine.js';
+import { runGeoPreCrawl } from './geo-crawl.service.js';
+
+const GEO_PRECRAWL_TASK_TYPES = new Set(['geo_quick_start', 'geo_audit']);
+
+async function enrichGeoDetectionInput(
+  type: string,
+  input: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  if (!GEO_PRECRAWL_TASK_TYPES.has(type)) return input;
+  const brandUrl = resolveCanonicalWebsite(input);
+  if (!brandUrl) return input;
+  try {
+    const snapshot = await runGeoPreCrawl(brandUrl);
+    if (!snapshot) return input;
+    const ruleScorePreview = scoreFromCrawlSnapshot(snapshot);
+    return { ...input, preCrawlSnapshot: snapshot, ruleScorePreview };
+  } catch {
+    return input;
+  }
+}
 import {
   resolveHermesSetupReason,
   resolveHermesTaskEnqueueStatus,
@@ -54,14 +75,18 @@ function mapTask(row: {
 }
 
 export async function createAgentTask(input: CreateAgentTaskInput): Promise<AgentTask> {
+  const brandName = input.brandName?.trim();
+  if (!brandName) {
+    throw new Error('缺少 brandName，无法创建任务');
+  }
+
   let executor = input.executor ?? 'direct_model';
   let status: AgentTask['status'] = 'queued';
   let reviewCategory: string | undefined;
 
-  const normalizedInput = normalizeGeoSkillInput(
+  const normalizedInput = await enrichGeoDetectionInput(
     input.type,
-    input.input,
-    input.brandName
+    normalizeGeoSkillInput(input.type, input.input, brandName)
   );
 
   const canMockGeoAsset =
@@ -88,7 +113,7 @@ export async function createAgentTask(input: CreateAgentTaskInput): Promise<Agen
       status,
       progress: 0,
       executor,
-      brandName: input.brandName,
+      brandName: brandName,
       input: JSON.stringify(normalizedInput),
       businessRef: input.businessRef,
       reviewCategory: reviewCategory ?? null,

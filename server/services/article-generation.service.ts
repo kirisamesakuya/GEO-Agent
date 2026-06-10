@@ -2,6 +2,7 @@ import type { AgentTask } from '../agent/types.js';
 import { generateJson, getActiveModelLabel } from '../lib/ai.js';
 import { loadMinimaxConfig } from '../lib/minimax.js';
 import { getBrandProfile } from './brand.service.js';
+import { getWeightedKeywordTerms } from './keyword.service.js';
 import { getGeoReport } from './campaign.service.js';
 import {
   buildEffectBaselineFromResults,
@@ -166,8 +167,11 @@ export async function buildArticleGenerationContext(
       body: k.body,
     }));
 
-  const keywords =
-    input.keywords.length > 0 ? input.keywords : profile.keywords.slice(0, 8);
+  let keywords = input.keywords;
+  if (keywords.length === 0) {
+    const libraryTerms = await getWeightedKeywordTerms(brandName, 12);
+    keywords = libraryTerms.length > 0 ? libraryTerms : profile.keywords.slice(0, 8);
+  }
   const negativeKeywords =
     input.negativeKeywords.length > 0
       ? input.negativeKeywords

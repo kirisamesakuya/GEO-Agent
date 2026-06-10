@@ -1,15 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Circle, Loader2 } from 'lucide-react';
 import type { BrandProfile } from '../../types';
-import { confirmOnboardingBrand } from '../../lib/onboarding-client';
+import { submitFirstAudit } from '../../lib/onboarding-client';
 import type { OnboardingGoal } from '../../lib/brand-clue';
 import IndustrySelect from '../common/IndustrySelect';
 
 type ConfirmProfile = Partial<BrandProfile> & { socialLink?: string };
 
+type CluePayload = {
+  brandUrl?: string;
+  website?: string;
+  socialLink?: string;
+  description?: string;
+  text?: string;
+  inputType?: string;
+  files?: Array<{ id: string; name: string; url: string; mimeType?: string }>;
+};
+
 interface Props {
   brandName: string;
   initialProfile?: ConfirmProfile;
+  cluePayload?: CluePayload;
   goal?: OnboardingGoal;
   onConfirmed: (result: { brandName: string; taskId: string }) => void;
   onBack?: () => void;
@@ -18,6 +29,7 @@ interface Props {
 export default function BrandConfirmView({
   brandName,
   initialProfile,
+  cluePayload,
   goal = 'geo_quick_start',
   onConfirmed,
   onBack,
@@ -59,7 +71,7 @@ export default function BrandConfirmView({
 
   useEffect(() => {
     fetch(`/api/brand-profile?brandName=${encodeURIComponent(brandName)}`)
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.name) {
           setProfile((p) => {
@@ -80,6 +92,17 @@ export default function BrandConfirmView({
             setMissingHints(hints);
             return merged;
           });
+        } else {
+          setProfile((p) => {
+            const hints: string[] = [];
+            if (!p.city) hints.push('是否有城市/门店地址？');
+            if (!p.website && !p.description && !p.socialLink) {
+              hints.push('是否有官网或社媒主页？');
+            }
+            if (!p.keywords?.length) hints.push('主营服务是否完整？');
+            setMissingHints(hints);
+            return p;
+          });
         }
       })
       .catch(() => {});
@@ -93,12 +116,17 @@ export default function BrandConfirmView({
     setLoading(true);
     setError('');
     try {
-      const result = await confirmOnboardingBrand({
-        brandName,
+      const result = await submitFirstAudit({
+        draftBrandName: brandName,
         profile,
+        clue: cluePayload,
         goal,
+        runExtract: Boolean(cluePayload?.files?.length),
       });
-      onConfirmed({ brandName: result.brand.name, taskId: result.task.id });
+      onConfirmed({
+        brandName: result.workspaceBrand ?? result.brand.name,
+        taskId: result.geoTask.id,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : '确认失败');
     } finally {

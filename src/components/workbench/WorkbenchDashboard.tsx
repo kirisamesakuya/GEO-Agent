@@ -13,6 +13,12 @@ import {
 import { ArrowUpRight, BarChart3, PieChart as PieChartIcon, Radar, TrendingUp } from 'lucide-react';
 import type { ViewType } from '../../types';
 import { formatDayDelta, formatWeekDelta, weekOverWeek } from './kpi-helpers';
+import {
+  buildLoopNavigateHint,
+  suggestNextLoopStep,
+  GEO_LOOP_STEP_LABELS,
+  applyLoopNavigateUrl,
+} from '../../lib/geo-capability-loop';
 
 export const COCKPIT_CHART_COLORS = [
   '#1d4ed8',
@@ -176,6 +182,16 @@ export default function WorkbenchDashboard({ data, onNavigate }: Props) {
   const publishWowLabel = formatWeekDelta(publishWow);
   const indexWowLabel = formatWeekDelta(indexWow);
 
+  const nextLoopStep = suggestNextLoopStep({
+    keywordCount: data.metrics.indexedKeywords,
+    hasGeoReport: Boolean(data.geoInsight?.latestReportId),
+    hasPublishedContent: data.metrics.totalPublished > 0,
+  });
+  const nextLoopNav = buildLoopNavigateHint(nextLoopStep, {
+    brandName: '',
+    geoReportId: data.geoInsight?.latestReportId ?? undefined,
+  });
+
   const volumeMetrics = [
     {
       label: '累计发布',
@@ -216,6 +232,22 @@ export default function WorkbenchDashboard({ data, onNavigate }: Props) {
 
   return (
     <div className="geo-cockpit">
+      <div className="geo-card p-3 mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs text-[var(--neutral-text-02)]">
+          推荐下一步：<strong className="text-[var(--color-title)]">{GEO_LOOP_STEP_LABELS[nextLoopStep]}</strong>
+          <span className="text-[var(--neutral-text-03)] ml-2">词库 → 检测 → 写文 → 发布 → 监测</span>
+        </div>
+        <button
+          type="button"
+          className="geo-btn-primary geo-btn-sm"
+          onClick={() => {
+            if (nextLoopNav.urlParams) applyLoopNavigateUrl(nextLoopNav.urlParams);
+            onNavigate(nextLoopNav.view, nextLoopNav.hint);
+          }}
+        >
+          前往 {GEO_LOOP_STEP_LABELS[nextLoopStep]}
+        </button>
+      </div>
       <div className="geo-cockpit-head">
         <div className="geo-cockpit-head-title">
           <TrendingUp className="w-4 h-4" style={{ color: 'var(--color-accent)' }} aria-hidden />

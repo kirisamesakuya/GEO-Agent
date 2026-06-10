@@ -69,8 +69,8 @@ export const ARTICLE_DELIVERY_STATUS_TABS: {
 
 export const ARTICLE_DELIVERY_SOURCE_OPTIONS: { id: ArticleDeliverySourceFilter; label: string }[] = [
   { id: 'all', label: '全部来源' },
-  { id: 'ai_generated', label: 'AI生成' },
-  { id: 'manual_order', label: '人工写作' },
+  { id: 'ai_generated', label: '自有内容（Hermes）' },
+  { id: 'manual_order', label: '服务商交付' },
 ];
 
 /** 列表快捷来源筛选（不含未开放能力） */
@@ -93,10 +93,37 @@ export function buildArticleDeliveryPlatformOptions(labels: string[]) {
 }
 
 export const ARTICLE_DELIVERY_SOURCE_LABEL: Record<ArticleDeliverySource, string> = {
-  ai_generated: 'AI生成',
-  manual_order: '人工写作',
+  ai_generated: '自有·Hermes',
+  manual_order: '服务商',
   imported: '导入',
 };
+
+/** 内容交付渠道 Tab：自有 Hermes vs 服务商接单 */
+export type ArticleDeliveryChannelFilter = 'all' | 'self' | 'provider';
+
+export const ARTICLE_DELIVERY_CHANNEL_TABS: {
+  id: ArticleDeliveryChannelFilter;
+  label: string;
+  desc: string;
+}[] = [
+  { id: 'all', label: '全部', desc: '自有内容与服务商订单' },
+  { id: 'self', label: '自有内容', desc: 'AI 生成 · Hermes 发布' },
+  { id: 'provider', label: '服务商交付', desc: '接单方写作/发布 · 需验收' },
+];
+
+export function parseDeliveryChannelFromUrl(): ArticleDeliveryChannelFilter {
+  const ch = new URLSearchParams(window.location.search).get('deliveryChannel');
+  if (ch === 'self' || ch === 'provider' || ch === 'all') return ch;
+  return 'all';
+}
+
+export function channelToSourceFilter(
+  channel: ArticleDeliveryChannelFilter
+): ArticleDeliverySourceFilter {
+  if (channel === 'self') return 'ai_generated';
+  if (channel === 'provider') return 'manual_order';
+  return 'all';
+}
 
 export const ARTICLE_DELIVERY_STAGE_LABEL: Record<ArticleDeliveryStage, string> = {
   writing: '写作中',
@@ -278,6 +305,14 @@ export function groupAiRowsForPublish(rows: ArticleDeliveryRow[]): AiPublishGrou
 }
 
 export function articleDeliveryRowAction(row: ArticleDeliveryRow): ReturnType<typeof rowActionForStage> {
+  if (row.source === 'manual_order') {
+    const stage = row.stage;
+    if (stage === 'draft_review') return 'review';
+    if (stage === 'pending_acceptance') return 'accept';
+    if (stage === 'pending_publish') return 'view';
+    if (stage === 'publish_failed') return 'view';
+    return 'view';
+  }
   return rowActionForStage(row.stage);
 }
 

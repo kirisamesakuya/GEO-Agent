@@ -30,10 +30,11 @@ function formatBrandListTime(iso?: string): string {
 
 interface Props {
   onBrandCreated?: (name: string) => void;
+  onStartFirstAudit?: () => void;
   onOpenBrandWorkspace: (name: string, tab: BrandCenterTab) => void;
 }
 
-export default function BrandListView({ onBrandCreated, onOpenBrandWorkspace }: Props) {
+export default function BrandListView({ onBrandCreated, onStartFirstAudit, onOpenBrandWorkspace }: Props) {
   const { toast } = useToast();
   const [brands, setBrands] = useState<BrandItem[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -133,14 +134,25 @@ export default function BrandListView({ onBrandCreated, onOpenBrandWorkspace }: 
           <div>
             <h2 className="font-bold text-sm">品牌管理</h2>
           </div>
-          <button
-            type="button"
-            className="geo-btn-primary geo-btn-sm shrink-0 flex items-center gap-1"
-            onClick={() => setShowAddModal(true)}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            新增品牌
-          </button>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            {onStartFirstAudit && (
+              <button
+                type="button"
+                className="geo-btn-secondary geo-btn-sm shrink-0"
+                onClick={onStartFirstAudit}
+              >
+                添加品牌并首检
+              </button>
+            )}
+            <button
+              type="button"
+              className="geo-btn-primary geo-btn-sm shrink-0 flex items-center gap-1"
+              onClick={() => setShowAddModal(true)}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              新增品牌
+            </button>
+          </div>
         </div>
 
         <div className="geo-card overflow-x-auto">

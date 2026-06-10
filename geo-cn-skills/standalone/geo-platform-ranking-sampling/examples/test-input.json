@@ -1,0 +1,35 @@
+{
+  "type": "index_sampling",
+  "skill": "geo-platform-ranking-sampling",
+  "input": {
+    "brandName": "云杉口腔",
+    "brandUrl": "https://example.com",
+    "industry": "口腔医疗",
+    "brandCity": "南京",
+    "competitors": ["某口腔连锁"],
+    "platforms": ["豆包", "DeepSeek"],
+    "keywords": [
+      "南京种植牙哪家好",
+      "隐形矫正怎么选"
+    ],
+    "monitoringPrompts": [
+      {
+        "platform": "豆包",
+        "prompt": "南京种植牙哪家好？请推荐并说明理由",
+        "intent": "选型推荐"
+      },
+      {
+        "platform": "DeepSeek",
+        "prompt": "南京种植牙哪家好？请推荐并说明理由",
+        "intent": "选型推荐"
+      }
+    ],
+    "region": "CN",
+    "language": "zh-Hans",
+    "geoMarket": "domestic",
+    "samplingMode": "live_browser",
+    "outputContract": {
+      "format": "geoWebOutput.v1"
+    }
+  }
+}

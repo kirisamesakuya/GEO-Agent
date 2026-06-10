@@ -120,14 +120,54 @@ export async function confirmOnboardingBrand(input: {
   profile: Partial<BrandProfile>;
   goal?: OnboardingGoal;
 }) {
-  const res = await fetch('/api/onboarding/confirm-brand', {
+  const result = await submitFirstAudit({
+    draftBrandName: input.brandName,
+    profile: input.profile,
+    goal: input.goal,
+  });
+  return {
+    brand: result.brand,
+    task: result.geoTask,
+    workspaceBrand: result.workspaceBrand,
+    nextStep: result.nextStep,
+  };
+}
+
+export async function submitFirstAudit(input: {
+  draftBrandName?: string;
+  profile: Partial<BrandProfile> & { socialLink?: string };
+  clue?: {
+    brandUrl?: string;
+    website?: string;
+    socialLink?: string;
+    description?: string;
+    text?: string;
+    inputType?: string;
+    files?: Array<{ id: string; name: string; url: string; mimeType?: string }>;
+  };
+  goal?: OnboardingGoal;
+  runExtract?: boolean;
+}) {
+  const res = await fetch('/api/onboarding/first-audit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? '确认失败');
-  return data as { brand: BrandProfile; task: { id: string; status: string }; nextStep: string };
+  if (!res.ok) throw new Error(data.error ?? '首检发起失败');
+  return data as {
+    brand: BrandProfile;
+    geoTask: { id: string; status: string };
+    extractTask?: { id: string; status?: string } | null;
+    workspaceBrand: string;
+    queueHint?: {
+      isQueued?: boolean;
+      queuePosition?: number;
+      aheadCount?: number;
+      userMessage?: string;
+    };
+    nextStep: string;
+  };
 }
 
 export async function retryOnboardingAgentTask(taskId: string) {

@@ -53,6 +53,7 @@ const VIEW_TITLES: Record<ViewType, string> = {
   team_settings: '团队权限',
   notifications: '消息通知',
   brand_confirm: '确认品牌资料',
+  brand_onboarding: '添加品牌 · 首次体检',
   onboarding_console: 'GEO 检测',
 };
 

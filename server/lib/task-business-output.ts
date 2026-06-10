@@ -180,6 +180,27 @@ export function extractKeywordSuggestions(
   });
 }
 
+/** 从 keyword_mining 任务输出提取监测问句，供 index_sampling 使用 */
+export function extractMonitoringPrompts(output: Record<string, unknown>): string[] {
+  const data = coerceRecord(output.data);
+  const direct = output.monitoringPrompts ?? data.monitoringPrompts;
+  if (Array.isArray(direct)) {
+    return direct.map((p) => String(p).trim()).filter(Boolean);
+  }
+  const clusters = data.intentClusters ?? output.intentClusters;
+  if (Array.isArray(clusters)) {
+    const prompts: string[] = [];
+    for (const cluster of clusters) {
+      if (!cluster || typeof cluster !== 'object') continue;
+      const row = cluster as Record<string, unknown>;
+      const sample = row.samplePrompt ?? row.prompt ?? row.question;
+      if (sample) prompts.push(String(sample).trim());
+    }
+    return prompts.filter(Boolean);
+  }
+  return [];
+}
+
 function firstArtifact(
   output: Record<string, unknown>,
   types: string[]

@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import type { ViewType } from '../../types';
+import { useEffect, useMemo, useState } from 'react';
+import type { ViewType, BrandProfile } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import AgentInputCard from '../common/AgentInputCard';
 import AgentTaskBackgroundCard, {
@@ -26,6 +26,8 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
+import GeoWebsiteDeployChecklist from './GeoWebsiteDeployChecklist';
+import { fetchOnboardingStatus } from '../../lib/onboarding-client';
 
 interface Props {
   brandName: string;
@@ -116,6 +118,81 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
   const [taskTitle, setTaskTitle] = useState('');
   const [taskStatus, setTaskStatus] = useState<AgentTaskStatus | null>(null);
   const [queueHint, setQueueHint] = useState<TaskQueueHint | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [libraryKeywords, setLibraryKeywords] = useState<string[]>([]);
+  const [activeOnboardingTaskId, setActiveOnboardingTaskId] = useState<string | null>(null);
+
+  const workspaceBrand = brandName !== '__all__' ? brandName.trim() : '';
+
+  useEffect(() => {
+    if (!workspaceBrand) return;
+
+    setPlanConfirmed(false);
+    setName(workspaceBrand.slice(0, BRAND_NAME_MAX));
+    setProfileLoading(true);
+    let cancelled = false;
+
+    void fetch(`/api/brand-profile?brandName=${encodeURIComponent(workspaceBrand)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: BrandProfile | null) => {
+        if (cancelled || !data?.name) return;
+        setName(String(data.name).slice(0, BRAND_NAME_MAX));
+        setCity(String(data.city ?? '').trim());
+        const serviceText =
+          Array.isArray(data.keywords) && data.keywords.length > 0
+            ? data.keywords.join(', ')
+            : String(data.description ?? '').trim();
+        setServices(serviceText.slice(0, BRAND_DESCRIPTION_MAX));
+        setWebsiteUrl(String(data.website ?? '').trim());
+        setFreeText(String(data.description ?? '').trim().slice(0, BRAND_DESCRIPTION_MAX));
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setProfileLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceBrand]);
+
+  useEffect(() => {
+    if (!workspaceBrand) {
+      setActiveOnboardingTaskId(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchOnboardingStatus(workspaceBrand)
+      .then((s) => {
+        if (!cancelled) setActiveOnboardingTaskId(s.activeGeoTaskId ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveOnboardingTaskId(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceBrand]);
+
+  useEffect(() => {
+    if (!workspaceBrand) {
+      setLibraryKeywords([]);
+      return;
+    }
+    let cancelled = false;
+    void fetch(`/api/keywords?brandName=${encodeURIComponent(workspaceBrand)}`)
+      .then((r) => (r.ok ? r.json() : { keywords: [] }))
+      .then((d: { keywords?: Array<{ term: string }> }) => {
+        if (cancelled) return;
+        setLibraryKeywords((d.keywords ?? []).map((k) => k.term).filter(Boolean));
+      })
+      .catch(() => {
+        if (!cancelled) setLibraryKeywords([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceBrand]);
 
   const serviceList = useMemo(() => splitList(services), [services]);
   const evidenceCount =
@@ -227,18 +304,33 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
       toast('请先确认 AI 拆解方案，再提交 Hermes', 'error');
       return;
     }
-    if (!(await ensureHermesReady(name.trim()))) return;
+    const detectBrand = name.trim();
+    if (workspaceBrand && detectBrand !== workspaceBrand) {
+      toast(
+        `当前工作区为「${workspaceBrand}」，品牌名称须一致；请切换上方工作区品牌或改回该名称后再提交`,
+        'error'
+      );
+      return;
+    }
+    const taskBrand = workspaceBrand || detectBrand;
+    if (!(await ensureHermesReady(taskBrand))) return;
+
+    const plannedQuestionTerms = [
+      ...libraryKeywords.slice(0, 12),
+      ...serviceList.map((s) => `${taskBrand} ${s}`.trim()),
+      ...platforms.map((p) => `${taskBrand} 在${p}的推荐情况`),
+    ].filter((v, i, arr) => v.length > 0 && arr.indexOf(v) === i).slice(0, 20);
 
     setLoading(true);
     setTaskStatus('queued');
-    const title = `${name.trim()} · ${depthConfig.titleSuffix}`;
+    const title = `${taskBrand} · ${depthConfig.titleSuffix}`;
     const { task, error, queueHint: hint } = await submitGeoAgentTask({
       type: depthConfig.taskType,
       title,
-      brandName: name.trim(),
+      brandName: taskBrand,
       payload: {
         skill: depthConfig.skill,
-        brandName: name.trim(),
+        brandName: taskBrand,
         brandCity: city.trim() || undefined,
         productNames: serviceList.length ? serviceList : undefined,
         brandUrl: websiteUrl.trim() || undefined,
@@ -259,7 +351,7 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
             ? [{ kind: 'text' as const, name: '补充说明', value: freeText.trim() }]
             : []),
         ],
-        plannedQuestions: aiPlan.questions,
+        plannedQuestions: plannedQuestionTerms.length ? plannedQuestionTerms : undefined,
         plannedModules: aiPlan.modules,
         outputContract: {
           format: 'json',
@@ -269,7 +361,7 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
       },
     });
     if (error || !task) {
-      if (error) showHermesError(error, name.trim());
+      if (error) showHermesError(error, taskBrand);
       toast(error ?? '提交失败', 'error');
       setLoading(false);
       setTaskStatus(null);
@@ -308,6 +400,23 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
       <div className="flex-1 min-h-0 overflow-y-auto geo-page-content space-y-4 max-w-4xl">
+        {activeOnboardingTaskId && !taskId && onNavigate && (
+          <div className="rounded-xl border border-[var(--color-accent)]/30 bg-[var(--color-accent-light)]/40 p-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-[var(--color-title)]">已有进行中的 GEO 首检</p>
+              <p className="text-xs text-[var(--neutral-text-03)] mt-1">
+                请先在「添加品牌 · 首次体检」流程或检测进度页查看，避免重复提交。
+              </p>
+            </div>
+            <button
+              type="button"
+              className="geo-btn-primary geo-btn-sm"
+              onClick={() => onNavigate('brand_onboarding', activeOnboardingTaskId)}
+            >
+              查看检测进度
+            </button>
+          </div>
+        )}
         <AgentInputCard
           title={depthConfig.cardTitle}
           description={depthConfig.cardDescription}
@@ -347,15 +456,25 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
                 <FieldLimitLabel label="品牌名称 *" className="block mb-1" />
                 <FieldCharLimitBox current={name.length} max={BRAND_NAME_MAX} className="mt-0">
                   <input
-                    className={`geo-input w-full ${fieldCharLimitInputClass()}`}
+                    className={`geo-input w-full ${fieldCharLimitInputClass()} ${workspaceBrand ? 'bg-[var(--neutral-bg-02)] cursor-default' : ''}`}
                     value={name}
                     maxLength={BRAND_NAME_MAX}
+                    readOnly={Boolean(workspaceBrand)}
+                    disabled={profileLoading && !workspaceBrand}
+                    aria-readonly={Boolean(workspaceBrand)}
                     onChange={(e) => {
+                      if (workspaceBrand) return;
                       setPlanConfirmed(false);
                       setName(e.target.value.slice(0, BRAND_NAME_MAX));
                     }}
                   />
                 </FieldCharLimitBox>
+                {workspaceBrand && (
+                  <p className="text-[10px] mt-1 text-[var(--color-accent)] font-medium">
+                    本次检测归属：{workspaceBrand}（切换请使用顶栏品牌选择器）
+                    {profileLoading ? ' · 资料加载中…' : ''}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="geo-label">城市 / 目标市场</label>
@@ -565,6 +684,14 @@ export default function GeoQuickStartView({ brandName, onNavigate, onOpenHistory
               </li>
             ))}
           </ul>
+          {analysisDepth === 'deep' && workspaceBrand && (
+            <GeoWebsiteDeployChecklist
+              compact
+              brandName={workspaceBrand}
+              websiteUrl={websiteUrl}
+              preCrawl={null}
+            />
+          )}
           <div>
             <p className="font-medium text-[var(--neutral-text-02)] mb-2">分析模式</p>
             <div className="rounded-lg border border-[var(--color-primary)]/25 bg-[var(--color-primary)]/5 p-3">

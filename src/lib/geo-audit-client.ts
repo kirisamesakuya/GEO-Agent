@@ -1,4 +1,5 @@
 import type { AgentTask } from '../types';
+import { appendBrandQuery } from './publisher-context';
 
 export type GeoAuditScores = {
   aiCitability?: number;
@@ -16,6 +17,9 @@ export type GeoAuditFinding = {
   impact: string;
   suggestion: string;
   owner?: string;
+  evidence?: string;
+  source?: string;
+  category?: string;
 };
 
 export type GeoAuditArtifact = {
@@ -47,6 +51,7 @@ export type GeoAuditDetail = {
     skillName?: string;
     status?: string;
   } | null;
+  raw?: Record<string, unknown> | null;
   brandMentionSummary: string;
   competitorAnalysis: string;
   contentGap: string;
@@ -69,7 +74,7 @@ export async function submitGeoAgentTask(input: {
   };
   error?: string;
 }> {
-  const res = await fetch('/api/agent-tasks', {
+  const res = await fetch(appendBrandQuery('/api/agent-tasks', input.brandName), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -152,4 +157,6 @@ export const SCORE_LABELS: Record<string, string> = {
   technicalGeo: '技术 GEO',
   schema: 'Schema',
   platformOptimization: '平台优化',
+  technicalScore: '技术得分',
+  crawlerAccessScore: '爬虫访问',
 };

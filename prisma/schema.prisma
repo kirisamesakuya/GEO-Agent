@@ -54,6 +54,7 @@ model Brand {
   keywordEntries  KeywordEntry[]
   knowledgeEntries KnowledgeEntry[]
   indexQueryPlans IndexQueryPlan[]
+  aiMonitorSessions AiMonitorSession[]
   mediaAssets     MediaAsset[]
   publishPlans       PublishPlan[]
   geoContentProjects GeoContentProject[]
@@ -81,6 +82,24 @@ model KnowledgeEntry {
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model AiMonitorSession {
+  id             String   @id @default(uuid())
+  brandId        String
+  brand          Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  platform       String
+  /// unknown | verifying | ready | login_required | captcha | error | unavailable
+  status         String   @default("unknown")
+  accountLabel   String?
+  lastVerifiedAt DateTime?
+  lastError      String?
+  verifyTaskId   String?
+  updatedAt      DateTime @updatedAt
+  createdAt      DateTime @default(now())
+
+  @@unique([brandId, platform])
+  @@index([brandId])
 }
 
 model IndexQueryPlan {

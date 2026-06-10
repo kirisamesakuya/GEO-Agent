@@ -5,7 +5,6 @@ import PageHeaderWithBrand from './common/PageHeaderWithBrand';
 import WorkbenchAlertStrip from './workbench/WorkbenchAlertStrip';
 import WorkbenchDashboard, { type CockpitData } from './workbench/WorkbenchDashboard';
 import WorkbenchHermesSummary from './workbench/WorkbenchHermesSummary';
-import BrandClueStartFlow from './onboarding/BrandClueStartFlow';
 import { fetchOnboardingStatus, type OnboardingStatus } from '../lib/onboarding-client';
 
 interface PublisherDashboard extends CockpitData {
@@ -26,20 +25,10 @@ interface Props {
   brandName: string;
   onBrandChange: (name: string) => void;
   onNavigate: (view: ViewType, hint?: string) => void;
-  onOnboardingStart?: (result: {
-    brandName: string;
-    extractTaskId: string;
-    goal: string;
-    clue?: {
-      brandUrl?: string;
-      website?: string;
-      socialLink?: string;
-      description?: string;
-    };
-  }) => void;
+  onStartFirstAudit?: () => void;
 }
 
-export default function WorkbenchView({ brandName, onBrandChange, onNavigate, onOnboardingStart }: Props) {
+export default function WorkbenchView({ brandName, onBrandChange, onNavigate, onStartFirstAudit }: Props) {
   const [data, setData] = useState<PublisherDashboard | null>(null);
   const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -100,12 +89,16 @@ export default function WorkbenchView({ brandName, onBrandChange, onNavigate, on
         }
       />
 
-      {onboarding?.showOnboardingHero && onOnboardingStart && (
-        <BrandClueStartFlow
-          variant="page"
-          onNavigate={onNavigate}
-          onComplete={(result) => onOnboardingStart(result)}
-        />
+      {onboarding?.showOnboardingHero && onStartFirstAudit && (
+        <div className="geo-card p-6 md:p-8 space-y-3">
+          <h3 className="font-bold text-base">3 分钟完成首次 GEO 检测</h3>
+          <p className="text-sm text-[var(--neutral-text-03)]">
+            添加品牌资料并发起 AI 可见度首检。完成后可在 GEO 分析与任务结果中心查看报告。
+          </p>
+          <button type="button" className="geo-btn-primary geo-btn-sm" onClick={onStartFirstAudit}>
+            添加品牌 · 首次体检
+          </button>
+        </div>
       )}
 
       {data && data.todos.length > 0 && (

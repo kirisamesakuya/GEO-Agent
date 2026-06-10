@@ -122,10 +122,18 @@ export default function AgentTaskResultsCenterView({
       });
   }, [filter, query, tasks, typeFilter]);
 
+  const openTaskResult = (task: AgentTask) => {
+    if (task.brandName && task.brandName !== brandName) {
+      onBrandChange(task.brandName);
+    }
+    onNavigate?.('agent_task_result', task.id);
+  };
+
   if (selectedTaskId) {
     return (
       <AgentTaskResultView
         taskId={selectedTaskId}
+        brandName={brandName}
         onNavigate={onNavigate}
         onBack={onGoBack ?? (() => onNavigate?.('agent_task_results'))}
       />
@@ -264,7 +272,7 @@ export default function AgentTaskResultsCenterView({
                       <tr
                         key={task.id}
                         className="cursor-pointer"
-                        onClick={() => onNavigate?.('agent_task_result', task.id)}
+                        onClick={() => openTaskResult(task)}
                       >
                         <td>
                           <p className="font-medium text-[var(--color-title)] truncate max-w-[16rem]">{task.title}</p>
@@ -297,7 +305,7 @@ export default function AgentTaskResultsCenterView({
                               className="inline-flex items-center gap-0.5 text-xs text-[var(--color-accent)] font-medium hover:underline"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onNavigate?.('agent_task_result', task.id);
+                                openTaskResult(task);
                               }}
                             >
                               查看结果

@@ -271,6 +271,11 @@ export default function GeoReportPrintLayout({ data, watermark, preview = false 
                         建议：{f.suggestion}
                       </p>
                     )}
+                    {f.evidence && (
+                      <p style={{ margin: '4px 0 0', fontSize: 10, color: '#64748b', lineHeight: 1.5, fontFamily: 'monospace' }}>
+                        证据：{f.evidence}
+                      </p>
+                    )}
                   </div>
                 );
               })}

@@ -75,7 +75,8 @@ export function resolvePublisherBrandName(input: {
   if (saved === '__all__' || (saved && isProspectBrandScope(saved))) {
     return saved;
   }
-  if (saved && names.has(saved)) return saved;
+  // 快速发起新建品牌时，/api/brands 可能尚未刷新；仍信任 localStorage 中的工作区选择
+  if (saved?.trim()) return saved.trim();
   if (me?.brandName && names.has(me.brandName)) return me.brandName;
   const def = brands.find((b) => b.isDefault) ?? brands[0];
   return def?.name ?? fallback;

@@ -17,7 +17,7 @@ export interface QuickStartEntry {
 
 export const QUICK_START_LAST_KEY = 'geo_quick_start_last';
 
-/** 主路径：诊断 → 生产 → 发单 → 词库 */
+/** 主路径：诊断 → 自有发布 → 服务商发单 → 词库 */
 export const QUICK_START_ENTRIES: QuickStartEntry[] = [
   {
     id: 'geo_analysis',
@@ -28,15 +28,15 @@ export const QUICK_START_ENTRIES: QuickStartEntry[] = [
   {
     id: 'generate_article',
     view: 'generate_article',
-    title: '生成 GEO 文章',
-    desc: 'AI 撰写后进入内容交付，可发布并查看发布记录',
+    title: '自己写并发布',
+    desc: 'AI 撰写 · 自有账号 Hermes 发布（免费路径）',
     hint: 'quick',
   },
   {
     id: 'create_order',
     view: 'create_order',
-    title: '发布任务',
-    desc: '发布文章到接单端，或在内容交付中提交网页需求',
+    title: '找服务商写/发',
+    desc: '向接单端发任务包 · 需预算（收费路径）',
     hint: 'ai',
   },
   {

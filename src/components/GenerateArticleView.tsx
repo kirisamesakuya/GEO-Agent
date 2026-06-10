@@ -899,7 +899,10 @@ export default function GenerateArticleView({
                   : undefined
               }
               onOpenContentLibrary={
-                onNavigate ? () => onNavigate('content_delivery') : undefined
+                onNavigate ? () => onNavigate('content_delivery', 'self') : undefined
+              }
+              onOpenProviderOrder={
+                onNavigate ? () => onNavigate('create_order', 'ai') : undefined
               }
             />
           </div>

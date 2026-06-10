@@ -27,6 +27,9 @@ import { isProspectBrandScope } from '../lib/brand-scope';
 import { EFFECT_JUDGMENT_LABEL } from '../lib/article-effect-nav';
 import { navigateToAgentTaskResult } from '../lib/agent-task-result-nav';
 import GeoArtifactPreview, { GeoArtifactList } from './geo/GeoArtifactPreview';
+import GeoWebsiteDeployChecklist from './geo/GeoWebsiteDeployChecklist';
+import GeoPreCrawlPanel, { extractPreCrawlFromAuditRaw } from './geo/GeoPreCrawlPanel';
+import { buildLoopNavigateHint, applyLoopNavigateUrl } from '../lib/geo-capability-loop';
 
 interface Props {
   brandName: string;
@@ -80,6 +83,7 @@ export default function GeoReportHistoryView({
   const [auditDetail, setAuditDetail] = useState<GeoAuditDetail | null>(null);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
   const [compareLoading, setCompareLoading] = useState(false);
+  const [brandWebsite, setBrandWebsite] = useState('');
   const [articleEffects, setArticleEffects] = useState<
     Array<{
       contentItemId: string;
@@ -123,7 +127,20 @@ export default function GeoReportHistoryView({
   const selectedTitle = selected ? formatGeoReportLabel(selected) : '';
   const printData = selected ? reportToPrintData(selected, selectedTitle, auditDetail) : null;
   const htmlReport = pickGeoReportHtmlArtifact(auditDetail?.artifacts);
+  const preCrawlCtx = extractPreCrawlFromAuditRaw(auditDetail?.raw ?? null);
   const baselineReport = reports.find((r) => (r as GeoReportSummary & { isBaseline?: boolean }).isBaseline);
+
+  useEffect(() => {
+    if (!selected?.brandName) {
+      setBrandWebsite('');
+      return;
+    }
+    void fetch(`/api/brand-profile?brandName=${encodeURIComponent(selected.brandName)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setBrandWebsite(String(d?.website ?? '')))
+      .catch(() => setBrandWebsite(''));
+  }, [selected?.brandName]);
+
   const canCompare =
     Boolean(selected && baselineReport && selected.id !== baselineReport.id && !selected.isBaseline);
 
@@ -292,7 +309,7 @@ export default function GeoReportHistoryView({
                       onClick={() => onNavigate('create_order', `geo:${selected.id}`)}
                     >
                       <FileText className="w-3.5 h-3.5" />
-                      生成任务包
+                      按报告发服务商任务包
                     </button>
                   )}
                 </div>
@@ -306,7 +323,15 @@ export default function GeoReportHistoryView({
                       dangerouslySetInnerHTML={{ __html: htmlReport }}
                     />
                   ) : printData ? (
-                    <div className="mx-auto max-w-[820px]">
+                    <div className="mx-auto max-w-[820px] space-y-4">
+                      {(preCrawlCtx.snapshot || preCrawlCtx.rulePreview) && (
+                        <GeoPreCrawlPanel
+                          snapshot={preCrawlCtx.snapshot}
+                          rulePreview={preCrawlCtx.rulePreview}
+                          findings={auditDetail?.findings}
+                          scoringSource={preCrawlCtx.scoringSource}
+                        />
+                      )}
                       <GeoReportPrintLayout preview data={printData} watermark={watermark.enabled ? watermark : null} />
                     </div>
                   ) : null}
@@ -351,6 +376,36 @@ export default function GeoReportHistoryView({
                   className="w-80 shrink-0 border-l overflow-y-auto p-4 space-y-4"
                   style={{ borderColor: 'var(--neutral-divider-02)', background: 'var(--neutral-bg-03)' }}
                 >
+                  {selected && (
+                    <GeoWebsiteDeployChecklist
+                      compact
+                      brandName={selected.brandName}
+                      reportId={selected.id}
+                      websiteUrl={brandWebsite}
+                      artifacts={auditDetail?.artifacts}
+                      preCrawl={preCrawlCtx.snapshot}
+                      onOpenAssets={
+                        onNavigate
+                          ? () => {
+                              const nav = buildLoopNavigateHint('assets', {
+                                brandName: selected.brandName,
+                              });
+                              if (nav.urlParams) applyLoopNavigateUrl(nav.urlParams);
+                              onNavigate(nav.view, nav.hint);
+                            }
+                          : undefined
+                      }
+                    />
+                  )}
+                  {(preCrawlCtx.snapshot || preCrawlCtx.rulePreview) && (
+                    <GeoPreCrawlPanel
+                      compact
+                      snapshot={preCrawlCtx.snapshot}
+                      rulePreview={preCrawlCtx.rulePreview}
+                      findings={auditDetail?.findings}
+                      scoringSource={preCrawlCtx.scoringSource}
+                    />
+                  )}
                   {(auditDetail?.artifacts?.length ?? 0) > 0 && (
                     <div>
                       <h3 className="text-xs font-semibold text-[var(--color-title)] mb-2">Artifacts</h3>
@@ -365,6 +420,20 @@ export default function GeoReportHistoryView({
                             artifact={
                               auditDetail.artifacts.find((a) => a.id === selectedArtifactId) ??
                               auditDetail.artifacts[0]
+                            }
+                            onRegenerateAsset={
+                              onNavigate
+                                ? (assetType) => {
+                                    const nav = buildLoopNavigateHint('assets', {
+                                      brandName: selected!.brandName,
+                                    });
+                                    const url = new URL(window.location.href);
+                                    url.searchParams.set('geoAssetType', assetType);
+                                    window.history.replaceState({}, '', url);
+                                    if (nav.urlParams) applyLoopNavigateUrl(nav.urlParams);
+                                    onNavigate(nav.view, nav.hint);
+                                  }
+                                : undefined
                             }
                           />
                         </div>
@@ -383,6 +452,47 @@ export default function GeoReportHistoryView({
                             onClick={() => onNavigate('geo_analysis', 'audit')}
                           >
                             继续深度分析
+                          </button>
+                          <button
+                            type="button"
+                            className="geo-btn-secondary geo-btn-xs w-full"
+                            onClick={() => {
+                              const nav = buildLoopNavigateHint('assets', {
+                                brandName: selected.brandName,
+                              });
+                              if (nav.urlParams) applyLoopNavigateUrl(nav.urlParams);
+                              onNavigate(nav.view, nav.hint);
+                            }}
+                          >
+                            网站 GEO 资产
+                          </button>
+                          <button
+                            type="button"
+                            className="geo-btn-secondary geo-btn-xs w-full"
+                            onClick={() => onNavigate('keyword_library', 'mine')}
+                          >
+                            补挖关键词
+                          </button>
+                          <button
+                            type="button"
+                            className="geo-btn-secondary geo-btn-xs w-full"
+                            onClick={() => {
+                              const nav = buildLoopNavigateHint('monitor', {
+                                brandName: selected.brandName,
+                                geoReportId: selected.id,
+                              });
+                              if (nav.urlParams) applyLoopNavigateUrl(nav.urlParams);
+                              onNavigate(nav.view, nav.hint);
+                            }}
+                          >
+                            创建监测计划
+                          </button>
+                          <button
+                            type="button"
+                            className="geo-btn-secondary geo-btn-xs w-full"
+                            onClick={() => onNavigate('generate_article', `geo:${selected.id}`)}
+                          >
+                            生成文章自己发布
                           </button>
                         </>
                       )}

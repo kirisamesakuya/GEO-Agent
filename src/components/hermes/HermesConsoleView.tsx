@@ -167,7 +167,7 @@ export default function HermesConsoleView({ onNavigate, scrollHint }: Props) {
               <button
                 type="button"
                 className="geo-btn-primary geo-btn-sm shrink-0"
-                onClick={() => onNavigate('onboarding_console', returnTaskId)}
+                onClick={() => onNavigate('brand_onboarding', returnTaskId)}
               >
                 继续 GEO 检测
               </button>

@@ -6,6 +6,7 @@ import WorkbenchView from './components/WorkbenchView';
 import IndexingRankView from './components/IndexingRankView';
 import GenerateArticleView from './components/GenerateArticleView';
 import GeoAnalysisView from './components/GeoAnalysisView';
+import { HermesSubmitGuardProvider } from './components/hermes/HermesSubmitGuard';
 import CreateOrderView from './components/CreateOrderView';
 import {
   createOrderModeFromHint,
@@ -86,18 +87,10 @@ import NotificationsView from './components/NotificationsView';
 import ShareGeoReportView from './components/ShareGeoReportView';
 import ProviderApp from './apps/provider/ProviderApp';
 import { isProspectBrandScope } from './lib/brand-scope';
-import {
-  fetchPublisherContext,
-  persistPublisherBrand,
-  readSavedPublisherBrand,
-  resolvePublisherBrandName,
-} from './lib/publisher-context';
 import PlatformApp from './apps/platform/PlatformApp';
 import QuickStartModal from './components/common/QuickStartModal';
-import BrandConfirmView from './components/onboarding/BrandConfirmView';
-import OnboardingConsoleView from './components/onboarding/OnboardingConsoleView';
-import type { OnboardingGoal } from './lib/brand-clue';
-import { fetchOnboardingStatus } from './lib/onboarding-client';
+import BrandOnboardingWizard from './components/onboarding/BrandOnboardingWizard';
+import { BrandWorkspaceProvider, useBrandWorkspace } from './context/BrandWorkspaceContext';
 
 /**
  * DEMO_ONLY:
@@ -163,7 +156,7 @@ function resolveInitialRoute(): { view: ViewType; hint?: string } {
     'create_website', 'content_library', 'content_delivery', 'order_delivery', 'hermes_console', 'agent_task_submitted',
     'agent_task_results', 'agent_tasks', 'agent_task_result', 'brand_list',
     'brand_profile', 'account_binding', 'account_funds', 'user_center', 'team_settings',
-    'notifications', 'brand_confirm', 'onboarding_console',
+    'notifications', 'brand_confirm', 'brand_onboarding', 'onboarding_console',
   ];
   if (v && allowed.includes(v as ViewType)) {
     const hint = params.get('hint') ?? undefined;
@@ -174,55 +167,57 @@ function resolveInitialRoute(): { view: ViewType; hint?: string } {
 
 export default function App() {
   const shareReportId = new URLSearchParams(window.location.search).get('shareReport');
+  if (shareReportId) {
+    return <ShareGeoReportView reportId={shareReportId} />;
+  }
+  const appMode = resolveAppMode();
+  if (appMode === 'provider') return <ProviderApp />;
+  if (appMode === 'platform') return <PlatformApp />;
+  return (
+    <BrandWorkspaceProvider>
+      <PublisherMain />
+    </BrandWorkspaceProvider>
+  );
+}
+
+function PublisherMain() {
   const initialRoute = resolveInitialRoute();
-  const [appMode] = useState<AppMode>(resolveAppMode);
-  const [activeView, setActiveView] = useState<ViewType>(initialRoute.view);
+  const [activeView, setActiveView] = useState<ViewType>(() => {
+    const route = initialRoute;
+    if (route.view === 'brand_confirm' || route.view === 'onboarding_console') {
+      return 'brand_onboarding';
+    }
+    return route.view;
+  });
   const [viewHint, setViewHint] = useState<string | undefined>(initialRoute.hint);
-  const [brandName, setBrandName] = useState<string>('云杉口腔');
+  const { workspaceBrand: brandName, switchWorkspace } = useBrandWorkspace();
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
-  const [onboardingBrand, setOnboardingBrand] = useState<string | null>(null);
-  const [onboardingGoal, setOnboardingGoal] = useState<OnboardingGoal>('geo_quick_start');
-  const [onboardingClue, setOnboardingClue] = useState<{
-    brandUrl?: string;
-    website?: string;
-    socialLink?: string;
-    description?: string;
-  } | null>(null);
   const [headerTaskStatus, setHeaderTaskStatus] = useState<AgentTaskStatus | null>(null);
-  const [brandOptions, setBrandOptions] = useState<{ id: string; name: string }[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navStackRef = useRef<Array<{ view: ViewType; hint?: string }>>([]);
   const skipNavRecordRef = useRef(false);
 
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
-  /**
-   * 优先从 /api/publisher/me 读取登录用户可访问品牌；
-   * Demo 未登录时回退 /api/brands 与 localStorage。
-   */
-  useEffect(() => {
-    const saved = readSavedPublisherBrand();
-    fetchPublisherContext()
-      .then(({ me, brands }) => {
-        if (brands.length) {
-          setBrandOptions(brands.map((b) => ({ id: b.id, name: b.name })));
-        }
-        setBrandName(resolvePublisherBrandName({ saved, me, brands }));
-      })
-      .catch(() => {});
-  }, []);
+  const handleBrandChange = useCallback(
+    (name: string) => {
+      void switchWorkspace(name);
+    },
+    [switchWorkspace]
+  );
 
-  if (shareReportId) {
-    return <ShareGeoReportView reportId={shareReportId} />;
-  }
-
-  const handleBrandChange = (name: string) => {
-    setBrandName(name);
-    persistPublisherBrand(name);
-  };
-
-  if (appMode === 'provider') return <ProviderApp />;
-  if (appMode === 'platform') return <PlatformApp />;
+  const openBrandOnboarding = useCallback(
+    (hint?: string) => {
+      setActiveView('brand_onboarding');
+      setViewHint(hint);
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', 'brand_onboarding');
+      if (hint) url.searchParams.set('hint', hint);
+      else url.searchParams.delete('hint');
+      window.history.pushState({}, '', url);
+    },
+    []
+  );
 
   const effectiveBrand =
     brandName === '__all__' || isProspectBrandScope(brandName) ? '云杉口腔' : brandName;
@@ -398,59 +393,6 @@ export default function App() {
     window.history.pushState({}, '', url);
   };
 
-  const handleOnboardingStart = (
-    result: {
-    brandName: string;
-    extractTaskId: string;
-    goal: string;
-    clue?: {
-      brandUrl?: string;
-      website?: string;
-      socialLink?: string;
-      description?: string;
-    };
-    brand?: { website?: string; description?: string };
-  },
-    options?: { preferBrandConfirm?: boolean }
-  ) => {
-    handleBrandChange(result.brandName);
-    setOnboardingBrand(result.brandName);
-    setOnboardingGoal((result.goal as OnboardingGoal) ?? 'geo_quick_start');
-    const website =
-      result.clue?.brandUrl?.trim() ||
-      result.clue?.website?.trim() ||
-      result.brand?.website?.trim() ||
-      '';
-    setOnboardingClue({
-      brandUrl: website || undefined,
-      website: website || undefined,
-      socialLink: result.clue?.socialLink?.trim() || undefined,
-      description:
-        result.clue?.description?.trim() ||
-        result.brand?.description?.trim() ||
-        undefined,
-    });
-    setShowNewTaskModal(false);
-    if (options?.preferBrandConfirm) {
-      setActiveView('brand_confirm');
-      setViewHint(result.extractTaskId);
-      return;
-    }
-    void fetchOnboardingStatus(result.brandName)
-      .then((ob) => {
-        if (!ob.hermesReady) {
-          navigate('hermes_console', 'setup');
-        } else {
-          setActiveView('brand_confirm');
-          setViewHint(result.extractTaskId);
-        }
-      })
-      .catch(() => {
-        setActiveView('brand_confirm');
-        setViewHint(result.extractTaskId);
-      });
-  };
-
   const renderActiveView = () => {
     switch (activeView) {
       case 'workbench':
@@ -459,50 +401,36 @@ export default function App() {
             brandName={effectiveBrand}
             onBrandChange={handleBrandChange}
             onNavigate={navigate}
-            onOnboardingStart={handleOnboardingStart}
+            onStartFirstAudit={() => openBrandOnboarding()}
           />
         );
+      case 'brand_onboarding':
       case 'brand_confirm':
+      case 'onboarding_console': {
+        const resumeConsole =
+          activeView === 'onboarding_console' ||
+          (activeView === 'brand_onboarding' &&
+            Boolean(viewHint && viewHint.length > 8 && !viewHint.startsWith('return:')));
         return (
-          <BrandConfirmView
-            brandName={onboardingBrand ?? effectiveBrand}
-            goal={onboardingGoal}
-            initialProfile={{
-              website: onboardingClue?.brandUrl ?? onboardingClue?.website ?? '',
-              description: onboardingClue?.description ?? '',
-              socialLink: onboardingClue?.socialLink ?? '',
-            }}
-            onBack={() => navigate('workbench')}
-            onConfirmed={({ brandName: confirmedBrand, taskId }) => {
-              handleBrandChange(confirmedBrand);
-              setOnboardingBrand(confirmedBrand);
-              void fetchOnboardingStatus(confirmedBrand)
-                .then((ob) => {
-                  if (!ob.hermesReady) {
-                    navigate('hermes_console', `return:onboarding:${taskId}`);
-                  } else {
-                    navigate('onboarding_console', taskId);
-                  }
-                })
-                .catch(() => navigate('onboarding_console', taskId));
-            }}
-          />
-        );
-      case 'onboarding_console':
-        return (
-          <OnboardingConsoleView
-            brandName={onboardingBrand ?? effectiveBrand}
-            taskId={viewHint}
+          <BrandOnboardingWizard
+            initialStep={resumeConsole ? 'console' : undefined}
+            brandName={resumeConsole ? brandName : undefined}
+            taskId={resumeConsole ? viewHint : undefined}
+            onWorkspaceSwitch={switchWorkspace}
             onNavigate={navigate}
+            onExit={() => navigate('workbench')}
           />
         );
+      }
       case 'indexing_rank':
         return (
-          <IndexingRankView
-            brandName={effectiveBrand}
-            onBrandChange={handleBrandChange}
-            onNavigate={navigate}
-          />
+          <HermesSubmitGuardProvider onNavigate={navigate}>
+            <IndexingRankView
+              brandName={effectiveBrand}
+              onBrandChange={handleBrandChange}
+              onNavigate={navigate}
+            />
+          </HermesSubmitGuardProvider>
         );
       case 'create_order':
       case 'content_publish':
@@ -684,6 +612,7 @@ export default function App() {
         return (
           <AgentTaskResultView
             taskId={taskId}
+            brandName={brandName}
             onNavigate={navigate}
             onBack={goBack}
           />
@@ -764,6 +693,7 @@ export default function App() {
             onBrandCreated={(name) => {
               handleBrandChange(name);
             }}
+            onStartFirstAudit={() => openBrandOnboarding()}
             onOpenBrandWorkspace={openBrandWorkspace}
           />
         );
@@ -814,6 +744,7 @@ export default function App() {
             brandName={effectiveBrand}
             onBrandChange={handleBrandChange}
             onNavigate={navigate}
+            onStartFirstAudit={() => openBrandOnboarding()}
           />
         );
     }
@@ -857,9 +788,9 @@ export default function App() {
 
       {showNewTaskModal && (
         <QuickStartModal
+          brandName={brandName}
           onClose={() => setShowNewTaskModal(false)}
           onNavigate={navigate}
-          onFlowComplete={handleOnboardingStart}
         />
       )}
     </div>

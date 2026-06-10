@@ -21,6 +21,10 @@ import GeoRiskConfirmModal from './GeoRiskConfirmModal';
 
 import GeoArtifactPreview from './GeoArtifactPreview';
 
+import GeoWebsiteDeployChecklist from './GeoWebsiteDeployChecklist';
+
+import { parseGeoAssetTypeFromUrl } from '../../lib/geo-analysis-nav';
+
 import {
 
   assetActionTypeForTaskType,
@@ -158,7 +162,12 @@ export default function GeoAssetsView({ brandName, onNavigate }: Props) {
 
   }, [brandName]);
 
-
+  useEffect(() => {
+    const assetType = parseGeoAssetTypeFromUrl();
+    if (assetType && ASSET_TYPES.some((t) => t.id === assetType)) {
+      setActiveType(assetType as (typeof ASSET_TYPES)[number]['id']);
+    }
+  }, []);
 
   const onComplete = (task: AgentTask) => {
 
@@ -360,7 +369,16 @@ export default function GeoAssetsView({ brandName, onNavigate }: Props) {
 
   return (
 
-    <div className="flex flex-1 min-h-0 overflow-hidden geo-page-content gap-4">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden geo-page-content gap-3 p-4">
+
+      <GeoWebsiteDeployChecklist
+        brandName={brandName}
+        reportId={reportId ?? undefined}
+        websiteUrl={websiteUrl}
+        artifacts={artifacts}
+      />
+
+      <div className="flex flex-1 min-h-0 overflow-hidden gap-4">
 
       <GeoRiskConfirmModal
 
@@ -631,6 +649,8 @@ export default function GeoAssetsView({ brandName, onNavigate }: Props) {
         })()}
 
       </div>
+
+    </div>
 
     </div>
 

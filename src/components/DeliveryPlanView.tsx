@@ -508,6 +508,7 @@ export default function DeliveryPlanView({
         <>
           <AgentInputCard
             title="AI 制定接单投放方案"
+            description="向资源平台发任务 · 需预算 · 接单方负责写作与发布"
             footer={
               <button
                 type="button"

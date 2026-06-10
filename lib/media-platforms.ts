@@ -88,7 +88,7 @@ export const GEO_AI_PLATFORM_LABELS = sortedLabels(['ai_search']);
 
 export const DEFAULT_CAMPAIGN_PLATFORMS = ['小红书', '知乎'] as const;
 export const DEFAULT_GEO_AI_PLATFORMS = ['豆包', '腾讯元宝'] as const;
-export const DEFAULT_INDEXING_PLATFORMS = ['豆包', 'DeepSeek'] as const;
+export const DEFAULT_INDEXING_PLATFORMS = ['DeepSeek', '豆包', '千问', 'Kimi', '元宝'] as const;
 
 export type ContentPublishPlatformLabel = (typeof CONTENT_LIBRARY_PLATFORM_ORDER)[number];
 export type GeoAiPlatformLabel = (typeof GEO_AI_PLATFORM_LABELS)[number];

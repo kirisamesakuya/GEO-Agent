@@ -1,6 +1,10 @@
 import type { AgentTask } from '../agent/types.js';
 import { fixtureForGeoTaskType } from '../lib/geo-skill-fixtures.js';
 import {
+  extractPreCrawlFromTaskInput,
+  mergeGeoWebOutputWithRuleScore,
+} from '../lib/geo-score-merge.js';
+import {
   buildMockAccountVerifyOutput,
   buildMockHermesPublishOutput,
 } from '../lib/hermes-publish-mock.js';
@@ -79,6 +83,16 @@ export function mockOutputForTaskType(
 
   if (GEO_HERMES_TYPES.has(type)) {
     const output = fixtureForGeoTaskType(type, merged) as Record<string, unknown>;
+    const taskInput = task?.input ?? merged;
+    if (type === 'geo_quick_start' || type === 'geo_audit') {
+      const { snapshot, rulePreview } = extractPreCrawlFromTaskInput(taskInput);
+      if (rulePreview) {
+        return {
+          source: 'mock_geo_fixture',
+          ...mergeGeoWebOutputWithRuleScore(output, rulePreview, snapshot),
+        };
+      }
+    }
     return { source: 'mock_geo_fixture', ...output };
   }
 

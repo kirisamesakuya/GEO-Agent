@@ -45,6 +45,7 @@ interface Props {
   onPreviewInput: () => void;
   onViewReport?: () => void;
   onOpenContentLibrary?: () => void;
+  onOpenProviderOrder?: () => void;
 }
 
 function SkeletonLine({ className = '' }: { className?: string }) {
@@ -89,6 +90,7 @@ export default function ArticleGenerationSummaryPanel({
   onPreviewInput,
   onViewReport,
   onOpenContentLibrary,
+  onOpenProviderOrder,
 }: Props) {
   const showTaskStatus = Boolean(loading || taskStatus);
   const showSuccess = Boolean(contentBatchId && articleCount > 0 && !loading);
@@ -134,9 +136,16 @@ export default function ArticleGenerationSummaryPanel({
             已生成 <strong>{articleCount}</strong> 篇并进入内容交付。
           </p>
           {onOpenContentLibrary && (
-            <button type="button" className="geo-btn-primary geo-btn-sm" onClick={onOpenContentLibrary}>
-              打开内容交付
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="geo-btn-primary geo-btn-sm" onClick={onOpenContentLibrary}>
+                去内容交付发布（Hermes）
+              </button>
+              {onOpenProviderOrder && (
+                <button type="button" className="geo-btn-secondary geo-btn-sm" onClick={onOpenProviderOrder}>
+                  改为服务商发单
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}

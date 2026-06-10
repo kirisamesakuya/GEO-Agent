@@ -1,7 +1,7 @@
 import type { AgentTask } from '../agent/types.js';
 import type { AgentTaskType } from '../agent/types.js';
 
-const DEFAULT_PLATFORMS = ['DeepSeek', '豆包', 'Kimi'];
+const DEFAULT_PLATFORMS = ['DeepSeek', '豆包', '千问', 'Kimi', '元宝'];
 
 /** 旧字段 → geo-quick-start 标准字段 */
 export const GEO_SKILL_FIELD_ALIASES: Record<string, string> = {
@@ -179,6 +179,11 @@ export function normalizeGeoSkillInput(
       ...(raw.outputContract ? { outputContract: raw.outputContract } : {}),
       ...(raw.analysisDepth ? { analysisDepth: raw.analysisDepth } : {}),
       ...(raw.requestedOutputs ? { requestedOutputs: raw.requestedOutputs } : {}),
+      ...(raw.preCrawlSnapshot ? { preCrawlSnapshot: raw.preCrawlSnapshot } : {}),
+      ...(raw.ruleScorePreview ? { ruleScorePreview: raw.ruleScorePreview } : {}),
+      ...(Array.isArray(raw.plannedQuestions) && raw.plannedQuestions.length
+        ? { plannedQuestions: raw.plannedQuestions }
+        : {}),
     });
   }
 
@@ -265,6 +270,40 @@ export function normalizeGeoSkillInput(
     });
   }
 
+  if (taskType === 'index_sampling') {
+    const keywords = Array.isArray(raw.keywords)
+      ? (raw.keywords as unknown[]).map(String).filter(Boolean)
+      : [];
+    const monitoringPrompts = Array.isArray(raw.monitoringPrompts)
+      ? raw.monitoringPrompts
+      : undefined;
+
+    return stripLegacyUrlFields({
+      ...base,
+      ...(brandCity ? { brandCity } : {}),
+      ...(productNames ? { productNames } : {}),
+      ...(brandDesc ? { brandDesc } : {}),
+      ...(raw.industry ? { industry: String(raw.industry) } : {}),
+      ...(Array.isArray(raw.competitors) && raw.competitors.length
+        ? { competitors: (raw.competitors as unknown[]).map(String) }
+        : {}),
+      platforms,
+      ...(keywords.length ? { keywords } : {}),
+      ...(monitoringPrompts ? { monitoringPrompts } : {}),
+      ...(raw.planId ? { planId: String(raw.planId) } : {}),
+      ...(raw.queryAt ? { queryAt: String(raw.queryAt) } : {}),
+      ...(raw.scheduledAt ? { scheduledAt: String(raw.scheduledAt) } : {}),
+      region: String(raw.region ?? 'CN'),
+      language: String(raw.language ?? 'zh-Hans'),
+      geoMarket: String(raw.geoMarket ?? 'domestic'),
+      samplingMode: String(raw.samplingMode ?? 'live_browser'),
+      ...(raw.probe === true ? { probe: true } : {}),
+      ...(raw.brandId ? { brandId: String(raw.brandId) } : {}),
+      ...(sourceMaterials ? { sourceMaterials } : {}),
+      ...(raw.outputContract ? { outputContract: raw.outputContract } : {}),
+    });
+  }
+
   if (taskType === 'geo_platform_optimizer') {
     const queries = Array.isArray(raw.queries)
       ? (raw.queries as unknown[]).map(String).filter(Boolean)
@@ -300,6 +339,8 @@ export function normalizeGeoSkillInput(
     ...(raw.requestedOutputs ? { requestedOutputs: raw.requestedOutputs } : {}),
     ...(raw.plannedQuestions ? { plannedQuestions: raw.plannedQuestions } : {}),
     ...(raw.plannedModules ? { plannedModules: raw.plannedModules } : {}),
+    ...(raw.preCrawlSnapshot ? { preCrawlSnapshot: raw.preCrawlSnapshot } : {}),
+    ...(raw.ruleScorePreview ? { ruleScorePreview: raw.ruleScorePreview } : {}),
     ...(raw.outputContract ? { outputContract: raw.outputContract } : {}),
   });
 }

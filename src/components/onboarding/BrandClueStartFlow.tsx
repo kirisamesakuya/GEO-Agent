@@ -6,6 +6,7 @@ import {
   CLUE_TYPE_CHIPS,
   ONBOARDING_GOALS,
   buildBrandCluePayload,
+  resolveDraftBrandName,
   type OnboardingGoal,
 } from '../../lib/brand-clue';
 import { fetchOnboardingStatus, startOnboarding, uploadBrandFile } from '../../lib/onboarding-client';
@@ -17,6 +18,8 @@ interface Props {
   /** 弹窗标题；默认「开始你的第一个 GEO 项目」 */
   headline?: string;
   variant?: 'page' | 'modal';
+  /** 向导模式：仅收集线索，确认页再原子创建品牌+首检 */
+  deferApi?: boolean;
   onNavigate?: (view: ViewType, hint?: string) => void;
   onComplete: (
     result: {
@@ -30,6 +33,7 @@ interface Props {
       socialLink?: string;
       description?: string;
     };
+    files?: Array<{ id: string; name: string; url: string; mimeType?: string }>;
   },
     options?: { preferBrandConfirm?: boolean }
   ) => void;
@@ -39,6 +43,7 @@ interface Props {
 export default function BrandClueStartFlow({
   headline,
   variant = 'page',
+  deferApi = false,
   onNavigate,
   onComplete,
   onCancel,
@@ -120,6 +125,35 @@ export default function BrandClueStartFlow({
         description: description.trim() || undefined,
         files,
       });
+
+      if (deferApi) {
+        const draftName = resolveDraftBrandName({
+          brandName: resolvedBrandName || undefined,
+          brandUrl: websiteUrl.trim() || undefined,
+          socialLink: socialLink.trim() || undefined,
+          description: description.trim() || undefined,
+          files,
+        });
+        const website = websiteUrl.trim();
+        onComplete(
+          {
+            brandName: draftName,
+            extractTaskId: '',
+            goal,
+            brand: { website: website || undefined, description: description.trim() || undefined },
+            clue: {
+              brandUrl: website || undefined,
+              website: website || undefined,
+              socialLink: socialLink.trim() || undefined,
+              description: description.trim() || undefined,
+            },
+            files,
+          },
+          { preferBrandConfirm: true }
+        );
+        return;
+      }
+
       const result = await startOnboarding({ ...payload, goal });
       const website =
         result.clue?.brandUrl?.trim() ||

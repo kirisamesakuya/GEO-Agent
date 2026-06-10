@@ -1,0 +1,38 @@
+{
+  "repository": {
+    "name": "geo-cn-skills",
+    "summary": "面向中国环境的 GEO Hermes 技能包，兼容 GEO-Agent geoWebOutput.v1",
+    "version": "2026.06.09-cn1",
+    "default_branch": "main"
+  },
+  "families": [
+    { "id": "pre-audit", "label": "预审" },
+    { "id": "site-technical", "label": "官网优化" },
+    { "id": "content", "label": "内容优化" },
+    { "id": "research", "label": "关键词检索" },
+    { "id": "agency", "label": "GEO 代理" },
+    { "id": "content-production", "label": "内容生产" }
+  ],
+  "skills": [
+    { "id": "geo-brand-mentions", "family": "pre-audit", "taskTypes": ["brand_extract"], "maturity": "beta" },
+    { "id": "geo-audit", "family": "pre-audit", "taskTypes": ["geo_audit"], "maturity": "beta" },
+    { "id": "geo-quick-start", "family": "pre-audit", "taskTypes": ["geo_quick_start"], "maturity": "beta" },
+    { "id": "geo-crawlers", "family": "site-technical", "taskTypes": ["geo_crawlers"], "maturity": "beta" },
+    { "id": "geo-technical", "family": "site-technical", "taskTypes": ["geo_technical"], "maturity": "beta" },
+    { "id": "geo-llmstxt", "family": "site-technical", "taskTypes": ["geo_llmstxt"], "maturity": "beta" },
+    { "id": "geo-schema", "family": "site-technical", "taskTypes": ["geo_schema"], "maturity": "beta" },
+    { "id": "geo-platform-optimizer", "family": "content", "taskTypes": ["geo_platform_optimizer"], "maturity": "beta" },
+    { "id": "geo-citability", "family": "content", "taskTypes": ["geo_citability"], "maturity": "beta" },
+    { "id": "geo-content", "family": "content", "taskTypes": ["geo_content"], "maturity": "beta" },
+    { "id": "geo-keyword-mining-web", "family": "research", "taskTypes": ["keyword_mining"], "maturity": "beta" },
+    { "id": "geo-prospect-web", "family": "agency", "taskTypes": ["geo_prospect"], "maturity": "draft" },
+    { "id": "geo-proposal-web", "family": "agency", "taskTypes": ["geo_proposal"], "maturity": "draft" },
+    { "id": "geo-report-web", "family": "agency", "taskTypes": ["geo_report"], "maturity": "beta" },
+    { "id": "geo-report-pdf", "family": "agency", "taskTypes": ["geo_report_pdf"], "maturity": "beta" },
+    { "id": "geo-compare", "family": "agency", "taskTypes": ["geo_compare"], "maturity": "beta" },
+    { "id": "geo-knowledge-extract-web", "family": "content-production", "taskTypes": ["knowledge_extract"], "maturity": "beta" },
+    { "id": "geo-article-generation-web", "family": "content-production", "taskTypes": ["article_generation"], "maturity": "beta" },
+    { "id": "geo-article-rewrite-web", "family": "content-production", "taskTypes": ["article_rewrite"], "maturity": "beta" },
+    { "id": "geo-platform-ranking-sampling", "family": "research", "taskTypes": ["index_sampling"], "maturity": "beta" }
+  ]
+}

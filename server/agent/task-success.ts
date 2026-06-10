@@ -216,26 +216,38 @@ export async function handleTaskSuccess(
     }
   }
 
-  if (task.type === 'index_sampling' && output.results) {
-    const planId = String(task.input.planId ?? task.businessRef ?? '');
-    if (planId) {
-      const results = output.results as Array<{
-        keyword: string;
-        platform: string;
-        hit: boolean;
-        citedMerchant?: boolean;
-        citationSnippet?: string;
-        aiResponse?: string;
-        citationUrls?: Array<{ title: string; url: string }> | string;
-      }>;
-      await saveIndexResults(planId, results);
-      await updateAgentTask(task.id, { output: { ...output, planId } });
-      const plan = await prisma.indexQueryPlan.findUnique({ where: { id: planId } });
-      if (plan?.verificationType === 'article_effect') {
-        const { updateArticleEffectFromRetest } = await import(
-          '../services/article-effect.service.js'
-        );
-        await updateArticleEffectFromRetest(planId);
+  if (task.type === 'index_sampling') {
+    const { extractIndexSamplingResults } = await import('../lib/index-sampling-output.js');
+    const extracted = extractIndexSamplingResults(output);
+    const inp = task.input as Record<string, unknown>;
+    const {
+      isAiMonitorProbeTask,
+      resolveAiMonitorProbeBrandId,
+      applyProbeResultsToSessions,
+      syncMonitorSessionsFromSamplingResults,
+    } = await import('../services/ai-monitor-session.service.js');
+
+    if (extracted?.length && isAiMonitorProbeTask(inp, task.businessRef)) {
+      const brandId = resolveAiMonitorProbeBrandId(inp, task.businessRef);
+      if (brandId) {
+        await applyProbeResultsToSessions(brandId, extracted);
+      }
+      await updateAgentTask(task.id, { output: { ...output, probe: true, results: extracted } });
+    } else if (extracted?.length) {
+      const planId = String(inp.planId ?? task.businessRef ?? '');
+      if (planId) {
+        await saveIndexResults(planId, extracted);
+        await updateAgentTask(task.id, { output: { ...output, planId, results: extracted } });
+        const plan = await prisma.indexQueryPlan.findUnique({ where: { id: planId } });
+        if (plan) {
+          await syncMonitorSessionsFromSamplingResults(plan.brandId, extracted);
+        }
+        if (plan?.verificationType === 'article_effect') {
+          const { updateArticleEffectFromRetest } = await import(
+            '../services/article-effect.service.js'
+          );
+          await updateArticleEffectFromRetest(planId);
+        }
       }
     }
   }

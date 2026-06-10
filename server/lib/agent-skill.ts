@@ -31,9 +31,9 @@ export const TASK_SKILL_MAP: Record<AgentTaskType, string> = {
   brand_extract: 'geo-brand-mentions',
   hermes_publish: 'hermes.publish.auto',
   account_verify: 'geo.account.verify',
-  keyword_mining: 'geo.keyword.mine',
+  keyword_mining: 'geo-keyword-mining-web',
   knowledge_extract: 'geo.knowledge.extract',
-  index_sampling: 'geo.index.sample',
+  index_sampling: 'geo-platform-ranking-sampling',
   article_rewrite: 'geo.article.rewrite',
 };
 

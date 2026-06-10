@@ -1,8 +1,10 @@
 import type { GeoAuditArtifact } from '../../lib/geo-audit-client';
+import { DEPLOY_BRIEF_BY_ARTIFACT_TYPE } from './GeoWebsiteDeployChecklist';
 
 interface Props {
   artifact: GeoAuditArtifact;
   className?: string;
+  onRegenerateAsset?: (assetType: string) => void;
 }
 
 function isMarkdown(type: string, name: string, mime?: string) {
@@ -22,8 +24,39 @@ function isImage(type: string, mime?: string) {
   return type === 'screenshot' || type === 'image' || Boolean(mime?.startsWith('image/'));
 }
 
-export default function GeoArtifactPreview({ artifact, className = '' }: Props) {
+export default function GeoArtifactPreview({ artifact, className = '', onRegenerateAsset }: Props) {
   const { type, name, preview, url, mimeType } = artifact;
+  const deployBrief = DEPLOY_BRIEF_BY_ARTIFACT_TYPE[type] ?? DEPLOY_BRIEF_BY_ARTIFACT_TYPE.text;
+  const assetTypeMap: Record<string, string> = {
+    schema_jsonld: 'geo_schema',
+    json: 'geo_schema',
+    llms_txt: 'geo_llmstxt',
+    robots_patch: 'geo_crawlers',
+  };
+  const regenType = assetTypeMap[type] ?? (name.includes('llms') ? 'geo_llmstxt' : undefined);
+
+  const actionBar = (onRegenerateAsset || deployBrief) && (
+    <div className="flex flex-wrap gap-2 mt-2">
+      {deployBrief && (
+        <button
+          type="button"
+          className="geo-btn-secondary geo-btn-xs"
+          onClick={() => void navigator.clipboard.writeText(deployBrief)}
+        >
+          复制部署说明
+        </button>
+      )}
+      {onRegenerateAsset && regenType && (
+        <button
+          type="button"
+          className="geo-link text-[10px]"
+          onClick={() => onRegenerateAsset(regenType)}
+        >
+          单独重新生成
+        </button>
+      )}
+    </div>
+  );
 
   if (isImage(type, mimeType) && (url || preview)) {
     const src = url ?? (preview?.startsWith('data:') ? preview : undefined);
@@ -31,6 +64,7 @@ export default function GeoArtifactPreview({ artifact, className = '' }: Props) 
       return (
         <div className={className}>
           <img src={src} alt={name} className="max-w-full rounded-lg border" style={{ borderColor: 'var(--neutral-divider-02)' }} />
+          {actionBar}
         </div>
       );
     }
@@ -38,9 +72,12 @@ export default function GeoArtifactPreview({ artifact, className = '' }: Props) 
 
   if (isMarkdown(type, name, mimeType) && preview) {
     return (
-      <pre className={`text-[11px] whitespace-pre-wrap overflow-auto max-h-64 bg-[var(--neutral-bg-03)] p-3 rounded-lg ${className}`}>
-        {preview}
-      </pre>
+      <div className={className}>
+        <pre className="text-[11px] whitespace-pre-wrap overflow-auto max-h-64 bg-[var(--neutral-bg-03)] p-3 rounded-lg">
+          {preview}
+        </pre>
+        {actionBar}
+      </div>
     );
   }
 
@@ -52,17 +89,23 @@ export default function GeoArtifactPreview({ artifact, className = '' }: Props) 
       // keep raw
     }
     return (
-      <pre className={`text-[10px] font-mono whitespace-pre-wrap overflow-auto max-h-64 bg-[var(--neutral-bg-03)] p-3 rounded-lg ${className}`}>
-        {formatted}
-      </pre>
+      <div className={className}>
+        <pre className="text-[10px] font-mono whitespace-pre-wrap overflow-auto max-h-64 bg-[var(--neutral-bg-03)] p-3 rounded-lg">
+          {formatted}
+        </pre>
+        {actionBar}
+      </div>
     );
   }
 
   if (preview) {
     return (
-      <pre className={`text-[11px] whitespace-pre-wrap overflow-auto max-h-48 bg-[var(--neutral-bg-03)] p-3 rounded-lg ${className}`}>
-        {preview}
-      </pre>
+      <div className={className}>
+        <pre className="text-[11px] whitespace-pre-wrap overflow-auto max-h-48 bg-[var(--neutral-bg-03)] p-3 rounded-lg">
+          {preview}
+        </pre>
+        {actionBar}
+      </div>
     );
   }
 

@@ -1,0 +1,7 @@
+{
+  "id": "geo-keyword-mining-web",
+  "version": "2026.06.09-cn1",
+  "taskTypes": ["keyword_mining"],
+  "family": "research",
+  "region": "CN"
+}

@@ -71,7 +71,6 @@ export function resolveNotificationNavigation(
   }
   if (
     view === 'content_delivery' ||
-    view === 'order_delivery' ||
     view === 'agent_tasks' ||
     view === 'agent_task_result'
   ) {

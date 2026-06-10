@@ -1,0 +1,32 @@
+{
+  "version": "2026.06.09-cn1",
+  "region": "CN",
+  "language": "zh-Hans",
+  "geoMarket": "domestic",
+  "defaultPlatforms": [
+    "DeepSeek",
+    "豆包",
+    "千问",
+    "Kimi",
+    "元宝"
+  ],
+  "platformAliases": {
+    "deepseek": "DeepSeek",
+    "doubao": "豆包",
+    "豆包": "豆包",
+    "qwen": "千问",
+    "通义千问": "千问",
+    "kimi": "Kimi",
+    "yuanbao": "元宝",
+    "腾讯元宝": "元宝"
+  },
+  "sourcePolicy": {
+    "requireOfficialSources": true,
+    "requireCurrentWebVerification": true,
+    "freshnessWindowDays": 30,
+    "allowForums": false
+  },
+  "outputContract": {
+    "format": "geoWebOutput.v1"
+  }
+}

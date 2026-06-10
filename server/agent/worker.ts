@@ -123,8 +123,24 @@ export async function enqueueAgentTask(
     }
 
     if (result.status === 'failed' && current.type === 'index_sampling') {
-      const planId = String(current.input.planId ?? current.businessRef ?? '');
-      if (planId) await markIndexPlanFailed(planId);
+      const inp = current.input as Record<string, unknown>;
+      const {
+        isAiMonitorProbeTask,
+        resolveAiMonitorProbeBrandId,
+        applyProbeFailureToSessions,
+      } = await import('../services/ai-monitor-session.service.js');
+      if (isAiMonitorProbeTask(inp, current.businessRef)) {
+        const brandId = resolveAiMonitorProbeBrandId(inp, current.businessRef);
+        if (brandId) {
+          await applyProbeFailureToSessions(
+            brandId,
+            result.userErrorMessage ?? result.errorMessage
+          );
+        }
+      } else {
+        const planId = String(inp.planId ?? current.businessRef ?? '');
+        if (planId) await markIndexPlanFailed(planId);
+      }
     }
 
     if (terminal) {
@@ -179,8 +195,19 @@ export async function enqueueAgentTask(
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     if (task.type === 'index_sampling') {
-      const planId = String(task.input.planId ?? task.businessRef ?? '');
-      if (planId) await markIndexPlanFailed(planId);
+      const inp = task.input as Record<string, unknown>;
+      const {
+        isAiMonitorProbeTask,
+        resolveAiMonitorProbeBrandId,
+        applyProbeFailureToSessions,
+      } = await import('../services/ai-monitor-session.service.js');
+      if (isAiMonitorProbeTask(inp, task.businessRef)) {
+        const brandId = resolveAiMonitorProbeBrandId(inp, task.businessRef);
+        if (brandId) await applyProbeFailureToSessions(brandId, message);
+      } else {
+        const planId = String(inp.planId ?? task.businessRef ?? '');
+        if (planId) await markIndexPlanFailed(planId);
+      }
     }
     await updateAgentTask(task.id, {
       status: 'failed',

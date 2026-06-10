@@ -21,6 +21,7 @@ import { registerPublisherRoutes } from './server/routes/publisher.js';
 import { registerKeywordRoutes } from './server/routes/keywords.js';
 import { registerKnowledgeRoutes } from './server/routes/knowledge.js';
 import { registerIndexingRoutes } from './server/routes/indexing.js';
+import { registerAiMonitorSessionRoutes } from './server/routes/ai-monitor-sessions.js';
 import { registerMediaRoutes } from './server/routes/media.js';
 import { registerPublishPlanRoutes } from './server/routes/publish-plans.js';
 import { registerGeoContentProjectRoutes } from './server/routes/geo-content-projects.js';
@@ -83,6 +84,7 @@ async function bootstrap() {
   registerKeywordRoutes(app);
   registerKnowledgeRoutes(app);
   registerIndexingRoutes(app);
+  registerAiMonitorSessionRoutes(app);
   registerMediaRoutes(app);
   registerPublishPlanRoutes(app);
   registerGeoContentProjectRoutes(app);

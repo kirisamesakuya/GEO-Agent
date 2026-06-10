@@ -1,0 +1,7 @@
+{
+  "id": "geo-audit",
+  "version": "2026.06.09-cn1",
+  "taskTypes": ["geo_audit"],
+  "family": "pre-audit",
+  "region": "CN"
+}

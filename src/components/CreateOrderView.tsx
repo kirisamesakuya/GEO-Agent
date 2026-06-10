@@ -78,10 +78,15 @@ export default function CreateOrderView({
         <div className="mb-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <h2 className="text-sm font-bold text-[var(--color-title)]">
-              {websiteFlow ? '发布网页改装' : '发布任务'}
+              {websiteFlow ? '发布网页改装' : '服务商发单'}
             </h2>
             <BrandSwitcher variant="scope" brandName={brandName} onBrandChange={onBrandChange} />
           </div>
+          {!websiteFlow && (
+            <p className="text-[10px] text-[var(--neutral-text-03)] mb-2">
+              向资源平台发任务 · 需预算 · 由接单方写作/发布
+            </p>
+          )}
         </div>
         {CUSTOM_PUBLISH_ENABLED && !websiteFlow && VISIBLE_CREATE_ORDER_MODES.length > 1 && (
           <div className="flex gap-1 flex-wrap">

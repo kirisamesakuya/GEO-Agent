@@ -17,6 +17,32 @@ function assertBrandScope(req: Request, res: Response, brandName: string): boole
   return true;
 }
 
+/** 校验品牌是否在当前商家组织/品牌权限内（session 与 demo 共用） */
+async function assertPublisherBrandScope(
+  req: Request,
+  res: Response,
+  brandName: string
+): Promise<string | null> {
+  const decoded = brandName.trim();
+  const brand = await prisma.brand.findFirst({
+    where: { name: decoded, status: { not: 'archived' } },
+    select: { id: true, organizationId: true },
+  });
+  if (!brand) {
+    res.status(404).json({ error: '品牌不存在' });
+    return null;
+  }
+  if (req.ctx?.organizationId && brand.organizationId !== req.ctx.organizationId) {
+    res.status(403).json({ error: '无权访问该品牌数据' });
+    return null;
+  }
+  if (req.ctx?.brandIds?.length && !req.ctx.brandIds.includes(brand.id)) {
+    res.status(403).json({ error: '无权访问该品牌数据' });
+    return null;
+  }
+  return decoded;
+}
+
 /**
  * 解析当前请求可访问的 brandName。
  * session 模式：校验 brand 属于当前用户 organization/brand 权限。
@@ -73,23 +99,12 @@ export async function requireBrandNameParam(
   }
 
   if (getAuthMode() === 'session') {
-    const brand = await prisma.brand.findFirst({
-      where: { name: decoded },
-      select: { id: true, organizationId: true },
-    });
-    if (!brand) {
-      res.status(404).json({ error: '品牌不存在' });
-      return null;
-    }
-    if (req.ctx?.organizationId && brand.organizationId !== req.ctx.organizationId) {
-      res.status(403).json({ error: '无权访问该品牌数据' });
-      return null;
-    }
-    if (req.ctx?.brandIds?.length && !req.ctx.brandIds.includes(brand.id)) {
-      res.status(403).json({ error: '无权访问该品牌数据' });
-      return null;
-    }
-    return decoded;
+    return assertPublisherBrandScope(req, res, decoded);
+  }
+
+  // Demo：按组织品牌权限校验，避免 GET /api/agent-tasks/:id 未带 brandName 时被默认工作区拦截
+  if (req.ctx?.organizationId || req.ctx?.brandIds?.length) {
+    return assertPublisherBrandScope(req, res, decoded);
   }
 
   if (!assertBrandScope(req, res, decoded)) return null;

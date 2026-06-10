@@ -1,0 +1,7 @@
+{
+  "id": "geo-quick-start",
+  "version": "2026.06.09-cn1",
+  "taskTypes": ["geo_quick_start"],
+  "family": "pre-audit",
+  "region": "CN"
+}

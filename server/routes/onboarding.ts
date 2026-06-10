@@ -16,6 +16,7 @@ import { getTaskQueueHint } from '../services/hermes-concurrency.service.js';
 import { detectBrandClueInputType } from '../services/brand-source-material.service.js';
 import { normalizeGeoSkillInput } from '../lib/hermes-geo-input.js';
 import { ensureAgentTaskScope } from '../lib/publisher-scope.js';
+import { submitFirstGeoAudit } from '../services/onboarding-first-audit.service.js';
 
 export function registerOnboardingRoutes(app: Express) {
   app.post('/api/brand-source-materials', async (req, res) => {
@@ -190,8 +191,9 @@ export function registerOnboardingRoutes(app: Express) {
       const brandName = await requireBrandAccess(req, res, String(rawBrandName));
       if (!brandName) return;
 
-      const updated = await updateBrandProfile(
-        {
+      const result = await submitFirstGeoAudit({
+        draftBrandName: brandName,
+        profile: {
           name: String(profile.name ?? brandName),
           industry: String(profile.industry ?? ''),
           city: String(profile.city ?? ''),
@@ -199,53 +201,70 @@ export function registerOnboardingRoutes(app: Express) {
           description: String(profile.description ?? ''),
           keywords: Array.isArray(profile.keywords) ? profile.keywords.map(String) : [],
           competitors: Array.isArray(profile.competitors) ? profile.competitors.map(String) : [],
+          socialLink:
+            typeof profile.socialLink === 'string' ? String(profile.socialLink).trim() : undefined,
           sourceMaterials: profile.sourceMaterials,
         },
-        brandName
-      );
-
-      const taskType = goal === 'geo_audit' ? 'geo_audit' : 'geo_quick_start';
-      const taskTitle =
-        taskType === 'geo_audit'
-          ? `${updated.name} · GEO 专业审计`
-          : `${updated.name} · AI 可见度快速体检`;
-
-      const socialLink =
-        typeof profile.socialLink === 'string' ? String(profile.socialLink).trim() : '';
-
-      const task = await createAgentTask({
-        type: taskType,
-        title: taskTitle,
-        brandName: updated.name,
-        executor: await resolveExecutorKindForTask(taskType),
-        input: normalizeGeoSkillInput(
-          taskType,
-          {
-            brandName: updated.name,
-            brandCity: updated.city,
-            industry: updated.industry,
-            productNames: updated.keywords,
-            competitors: updated.competitors,
-            brandUrl: updated.website,
-            socialLink: socialLink || undefined,
-            brandDesc: updated.description,
-            sourceMaterials: [
-              ...(updated.website
-                ? [{ kind: 'link', name: '官网 URL', value: updated.website }]
-                : []),
-              ...(updated.sourceMaterials ?? []),
-            ],
-            platforms: ['DeepSeek', '豆包', 'Kimi'],
-          },
-          updated.name
-        ),
+        goal: goal === 'geo_audit' ? 'geo_audit' : 'geo_quick_start',
       });
-      maybeEnqueueAgentTask(task);
-      const queueHint = await getTaskQueueHint(task);
 
-      res.json({ brand: updated, task, queueHint, nextStep: 'onboarding_console' });
+      res.json({
+        brand: result.brand,
+        task: result.geoTask,
+        queueHint: result.queueHint,
+        nextStep: result.nextStep,
+        workspaceBrand: result.workspaceBrand,
+      });
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : '确认失败' });
+    }
+  });
+
+  /**
+   * 原子首检：创建/更新品牌 + 发起 GEO 检测（可选 brand_extract）。
+   * 向导确认页首选此接口，响应含 workspaceBrand 供前端切换工作区。
+   */
+  app.post('/api/onboarding/first-audit', async (req, res) => {
+    if (!requirePublisherUser(req, res)) return;
+    try {
+      const { draftBrandName, profile, clue, goal, runExtract } = req.body ?? {};
+      if (!profile?.name) {
+        return res.status(400).json({ error: '缺少 profile.name' });
+      }
+
+      const draftKey = String(draftBrandName ?? profile.name ?? '').trim();
+      if (draftKey) {
+        const existing = await getBrandProfile(draftKey);
+        if (existing) {
+          const scoped = await requireBrandAccess(req, res, draftKey);
+          if (!scoped) return;
+        }
+      }
+
+      const result = await submitFirstGeoAudit({
+        draftBrandName: draftKey || undefined,
+        profile: {
+          name: String(profile.name),
+          industry: profile.industry != null ? String(profile.industry) : undefined,
+          city: profile.city != null ? String(profile.city) : undefined,
+          website: profile.website != null ? String(profile.website) : undefined,
+          description: profile.description != null ? String(profile.description) : undefined,
+          keywords: Array.isArray(profile.keywords) ? profile.keywords.map(String) : undefined,
+          competitors: Array.isArray(profile.competitors)
+            ? profile.competitors.map(String)
+            : undefined,
+          socialLink:
+            typeof profile.socialLink === 'string' ? String(profile.socialLink).trim() : undefined,
+          sourceMaterials: profile.sourceMaterials,
+        },
+        clue: clue ?? undefined,
+        goal: goal === 'geo_audit' ? 'geo_audit' : 'geo_quick_start',
+        runExtract: Boolean(runExtract),
+      });
+
+      res.status(201).json(result);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '首检发起失败' });
     }
   });
 

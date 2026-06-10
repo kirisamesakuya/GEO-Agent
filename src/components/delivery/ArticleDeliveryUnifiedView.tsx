@@ -58,6 +58,14 @@ import {
 
   parseArticleDeliveryStatusFromUrl,
 
+  parseDeliveryChannelFromUrl,
+
+  channelToSourceFilter,
+
+  ARTICLE_DELIVERY_CHANNEL_TABS,
+
+  type ArticleDeliveryChannelFilter,
+
   type ArticleDeliveryRow,
 
   type ArticleDeliverySourceFilter,
@@ -126,7 +134,13 @@ export default function ArticleDeliveryUnifiedView({
 
   const [search, setSearch] = useState('');
 
-  const [sourceFilter, setSourceFilter] = useState<ArticleDeliverySourceFilter>('all');
+  const [channelFilter, setChannelFilter] = useState<ArticleDeliveryChannelFilter>(() =>
+    parseDeliveryChannelFromUrl()
+  );
+
+  const [sourceFilter, setSourceFilter] = useState<ArticleDeliverySourceFilter>(() =>
+    channelToSourceFilter(parseDeliveryChannelFromUrl())
+  );
 
   const [platformFilter, setPlatformFilter] = useState('');
 
@@ -386,6 +400,17 @@ export default function ArticleDeliveryUnifiedView({
 
   };
 
+  const switchChannel = (next: ArticleDeliveryChannelFilter) => {
+    setChannelFilter(next);
+    const src = channelToSourceFilter(next);
+    setSourceFilter(src);
+    setPage(1);
+    const url = new URL(window.location.href);
+    if (next === 'all') url.searchParams.delete('deliveryChannel');
+    else url.searchParams.set('deliveryChannel', next);
+    window.history.replaceState({}, '', url);
+  };
+
 
 
   const openRow = (row: ArticleDeliveryRow) => {
@@ -580,6 +605,14 @@ export default function ArticleDeliveryUnifiedView({
 
   const handleRowAction = (row: ArticleDeliveryRow, action: ReturnType<typeof articleDeliveryRowAction>) => {
 
+    if (row.source === 'manual_order') {
+
+      openRow(row);
+
+      return;
+
+    }
+
     if (action === 'publish' || action === 'retry') {
 
       beginPublish([row]);
@@ -653,6 +686,20 @@ export default function ArticleDeliveryUnifiedView({
         hidePageHeader
 
         title="文章交付"
+
+        description={
+          channelFilter === 'self'
+            ? '自有内容 · Hermes 发布'
+            : channelFilter === 'provider'
+              ? '服务商交付 · 审稿验收'
+              : '自有 Hermes 发布与服务商交付'
+        }
+
+        sectionTabs={ARTICLE_DELIVERY_CHANNEL_TABS.map((t) => ({ id: t.id, label: t.label }))}
+
+        activeSection={channelFilter}
+
+        onSectionChange={(id) => switchChannel(id as ArticleDeliveryChannelFilter)}
 
         statusTabs={ARTICLE_DELIVERY_STATUS_TABS.map((t) => ({
 

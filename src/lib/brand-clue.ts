@@ -73,6 +73,23 @@ export function buildBrandCluePayload(input: BrandClueFormInput) {
   };
 }
 
+/** 线索阶段本地解析品牌名（与服务端 onboarding-first-audit 逻辑对齐） */
+export function resolveDraftBrandName(input: BrandClueFormInput): string {
+  const brandName = input.brandName?.trim();
+  if (brandName) return brandName;
+  const brandUrl = (input.brandUrl ?? input.website ?? '').trim();
+  if (brandUrl) {
+    try {
+      return new URL(brandUrl).hostname.replace(/^www\./, '');
+    } catch {
+      return brandUrl.slice(0, 30);
+    }
+  }
+  const description = input.description?.trim() ?? '';
+  if (description) return description.slice(0, 20);
+  return '新品牌';
+}
+
 export type OnboardingGoal = 'geo_quick_start' | 'geo_audit' | 'article' | 'task_pack';
 
 export const ONBOARDING_GOALS: Array<{ id: OnboardingGoal; title: string; desc: string }> = [
