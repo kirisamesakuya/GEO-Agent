@@ -64,6 +64,8 @@ npm install
 - [`docs/GEO投放助手_Demo研发与AI改造约束文档.md`](docs/GEO投放助手_Demo研发与AI改造约束文档.md)
 - [`docs/GEO投放助手_后台逻辑生产化改造文档.md`](docs/GEO投放助手_后台逻辑生产化改造文档.md)
 
+**产品 PRD（v2.0 定稿）不在本 Git 远程仓库**，仅本地维护并通过 zip 离线分发；详见 [`docs/PRD_分发说明.md`](docs/PRD_分发说明.md)。
+
 ### 认证与数据
 
 | 变量 | 说明 |

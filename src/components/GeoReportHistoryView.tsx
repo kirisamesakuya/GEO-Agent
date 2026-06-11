@@ -61,6 +61,8 @@ function reportToPrintData(
   title: string,
   audit?: GeoAuditDetail | null
 ): GeoReportPrintData {
+  const raw = audit?.raw ?? {};
+  const rawData = (raw.data ?? {}) as Record<string, unknown>;
   return {
     title,
     brandName: r.brandName,
@@ -79,6 +81,10 @@ function reportToPrintData(
     scores: normalizeGeoAuditScores(audit?.scores),
     findings: normalizeGeoAuditFindings(audit?.findings),
     actionPlan: audit?.actionPlan,
+    deliveryStatus: audit?.deliveryStatus ?? (raw.deliveryStatus as string | undefined),
+    qualityGate: audit?.qualityGate ?? (raw.qualityGate as GeoReportPrintData['qualityGate']),
+    executiveSummary: (rawData.executiveSummary ?? raw.executiveSummary) as GeoReportPrintData['executiveSummary'],
+    nextBestAction: audit?.nextBestAction ?? (raw.nextBestAction as GeoReportPrintData['nextBestAction']),
   };
 }
 

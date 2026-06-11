@@ -11,3 +11,15 @@ uploads/
 .env*
 !.env.example
 config/minimax.local.json
+
+# --- PRD v2.0+：仅本地 / 离线分发，不上传远程（见 docs/PRD_分发说明.md）---
+docs/PRD_GEO投放助手_*
+docs/PRD_v2.0_*
+docs/prd-assets/
+docs/_qa/
+docs/*内嵌图片*
+docs/GEO投放助手_正式开发版_PRD_*
+scripts/build_prd_html.py
+scripts/build_prd_docx.py
+scripts/render_pdf_contact.py
+scripts/__pycache__/

@@ -34,8 +34,13 @@ Every skill must return a single JSON object with:
 - `findings` — issues with severity, category, evidence, recommendation
 - `artifacts` — markdown, html, json, pdf, schema_jsonld, llms_txt, robots_patch
 - `actionPlan` — P0/P1/P2 actions with owner
+- `deliveryStatus` — `DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_INPUT`
+- `qualityGate` — `verdict`, `score`, `evidenceCoverage`, `measuredShare`, `blockers`
+- `nextBestAction` — one concrete next action with owner and acceptance
 
 Long reports (HTML/Markdown briefs) go in `artifacts`, not outside JSON.
+
+Core customer-facing skills MUST also follow `shared/product-grade-delivery-standard.md`. A syntactically valid JSON response is not sufficient for completion.
 
 ## China Environment Rules
 

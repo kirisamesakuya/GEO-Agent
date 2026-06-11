@@ -2,7 +2,7 @@
   "repository": {
     "name": "geo-cn-skills",
     "summary": "面向中国环境的 GEO Hermes 技能包，兼容 GEO-Agent geoWebOutput.v1",
-    "version": "2026.06.09-cn1",
+    "version": "2026.06.11-product-grade.1",
     "default_branch": "main"
   },
   "families": [

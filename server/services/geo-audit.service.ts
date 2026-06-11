@@ -107,8 +107,12 @@ export async function createGeoReportFromTaskOutput(
       artifactsJson: output.artifacts ? JSON.stringify(output.artifacts) : null,
       actionPlanJson: output.actionPlan ? JSON.stringify(output.actionPlan) : null,
       rawJson: JSON.stringify({
+        ...output,
         audit,
-        asset: output.asset,
+        data,
+        deliveryStatus: output.deliveryStatus ?? null,
+        qualityGate: output.qualityGate ?? null,
+        nextBestAction: output.nextBestAction ?? null,
         questions: audit.questions,
         platformMatrix: audit.platformMatrix,
         preCrawlSnapshot: output.preCrawlSnapshot ?? inp.preCrawlSnapshot ?? null,
@@ -153,6 +157,7 @@ export function mapGeoReportRow(row: {
       return null;
     }
   };
+  const raw = parse<Record<string, unknown>>(row.rawJson);
   return {
     id: row.id,
     brandName: row.brandName,
@@ -176,7 +181,10 @@ export function mapGeoReportRow(row: {
     findings: parse<unknown[]>(row.findingsJson) ?? [],
     actionPlan: parse<unknown[]>(row.actionPlanJson) ?? [],
     artifacts: parse<unknown[]>(row.artifactsJson) ?? [],
-    raw: parse<Record<string, unknown>>(row.rawJson),
+    raw,
+    deliveryStatus: raw?.deliveryStatus ?? null,
+    qualityGate: raw?.qualityGate ?? null,
+    nextBestAction: raw?.nextBestAction ?? null,
     createdAt: row.createdAt.toISOString(),
   };
 }

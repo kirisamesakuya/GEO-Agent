@@ -20,6 +20,7 @@ export type GeoAuditFinding = {
   evidence?: string;
   source?: string;
   category?: string;
+  evidenceLevel?: string;
 };
 
 function mapFindingLevel(raw: unknown): string {
@@ -61,6 +62,7 @@ export function normalizeGeoAuditFindings(findings: unknown): GeoAuditFinding[] 
       evidence: row.evidence ? String(row.evidence) : undefined,
       source: row.source ? String(row.source) : undefined,
       category: row.category ? String(row.category) : undefined,
+      evidenceLevel: row.evidenceLevel ? String(row.evidenceLevel) : undefined,
     };
   });
 }
@@ -132,6 +134,15 @@ export type GeoAuditDetail = {
     status?: string;
   } | null;
   raw?: Record<string, unknown> | null;
+  deliveryStatus?: 'DONE' | 'DONE_WITH_CONCERNS' | 'BLOCKED' | 'NEEDS_INPUT';
+  qualityGate?: {
+    verdict?: 'SHIP' | 'FIX' | 'BLOCK';
+    score?: number;
+    evidenceCoverage?: number;
+    measuredShare?: number;
+    blockers?: string[];
+  } | null;
+  nextBestAction?: { action?: string; owner?: string; acceptance?: string } | null;
   brandMentionSummary: string;
   competitorAnalysis: string;
   contentGap: string;

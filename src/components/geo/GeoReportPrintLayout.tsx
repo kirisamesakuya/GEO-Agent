@@ -16,6 +16,20 @@ export interface GeoReportPrintData {
   scores?: Record<string, string | number> | null;
   findings?: GeoAuditFinding[];
   actionPlan?: Array<{ id: string; horizon: string; title: string; detail: string }>;
+  deliveryStatus?: string | null;
+  qualityGate?: {
+    verdict?: string;
+    score?: number;
+    evidenceCoverage?: number;
+    measuredShare?: number;
+    blockers?: string[];
+  } | null;
+  executiveSummary?: {
+    conclusion?: string;
+    keyFindings?: string[];
+    priorityActions?: string[];
+  } | null;
+  nextBestAction?: { action?: string; owner?: string; acceptance?: string } | null;
 }
 
 interface Props {
@@ -144,6 +158,32 @@ export default function GeoReportPrintLayout({ data, watermark, preview = false 
             })}
           </p>
         </header>
+
+        {(data.executiveSummary?.conclusion || data.qualityGate) && (
+          <section
+            style={{
+              marginBottom: 24,
+              padding: '16px 18px',
+              borderRadius: 12,
+              border: '1px solid #bfdbfe',
+              background: '#eff6ff',
+            }}
+          >
+            <p style={{ margin: 0, fontSize: 10, color: '#475569' }}>管理层摘要</p>
+            {data.executiveSummary?.conclusion && (
+              <p style={{ margin: '6px 0 10px', fontSize: 14, lineHeight: 1.6, fontWeight: 700, color: '#0f172a' }}>
+                {data.executiveSummary.conclusion}
+              </p>
+            )}
+            {data.qualityGate && (
+              <p style={{ margin: 0, fontSize: 11, color: '#334155' }}>
+                交付门禁：{data.qualityGate.verdict ?? '—'}
+                {data.qualityGate.evidenceCoverage != null ? ` · 证据覆盖 ${Math.round(data.qualityGate.evidenceCoverage * (data.qualityGate.evidenceCoverage <= 1 ? 100 : 1))}%` : ''}
+                {data.qualityGate.measuredShare != null ? ` · 实测占比 ${Math.round(data.qualityGate.measuredShare * (data.qualityGate.measuredShare <= 1 ? 100 : 1))}%` : ''}
+              </p>
+            )}
+          </section>
+        )}
 
         <section
           style={{
@@ -305,6 +345,17 @@ export default function GeoReportPrintLayout({ data, watermark, preview = false 
                 </li>
               ))}
             </ol>
+          </section>
+        )}
+
+        {data.nextBestAction?.action && (
+          <section style={{ marginBottom: 24, borderLeft: '4px solid #2563eb', padding: '10px 14px', background: '#f8fafc' }}>
+            <h2 style={{ fontSize: 13, margin: '0 0 6px', color: '#1e3a8a' }}>建议下一步</h2>
+            <p style={{ margin: 0, fontSize: 11, color: '#334155', lineHeight: 1.6 }}>
+              {data.nextBestAction.action}
+              {data.nextBestAction.owner ? ` · 负责人：${data.nextBestAction.owner}` : ''}
+              {data.nextBestAction.acceptance ? ` · 验收：${data.nextBestAction.acceptance}` : ''}
+            </p>
           </section>
         )}
 

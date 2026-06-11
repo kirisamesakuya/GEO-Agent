@@ -1,6 +1,6 @@
 import type { HermesHealthResult } from '../agent/executors/hermes.js';
 
-export const GEO_SKILLS_VERSION = '2026.06.06';
+export const GEO_SKILLS_VERSION = '2026.06.11-product-grade.1';
 
 export type SkillDependencyStatus = 'ready' | 'degraded' | 'unavailable';
 

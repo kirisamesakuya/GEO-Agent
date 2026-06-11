@@ -34,13 +34,17 @@
 
 ## Workflow
 
+执行前读取产品级交付与归因标准（源码位于 `../../shared/`；安装后位于 `../_shared/`）。
+
 1. **准备矩阵** — 每个 `(keyword 或 monitoringPrompt, platform)` 一行任务。
 2. **读平台 Playbook** — `references/platforms/<platform>.md`（入口 URL、登录检测、等待回答）。
 3. **执行查询** — 仅当浏览器工具可用且页面可访问时提问；否则 `status: unavailable`。
-4. **解析回答** — 提取：是否提及品牌、竞品、引用 URL、可引用摘要（≤500 字）。
-5. **截图（可选）** — 成功采样写入 `artifacts` type `image` 或 Hermes run artifacts。
-6. **汇总 metrics** — `hitRate`、`samplingStatus`（`complete` | `partial`）、`samplingMethod: hermes_browser`。
-7. **输出 JSON** — 见下方；**顶层必须有 `results[]`** 供 GEO-Agent 落库。
+4. **解析回答** — 提取：品牌是否出现、是否成为候选、是否被推荐、可识别排序、品牌事实准确性、负面表述、竞品、引用 URL、引用是否支持断言和回答摘要。
+5. **保留证据** — 成功采样必须保存回答原文摘要、平台、Prompt 版本、时间、地区、登录状态及截图或可审计 URL；截图由“可选”调整为可用时必选。
+6. **重复采样** — 效果验证模式下，同 Prompt 至少两轮；计算结论、候选、排序与引用源稳定性。
+7. **汇总 metrics** — 品牌出现率、候选率、推荐率、官网引用率、有效引用率、描述准确率、竞品出现率、答案稳定性、成功采样率和证据完整率。
+8. **绑定实验** — 文章复测必须带 `baselineId`, `contentId`, `contentVersion`, `publishedUrl`, `publishedAt`, `experimentVersion`, `window`。
+9. **输出 JSON** — 见下方；**顶层必须有 `results[]`** 供 GEO-Agent 落库。
 
 ## Per-Row `results[]` Shape
 
@@ -50,12 +54,16 @@
   "platform": "豆包",
   "hit": true,
   "brandMentioned": true,
+  "candidate": true,
+  "recommended": false,
   "citedMerchant": false,
   "rank": null,
   "citationSnippet": "回答中提及云杉口腔…",
   "aiResponse": "完整或截断回答正文",
   "citationUrls": [{ "title": "来源标题", "url": "https://..." }],
   "competitorMentions": ["竞品A"],
+  "claimAccuracy": "accurate|mixed|incorrect|not_reviewed",
+  "citationValidity": "valid|partial|invalid|none|not_reviewed",
   "status": "sampled",
   "evidenceStatus": "measured",
   "sampledAt": "2026-06-09T10:00:00+08:00"
@@ -111,6 +119,8 @@
 - 不得输出 cookie、session、token、完整登录态
 - 不得在无证据时填写 `hit: true` 或具体排名位次
 - 国内平台登录由用户在本机浏览器完成，技能只检测并报告 `login_required`
+- 登录阻断、验证码、页面错误不得进入未命中分母。
+- 没有处理组/对照组和观察窗口时，禁止声称某篇文章导致指标上涨。
 
 ## Platform Playbooks
 

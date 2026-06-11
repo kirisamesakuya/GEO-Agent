@@ -6,6 +6,7 @@
 - 统一输出契约 **`geoWebOutput.v1`**
 - 默认监测平台：**DeepSeek、豆包、千问、Kimi、元宝**
 - 融合公开 GEO 工作流中的国内平台适配、证据台账、CORE-EEAT 快扫等方法论
+- 核心能力执行 **产品级交付门禁**：客户报告、证据覆盖、可执行路线、内容发布门禁和发布前后效果验证
 
 ## 单独测试：排名监测技能
 
@@ -91,6 +92,8 @@ geo-cn-skills/
 `audit`, `data`, `metrics`, `findings`, `artifacts`, `actionPlan`
 
 详见 `shared/geo-web-contract.md`。
+
+核心客户产出还必须遵守 `shared/product-grade-delivery-standard.md`。Hermes 运行成功不等于产品交付成功。
 
 ## 与 GEO-Agent 的分工
 
