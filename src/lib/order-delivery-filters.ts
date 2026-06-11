@@ -53,3 +53,55 @@ export function orderMatchesStageFilter(status: string, filter: OrderStageFilter
   if (filter === 'pending_review') return status === 'draft_approved' || status === 'pending_review';
   return status === filter;
 }
+
+/** 内容交付 · 发单管理列表阶段 */
+export type OrderDispatchStatusFilter = 'all' | 'published' | 'accepted' | 'cancelled';
+
+export const ORDER_DISPATCH_STATUS_TABS: { id: OrderDispatchStatusFilter; label: string }[] = [
+  { id: 'all', label: '全部' },
+  { id: 'published', label: '待接单' },
+  { id: 'accepted', label: '已接单' },
+  { id: 'cancelled', label: '已撤回' },
+];
+
+export function parseOrderDispatchStageFromUrl(): OrderDispatchStatusFilter {
+  const stage = new URLSearchParams(window.location.search).get('orderDispatchStage');
+  if (ORDER_DISPATCH_STATUS_TABS.some((t) => t.id === stage)) {
+    return stage as OrderDispatchStatusFilter;
+  }
+  return 'all';
+}
+
+export function orderDispatchStageFromHint(hint?: string): OrderDispatchStatusFilter | null {
+  if (!hint) return null;
+  if (hint === 'pending_provider' || hint === 'order_manage:published') return 'published';
+  if (hint === 'cancelled' || hint === 'order_manage:cancelled') return 'cancelled';
+  if (hint === 'accepted' || hint === 'order_manage:accepted') return 'accepted';
+  if (hint === 'order_manage' || hint === 'order_manage:all') return 'all';
+  return null;
+}
+
+export function orderMatchesDispatchFilter(status: string, filter: OrderDispatchStatusFilter): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'published') return status === 'published';
+  if (filter === 'cancelled') return status === 'cancelled';
+  if (filter === 'accepted') return status !== 'published' && status !== 'cancelled';
+  return true;
+}
+
+export function countOrdersByDispatchFilter(
+  orders: { status: string }[]
+): Record<OrderDispatchStatusFilter, number> {
+  const counts: Record<OrderDispatchStatusFilter, number> = {
+    all: orders.length,
+    published: 0,
+    accepted: 0,
+    cancelled: 0,
+  };
+  for (const o of orders) {
+    if (o.status === 'published') counts.published += 1;
+    else if (o.status === 'cancelled') counts.cancelled += 1;
+    else counts.accepted += 1;
+  }
+  return counts;
+}

@@ -80,6 +80,7 @@ export function resolveCreateOrderEntry(hint?: string): { view: ViewType; hint?:
   const kind = normalizeCustomTaskKind(parseCustomTaskKindFromHint(hint) ?? undefined);
   if (kind === 'website') return { view: 'create_website' };
   if (hint === 'article_writing' || hint === 'article') return { view: 'generate_article' };
-  if (hint?.startsWith('geo:') || hint?.startsWith('plan:')) return { view: 'create_order', hint };
+  if (hint?.startsWith('geo:') || hint?.startsWith('plan:') || hint?.startsWith('index:'))
+    return { view: 'create_order', hint };
   return { view: 'create_order', hint: 'ai' };
 }

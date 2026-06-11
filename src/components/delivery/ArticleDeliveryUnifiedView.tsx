@@ -44,6 +44,8 @@ import {
 
   filterArticleDeliveryRows,
 
+  filterArticleDeliveryListRows,
+
   formatArticleDeliveryTime,
 
   groupAiRowsForPublish,
@@ -287,7 +289,7 @@ export default function ArticleDeliveryUnifiedView({
 
       );
 
-      setRows(mergeArticleDeliveryRows(aiRows, manualRows));
+      setRows(filterArticleDeliveryListRows(mergeArticleDeliveryRows(aiRows, manualRows)));
 
     } catch {
 
@@ -1014,7 +1016,7 @@ export default function ArticleDeliveryUnifiedView({
 
                   </th>
 
-                  <th>文章标题</th>
+                  <th>任务名称</th>
 
                   <th>来源</th>
 

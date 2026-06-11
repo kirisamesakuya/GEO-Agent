@@ -25,6 +25,27 @@ export function parseIndexingGapFromUrl(): { planId: string; resultIds: string[]
   return { planId, resultIds };
 }
 
+/** 解析排名缺口 hint：显式 index: hint 或 URL 参数 */
+export function resolveIndexingGapHint(hint?: string): string | undefined {
+  if (hint?.startsWith('index:')) return hint;
+  const fromUrl = parseIndexingGapFromUrl();
+  if (!fromUrl) return undefined;
+  return buildIndexingGapHint(fromUrl.planId, fromUrl.resultIds);
+}
+
+export function syncIndexingGapUrlParams(hint?: string) {
+  const url = new URL(window.location.href);
+  const gap = parseIndexingGapHint(hint ?? '') ?? parseIndexingGapFromUrl();
+  if (gap) {
+    url.searchParams.set('indexPlanId', gap.planId);
+    url.searchParams.set('indexResultIds', gap.resultIds.join(','));
+  } else {
+    url.searchParams.delete('indexPlanId');
+    url.searchParams.delete('indexResultIds');
+  }
+  return url;
+}
+
 export const EFFECT_JUDGMENT_LABEL: Record<string, string> = {
   pending: '待复测',
   observing: '待观察',

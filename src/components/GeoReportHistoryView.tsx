@@ -112,7 +112,7 @@ export default function GeoReportHistoryView({
   const [toolsDrawerOpen, setToolsDrawerOpen] = useState(false);
 
   useEffect(() => {
-    if (selectedId) setToolsDrawerOpen(true);
+    if (!selectedId) setToolsDrawerOpen(false);
   }, [selectedId]);
 
   useEffect(() => {
@@ -366,7 +366,7 @@ export default function GeoReportHistoryView({
                     onClick={() => setToolsDrawerOpen(true)}
                   >
                     <GitCompare className="w-3.5 h-3.5" />
-                    复盘与工具
+                    对比复盘
                   </button>
                   <button
                     type="button"
@@ -459,7 +459,7 @@ export default function GeoReportHistoryView({
                   className="flex items-center justify-between px-4 py-3 border-b shrink-0 bg-[var(--color-bg-card)]"
                   style={{ borderColor: 'var(--neutral-divider-02)' }}
                 >
-                  <h3 className="text-sm font-semibold text-[var(--color-title)]">复盘与工具</h3>
+                  <h3 className="text-sm font-semibold text-[var(--color-title)]">对比复盘</h3>
                   <button type="button" onClick={() => setToolsDrawerOpen(false)} className="p-1 rounded hover:bg-[var(--color-bg)]">
                     <X className="w-4 h-4" />
                   </button>
@@ -469,11 +469,6 @@ export default function GeoReportHistoryView({
                     className="rounded-lg border p-3 space-y-3"
                     style={{ borderColor: 'var(--neutral-divider-02)', background: 'var(--color-bg-card)' }}
                   >
-                    <h3 className="text-xs font-semibold text-[var(--color-title)] flex items-center gap-1.5">
-                      <GitCompare className="w-3.5 h-3.5" />
-                      月度复盘
-                    </h3>
-
                     <div>
                       <label className="geo-label text-[10px]">对比报告</label>
                       <select

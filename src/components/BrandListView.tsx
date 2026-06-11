@@ -141,7 +141,7 @@ export default function BrandListView({ onBrandCreated, onStartFirstAudit, onOpe
                 className="geo-btn-secondary geo-btn-sm shrink-0"
                 onClick={onStartFirstAudit}
               >
-                添加品牌并首检
+                智能检测
               </button>
             )}
             <button

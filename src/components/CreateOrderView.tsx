@@ -16,6 +16,7 @@ import {
   isWebsiteOrderContext,
 } from '../lib/create-order-nav';
 import CustomOrderView from './CustomOrderView';
+import { resolveIndexingGapHint } from '../lib/article-effect-nav';
 
 interface Props {
   brandName: string;
@@ -131,7 +132,7 @@ export default function CreateOrderView({
             initialGeoReportId={campaignPlanId ? undefined : geoReportId}
             initialCampaignPlanId={campaignPlanId}
             autoGenerateFromGeo={Boolean(geoReportId) && !campaignPlanId}
-            indexingGapHint={viewHint}
+            indexingGapHint={resolveIndexingGapHint(viewHint)}
           />
         )}
       </div>

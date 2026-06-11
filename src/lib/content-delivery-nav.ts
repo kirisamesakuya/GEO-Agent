@@ -1,16 +1,21 @@
 import type { ViewType } from '../types';
 
-/** 内容交付模块 Tab（统一列表迭代后） */
-export type ContentDeliveryTab = 'article' | 'website';
+/** 内容交付模块 Tab */
+export type ContentDeliveryTab = 'order_manage' | 'article' | 'website';
 
 /** @deprecated 旧 Tab 值，仅用于 URL 兼容解析 */
 export type LegacyContentDeliveryTab = 'list' | 'publish_records' | 'manual' | 'website';
 
 export const CONTENT_DELIVERY_TABS: { id: ContentDeliveryTab; label: string; desc: string }[] = [
   {
+    id: 'order_manage',
+    label: '发单管理',
+    desc: '服务商写作任务发单、待接单与撤回',
+  },
+  {
     id: 'article',
     label: '文章交付',
-    desc: '所有文章从写作、审核、发布到验收的统一交付台',
+    desc: '接单后的写作、审稿、发布与验收统一交付台',
   },
   {
     id: 'website',
@@ -20,6 +25,7 @@ export const CONTENT_DELIVERY_TABS: { id: ContentDeliveryTab; label: string; des
 ];
 
 function legacyTabToCurrent(tab: string | null): ContentDeliveryTab | null {
+  if (tab === 'order_manage') return 'order_manage';
   if (tab === 'website') return 'website';
   if (tab === 'list' || tab === 'publish_records' || tab === 'manual' || tab === 'article') {
     return tab === 'website' ? 'website' : 'article';
@@ -35,27 +41,38 @@ export function parseContentDeliveryTabFromUrl(): ContentDeliveryTab {
 
   const view = params.get('view');
   if (view === 'order_delivery') {
-    return params.get('orderTab') === 'website' ? 'website' : 'article';
+    return params.get('orderTab') === 'website' ? 'website' : 'order_manage';
   }
   if (view === 'content_library' && params.get('contentTab') === 'publish_records') {
     return 'article';
   }
   if (view === 'publish_records') return 'article';
-  return 'article';
+  return 'order_manage';
 }
 
 export function contentDeliveryTabFromHint(hint?: string): ContentDeliveryTab {
-  if (!hint) return 'article';
+  if (!hint) return 'order_manage';
   if (hint === 'website' || hint.startsWith('website_req:')) return 'website';
+  if (
+    hint === 'order_manage' ||
+    hint.startsWith('order_manage:') ||
+    hint === 'pending_provider' ||
+    hint === 'cancelled' ||
+    hint === 'accepted' ||
+    hint === 'published'
+  ) {
+    return 'order_manage';
+  }
   if (hint === 'publish_records' || hint === 'manual' || hint === 'task' || hint === 'list') {
     return 'article';
   }
-  if (hint.startsWith('order:')) return 'article';
+  if (hint.startsWith('order:')) return 'order_manage';
   if (hint.startsWith('content:') || hint.startsWith('publish:') || hint.startsWith('delivery:')) {
     return 'article';
   }
   if (hint.startsWith('project:')) return 'article';
-  return 'article';
+  if (hint === 'writing') return 'article';
+  return 'order_manage';
 }
 
 /** 将旧 view 归一到 content_delivery */
@@ -74,7 +91,7 @@ export function normalizeToContentDelivery(
   }
   if (view === 'order_delivery') {
     const tab = contentDeliveryTabFromHint(
-      hint === 'website' ? 'website' : hint === 'task' ? 'manual' : hint
+      hint === 'website' ? 'website' : hint === 'task' ? 'order_manage' : hint
     );
     return { view: 'content_delivery', hint, tab };
   }

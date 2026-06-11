@@ -183,7 +183,7 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
         return;
       }
       toast('已撤回发单，预算已释放', 'success');
-      onNavigate?.('content_delivery', 'cancelled');
+      onNavigate?.('content_delivery', 'order_manage:cancelled');
     } catch {
       toast('撤回失败，请稍后重试', 'error');
     } finally {
@@ -619,10 +619,12 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
         onNavigate?.(
           'content_delivery',
           stage === 'pending_provider'
-            ? 'pending_provider'
+            ? 'order_manage:published'
             : stage === 'cancelled'
-              ? 'cancelled'
-              : undefined
+              ? 'order_manage:cancelled'
+              : stage === 'writing'
+                ? 'writing'
+                : undefined
         )
       }
       actions={renderActions()}

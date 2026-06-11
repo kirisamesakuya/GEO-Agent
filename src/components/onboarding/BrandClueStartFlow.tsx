@@ -38,6 +38,8 @@ interface Props {
     options?: { preferBrandConfirm?: boolean }
   ) => void;
   onCancel?: () => void;
+  /** 注册子步骤返回：返回 true 表示已在子流程内处理，不应退出向导 */
+  onRegisterBackHandler?: (handler: () => boolean) => void;
 }
 
 export default function BrandClueStartFlow({
@@ -47,6 +49,7 @@ export default function BrandClueStartFlow({
   onNavigate,
   onComplete,
   onCancel,
+  onRegisterBackHandler,
 }: Props) {
   const [step, setStep] = useState<Step>('clue');
   const [activeField, setActiveField] = useState<BrandClueInputType>('website_url');
@@ -65,6 +68,21 @@ export default function BrandClueStartFlow({
   const [pendingComplete, setPendingComplete] = useState<Parameters<Props['onComplete']>[0] | null>(null);
   const [hermesReady, setHermesReady] = useState<boolean | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!onRegisterBackHandler) return;
+    onRegisterBackHandler(() => {
+      if (step === 'goal') {
+        setStep('clue');
+        return true;
+      }
+      if (step === 'submitted') {
+        setStep('goal');
+        return true;
+      }
+      return false;
+    });
+  }, [step, onRegisterBackHandler]);
 
   useEffect(() => {
     if (step !== 'submitted' || !pendingComplete?.brandName) return;

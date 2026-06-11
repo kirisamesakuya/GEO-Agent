@@ -176,11 +176,16 @@ export function registerCampaignRoutes(app: Express) {
     let planInput: Record<string, unknown>;
     if (src === 'indexing_result') {
       const planId = String(sourceIndexPlanId ?? '').trim();
-      const resultIds = Array.isArray(sourceIndexResultIds)
+      if (!planId) {
+        return res.status(400).json({ error: '请选择查询计划' });
+      }
+      const explicitIds = Array.isArray(sourceIndexResultIds)
         ? sourceIndexResultIds.map(String).filter(Boolean)
         : [];
-      if (!planId || resultIds.length === 0) {
-        return res.status(400).json({ error: '请从排名监控选择采样结果' });
+      const { resolveIndexingGapResultIds } = await import('../services/indexing.service.js');
+      const resultIds = await resolveIndexingGapResultIds(planId, explicitIds);
+      if (!resultIds.length) {
+        return res.status(400).json({ error: '该计划暂无排名缺口，请先执行采样或更换计划' });
       }
       planInput = buildCampaignInputFromIndexingGap(name, {
         sourceIndexPlanId: planId,

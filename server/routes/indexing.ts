@@ -7,6 +7,7 @@ import {
   runIndexPlan,
   listIndexResults,
   getIndexPlan,
+  analyzeIndexingPlanGap,
 } from '../services/indexing.service.js';
 
 export function registerIndexingRoutes(app: Express) {
@@ -64,6 +65,14 @@ export function registerIndexingRoutes(app: Express) {
     const brandName = planRow.brand.name;
     const plan = await runIndexPlan(req.params.id, brandName);
     res.json(plan);
+  });
+
+  app.get('/api/indexing/plans/:id/gap-analysis', async (req, res) => {
+    const planRow = await ensureIndexPlanScope(req, res, req.params.id);
+    if (!planRow) return;
+    const analysis = await analyzeIndexingPlanGap(req.params.id);
+    if (!analysis) return res.status(404).json({ error: '计划不存在' });
+    res.json({ analysis });
   });
 
   app.get('/api/indexing/plans/:id/gap-coverage', async (req, res) => {

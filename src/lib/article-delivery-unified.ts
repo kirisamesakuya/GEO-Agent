@@ -57,12 +57,12 @@ export type ArticleDeliveryStatusFilter =
 
 export type ArticleDeliverySourceFilter = 'all' | ArticleDeliverySource;
 
+/** 文章交付列表阶段 Tab（待接单、已撤回归发单管理） */
 export const ARTICLE_DELIVERY_STATUS_TABS: {
   id: ArticleDeliveryStatusFilter;
   label: string;
 }[] = [
-  { id: 'all', label: '全部文章' },
-  { id: 'pending_provider', label: '待接单' },
+  { id: 'all', label: '全部' },
   { id: 'writing', label: '写作中' },
   { id: 'draft_review', label: '待审稿' },
   { id: 'draft_revision', label: '审稿返修' },
@@ -70,8 +70,19 @@ export const ARTICLE_DELIVERY_STATUS_TABS: {
   { id: 'published', label: '已发布' },
   { id: 'pending_acceptance', label: '待验收' },
   { id: 'completed', label: '已完成' },
-  { id: 'cancelled', label: '已撤回' },
 ];
+
+/** 仅出现在发单管理、不进入文章交付统一列表的阶段 */
+export function isOrderDispatchOnlyStage(stage: ArticleDeliveryStage): boolean {
+  return stage === 'pending_provider' || stage === 'cancelled';
+}
+
+export function filterArticleDeliveryListRows(rows: ArticleDeliveryRow[]): ArticleDeliveryRow[] {
+  return rows.filter((row) => {
+    if (row.source !== 'manual_order') return true;
+    return !isOrderDispatchOnlyStage(row.stage);
+  });
+}
 
 export const ARTICLE_DELIVERY_SOURCE_OPTIONS: { id: ArticleDeliverySourceFilter; label: string }[] = [
   { id: 'all', label: '全部来源' },
@@ -539,16 +550,17 @@ export function parseArticleDeliveryDetailHint(hint?: string): {
 
 export function parseArticleDeliveryStatusFromUrl(): ArticleDeliveryStatusFilter {
   const s = new URLSearchParams(window.location.search).get('articleStage');
-  if (ARTICLE_DELIVERY_STATUS_TABS.some((t) => t.id === s)) {
+  if (s && ARTICLE_DELIVERY_STATUS_TABS.some((t) => t.id === s)) {
     return s as ArticleDeliveryStatusFilter;
   }
   return 'all';
 }
 
-/** 发单后跳转等内容交付时，将 hint 映射为列表阶段筛选 */
+/** 文章交付列表阶段筛选（不含发单管理阶段） */
 export function articleDeliveryStatusFromHint(hint?: string): ArticleDeliveryStatusFilter | null {
   if (!hint) return null;
-  if (hint === 'pending_provider' || hint === 'manual') return 'pending_provider';
+  if (hint === 'manual') return 'all';
+  if (hint === 'writing' || hint === 'order_manage:writing') return 'writing';
   if (ARTICLE_DELIVERY_STATUS_TABS.some((t) => t.id === hint)) {
     return hint as ArticleDeliveryStatusFilter;
   }

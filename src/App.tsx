@@ -17,6 +17,11 @@ import {
   resolveCreateOrderEntry,
 } from './lib/create-order-nav';
 import { parseCustomTaskKindFromHint } from './lib/custom-order-types';
+import {
+  buildIndexingGapHint,
+  parseIndexingGapFromUrl,
+  parseIndexingGapHint,
+} from './lib/article-effect-nav';
 import CreateWebsiteView from './components/CreateWebsiteView';
 import OrderDeliveryView from './components/OrderDeliveryView';
 import BrandCenterView from './components/BrandCenterView';
@@ -80,6 +85,7 @@ import {
   parseArticleDeliveryDetailHint,
   parseArticleDeliveryOrderHint,
 } from './lib/article-delivery-unified';
+import { orderDispatchStageFromHint } from './lib/order-delivery-filters';
 import {
   parseTaskOrderIdFromHint,
   parseWebsiteRequirementIdFromHint,
@@ -150,6 +156,10 @@ function resolveInitialRoute(): { view: ViewType; hint?: string } {
     if (planId) return { view: 'create_order', hint: `plan:${planId}` };
     const geoReportId = params.get('geoReportId');
     if (geoReportId) return { view: 'create_order', hint: `geo:${geoReportId}` };
+    const indexGap = parseIndexingGapFromUrl();
+    if (indexGap) {
+      return { view: 'create_order', hint: buildIndexingGapHint(indexGap.planId, indexGap.resultIds) };
+    }
     return { view: 'create_order', hint: 'ai' };
   }
   if (v === 'delivery_plan') {
@@ -214,19 +224,6 @@ function PublisherMain() {
     [switchWorkspace]
   );
 
-  const openBrandOnboarding = useCallback(
-    (hint?: string) => {
-      setActiveView('brand_onboarding');
-      setViewHint(hint);
-      const url = new URL(window.location.href);
-      url.searchParams.set('view', 'brand_onboarding');
-      if (hint) url.searchParams.set('hint', hint);
-      else url.searchParams.delete('hint');
-      window.history.pushState({}, '', url);
-    },
-    []
-  );
-
   const effectiveBrand =
     brandName === '__all__' || isProspectBrandScope(brandName) ? '云杉口腔' : brandName;
 
@@ -281,6 +278,14 @@ function PublisherMain() {
       const campaignPlanId = parseCampaignPlanIdFromHint(targetHint);
       if (campaignPlanId) url.searchParams.set('campaignPlanId', campaignPlanId);
       else url.searchParams.delete('campaignPlanId');
+      const indexGap = parseIndexingGapHint(targetHint);
+      if (indexGap) {
+        url.searchParams.set('indexPlanId', indexGap.planId);
+        url.searchParams.set('indexResultIds', indexGap.resultIds.join(','));
+      } else {
+        url.searchParams.delete('indexPlanId');
+        url.searchParams.delete('indexResultIds');
+      }
       if (orderMode === 'custom') {
         const task = parseCustomTaskKindFromHint(targetHint);
         if (task) url.searchParams.set('orderTask', task);
@@ -308,14 +313,21 @@ function PublisherMain() {
       url.searchParams.delete('reportId');
       url.searchParams.delete('contentTab');
       url.searchParams.delete('orderTab');
-      url.searchParams.set('deliveryTab', contentDeliveryTabFromHint(targetHint));
-      const stageFromHint = articleDeliveryStatusFromHint(targetHint);
-      if (stageFromHint && stageFromHint !== 'all') {
-        url.searchParams.set('articleStage', stageFromHint);
+      const deliveryTab = contentDeliveryTabFromHint(targetHint);
+      url.searchParams.set('deliveryTab', deliveryTab);
+      const dispatchStageFromHint = orderDispatchStageFromHint(targetHint);
+      const articleStageFromHint = articleDeliveryStatusFromHint(targetHint);
+      if (deliveryTab === 'order_manage' && dispatchStageFromHint && dispatchStageFromHint !== 'all') {
+        url.searchParams.set('orderDispatchStage', dispatchStageFromHint);
+        url.searchParams.delete('articleStage');
+      } else if (articleStageFromHint && articleStageFromHint !== 'all') {
+        url.searchParams.set('articleStage', articleStageFromHint);
+        url.searchParams.delete('orderDispatchStage');
       } else {
         url.searchParams.delete('articleStage');
+        url.searchParams.delete('orderDispatchStage');
       }
-      if (stageFromHint) {
+      if (dispatchStageFromHint || articleStageFromHint) {
         url.searchParams.delete('hint');
       } else if (
         targetHint?.startsWith('content:') ||
@@ -404,6 +416,10 @@ function PublisherMain() {
     navigate('agent_task_results');
   };
 
+  const openBrandOnboarding = (hint?: string) => {
+    navigate('brand_onboarding', hint);
+  };
+
   const openBrandWorkspace = (name: string, tab: BrandCenterTab) => {
     handleBrandChange(name);
     setActiveView(brandCenterTabToView(tab));
@@ -439,7 +455,8 @@ function PublisherMain() {
             taskId={resumeConsole ? viewHint : undefined}
             onWorkspaceSwitch={switchWorkspace}
             onNavigate={navigate}
-            onExit={() => navigate('workbench')}
+            onBack={goBack}
+            onExit={() => navigate('brand_list')}
           />
         );
       }

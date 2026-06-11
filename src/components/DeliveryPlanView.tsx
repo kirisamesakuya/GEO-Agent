@@ -16,7 +16,13 @@ import {
 import GeoRiskConfirmModal from './geo/GeoRiskConfirmModal';
 import { GEO_ASSET_RISK_LABELS } from '../lib/geo-asset';
 import { LOBBY_PLATFORM_LABELS } from '../../lib/media-platforms';
-import { parseIndexingGapFromUrl, parseIndexingGapHint } from '../lib/article-effect-nav';
+import { parseIndexingGapFromUrl, parseIndexingGapHint, resolveIndexingGapHint } from '../lib/article-effect-nav';
+import {
+  fetchIndexPlans,
+  fetchIndexingGapAnalysis,
+  type IndexPlanSummary,
+  type IndexingGapAnalysis,
+} from '../lib/indexing-gap-client';
 import { FieldCharLimitBox, FieldLimitLabel, fieldCharLimitInputClass } from './common/FieldCharLimit';
 import {
   CAMPAIGN_SUPPLEMENT_NOTES_MAX,
@@ -177,7 +183,7 @@ export default function DeliveryPlanView({
   const { toast } = useToast();
   const [mode, setMode] = useState<CreateMode>(lockedMode ?? 'ai');
   const gapFromHint =
-    parseIndexingGapHint(indexingGapHint) ?? parseIndexingGapFromUrl();
+    parseIndexingGapHint(resolveIndexingGapHint(indexingGapHint)) ?? parseIndexingGapFromUrl();
   const [sourceType, setSourceType] = useState<PlanSourceType>(
     initialGeoReportId ? 'geo_report' : gapFromHint ? 'indexing_result' : 'brand_profile'
   );
@@ -199,6 +205,9 @@ export default function DeliveryPlanView({
   const [savingPlan, setSavingPlan] = useState(false);
   const [plans, setPlans] = useState<CampaignPlan[]>([]);
   const [publishing, setPublishing] = useState(false);
+  const [indexPlans, setIndexPlans] = useState<IndexPlanSummary[]>([]);
+  const [gapAnalysis, setGapAnalysis] = useState<IndexingGapAnalysis | null>(null);
+  const [gapAnalysisLoading, setGapAnalysisLoading] = useState(false);
 
   const [manualTitle, setManualTitle] = useState('');
   const [manualPlatform, setManualPlatform] = useState('小红书');
@@ -236,12 +245,59 @@ export default function DeliveryPlanView({
   }, [initialGeoReportId]);
 
   useEffect(() => {
+    const resolved = resolveIndexingGapHint(indexingGapHint);
+    const gap = parseIndexingGapHint(resolved);
+    if (!gap) return;
+    setSourceType('indexing_result');
+    setSourceIndexPlanId(gap.planId);
+  }, [indexingGapHint]);
+
+  const loadGapAnalysis = useCallback(async (planId: string) => {
+    if (!planId) {
+      setGapAnalysis(null);
+      setSourceIndexResultIds([]);
+      return;
+    }
+    setGapAnalysisLoading(true);
+    try {
+      const analysis = await fetchIndexingGapAnalysis(planId);
+      setGapAnalysis(analysis);
+      setSourceIndexResultIds(analysis?.gapResultIds ?? []);
+    } catch {
+      setGapAnalysis(null);
+      setSourceIndexResultIds([]);
+    } finally {
+      setGapAnalysisLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (sourceType !== 'indexing_result' || !sourceIndexPlanId) {
+      if (sourceType !== 'indexing_result') {
+        setGapAnalysis(null);
+      }
+      return;
+    }
+    void loadGapAnalysis(sourceIndexPlanId);
+  }, [sourceType, sourceIndexPlanId, loadGapAnalysis]);
+
+  useEffect(() => {
     if (!brandName || brandName === '__all__') {
       setGeoReports([]);
+      setIndexPlans([]);
       return;
     }
     void fetchGeoReports(brandName).then(setGeoReports);
+    void fetchIndexPlans(brandName).then(setIndexPlans);
   }, [brandName]);
+
+  useEffect(() => {
+    if (sourceType !== 'indexing_result' || indexPlans.length === 0) return;
+    if (sourceIndexPlanId && indexPlans.some((p) => p.id === sourceIndexPlanId)) return;
+    const preferred =
+      indexPlans.find((p) => (p.resultCount ?? 0) > 0)?.id ?? indexPlans[0]?.id;
+    if (preferred) setSourceIndexPlanId(preferred);
+  }, [sourceType, indexPlans, sourceIndexPlanId]);
 
   useEffect(() => {
     if (plan?.packages) {
@@ -332,9 +388,19 @@ export default function DeliveryPlanView({
       await generateFromGeo();
       return;
     }
-    if (sourceType === 'indexing_result' && (!sourceIndexPlanId || sourceIndexResultIds.length === 0)) {
-      toast('请从排名监控选择采样结果', 'error');
-      return;
+    if (sourceType === 'indexing_result') {
+      if (!sourceIndexPlanId) {
+        toast('请选择查询计划', 'error');
+        return;
+      }
+      if (!gapAnalysis?.hasResults) {
+        toast('该计划尚未执行采样，请先在排名监控运行查询', 'error');
+        return;
+      }
+      if (!gapAnalysis.gapCount) {
+        toast('该计划暂无排名缺口（品牌已全部命中）', 'error');
+        return;
+      }
     }
     const notesError = validateSupplementNotes(supplementNotes);
     if (notesError) {
@@ -449,7 +515,7 @@ export default function DeliveryPlanView({
       return;
     }
     toast(`已发布 ${data.orders?.length ?? 0} 个任务到资源平台`, 'success');
-    if (onNavigate) onNavigate('content_delivery', 'pending_provider');
+    if (onNavigate) onNavigate('content_delivery', 'order_manage:published');
     loadPlans();
   };
 
@@ -549,6 +615,9 @@ export default function DeliveryPlanView({
                       if (next === 'geo_report' && !selectedGeoReportId && geoReports[0]?.id) {
                         setSelectedGeoReportId(geoReports[0].id);
                       }
+                      if (next === 'indexing_result' && !sourceIndexPlanId && indexPlans[0]?.id) {
+                        setSourceIndexPlanId(indexPlans[0].id);
+                      }
                     }}
                     options={[
                       { value: 'brand_profile', label: '按品牌资料' },
@@ -559,15 +628,80 @@ export default function DeliveryPlanView({
                 </div>
 
                 {sourceType === 'indexing_result' && (
-                  <div className="text-xs geo-callout-warning p-3 space-y-1">
-                    <p>
-                      已绑定 <strong>{sourceIndexResultIds.length}</strong> 条排名采样
-                      {sourceIndexPlanId ? `（计划 ${sourceIndexPlanId.slice(0, 8)}…）` : ''}
-                    </p>
-                    {!sourceIndexResultIds.length && onNavigate && (
-                      <button type="button" className="geo-link" onClick={() => onNavigate('indexing_rank')}>
-                        去排名监控选择
-                      </button>
+                  <div>
+                    <FieldLabel>关联查询计划</FieldLabel>
+                    {indexPlans.length === 0 ? (
+                      <p className="text-xs geo-callout-warning p-2">
+                        暂无查询计划，请先在排名监控创建并执行采样。
+                        {onNavigate && (
+                          <button
+                            type="button"
+                            className="geo-link ml-1"
+                            onClick={() => onNavigate('indexing_rank')}
+                          >
+                            去排名监控
+                          </button>
+                        )}
+                      </p>
+                    ) : (
+                      <>
+                        <select
+                          className="geo-input w-full text-sm max-w-xl"
+                          value={sourceIndexPlanId}
+                          onChange={(e) => setSourceIndexPlanId(e.target.value)}
+                        >
+                          {indexPlans.map((p) => {
+                            const miss = Math.max(0, (p.resultCount ?? 0) - (p.hitCount ?? 0));
+                            return (
+                              <option key={p.id} value={p.id}>
+                                {p.name} · 采样 {p.resultCount ?? 0} · 未命中 {miss}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        {gapAnalysisLoading && (
+                          <p className="text-xs text-[var(--neutral-text-03)] mt-2">
+                            AI 正在梳理命中与缺口…
+                          </p>
+                        )}
+                        {gapAnalysis && !gapAnalysisLoading && (
+                          <div
+                            className="text-xs rounded-lg p-3 mt-2 space-y-1.5"
+                            style={{ background: 'var(--neutral-bg-03)' }}
+                          >
+                            {!gapAnalysis.hasResults ? (
+                              <p className="geo-callout-warning p-2 -m-1">
+                                该计划尚未执行采样，请先在排名监控运行查询后再生成投放方案。
+                              </p>
+                            ) : gapAnalysis.gapCount === 0 ? (
+                              <p className="geo-callout-success p-2 -m-1">
+                                共 {gapAnalysis.totalCount} 条采样，品牌已全部命中，暂无补位缺口。
+                              </p>
+                            ) : (
+                              <>
+                                <p className="font-medium text-[var(--color-title)]">AI 已梳理排名缺口</p>
+                                <p>
+                                  共 {gapAnalysis.totalCount} 条采样，命中 {gapAnalysis.hitCount}，缺口{' '}
+                                  {gapAnalysis.gapCount}
+                                </p>
+                                {gapAnalysis.targetQuestions.length > 0 && (
+                                  <p>目标问题：{gapAnalysis.targetQuestions.join('、')}</p>
+                                )}
+                                {gapAnalysis.targetPlatforms.length > 0 && (
+                                  <p>目标平台：{gapAnalysis.targetPlatforms.join('、')}</p>
+                                )}
+                                <p>当前品牌提及率：{gapAnalysis.brandMentionRate}%</p>
+                                {gapAnalysis.competitorMentions.length > 0 && (
+                                  <p>竞品出现：{gapAnalysis.competitorMentions.join('、')}</p>
+                                )}
+                                <p className="text-[var(--neutral-text-03)]">
+                                  AI 将针对未命中采样自动制定补位投放方案
+                                </p>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}

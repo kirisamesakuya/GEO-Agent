@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ViewType } from '../types';
 import BrandSwitcher from './common/BrandSwitcher';
 import ArticleDeliveryUnifiedView from './delivery/ArticleDeliveryUnifiedView';
+import OrderDispatchManageView from './delivery/OrderDispatchManageView';
 import OrderDeliveryView from './OrderDeliveryView';
 import {
   CONTENT_DELIVERY_TABS,
@@ -10,6 +11,7 @@ import {
   type ContentDeliveryTab,
 } from '../lib/content-delivery-nav';
 import { parseArticleDeliveryStatusFromUrl } from '../lib/article-delivery-unified';
+import { parseOrderDispatchStageFromUrl } from '../lib/order-delivery-filters';
 
 interface Props {
   brandName: string;
@@ -67,6 +69,7 @@ export default function ContentDeliveryView({
 
   const activeMeta = CONTENT_DELIVERY_TABS.find((t) => t.id === pageTab);
   const articleStage = parseArticleDeliveryStatusFromUrl();
+  const orderDispatchStage = parseOrderDispatchStageFromUrl();
 
   return (
     <div className="flex flex-col min-h-0">
@@ -87,6 +90,14 @@ export default function ContentDeliveryView({
       </div>
 
       <div className="flex flex-col min-w-0">
+        {pageTab === 'order_manage' && (
+          <OrderDispatchManageView
+            brandName={brandName}
+            onBrandChange={onBrandChange}
+            onNavigate={onNavigate}
+            initialStatusFilter={orderDispatchStage}
+          />
+        )}
         {pageTab === 'article' && (
           <ArticleDeliveryUnifiedView
             brandName={brandName}

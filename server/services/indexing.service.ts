@@ -429,3 +429,60 @@ export async function getIndexPlan(planId: string): Promise<IndexPlanDto | null>
   const keywords = entries.length ? entries.map((e) => e.term) : kwIds;
   return mapPlan(row, keywords);
 }
+
+export interface IndexingGapAnalysisDto {
+  planId: string;
+  planName: string;
+  planStatus: string;
+  totalCount: number;
+  hitCount: number;
+  gapCount: number;
+  gapResultIds: string[];
+  targetQuestions: string[];
+  targetPlatforms: string[];
+  brandMentionRate: number;
+  competitorMentions: string[];
+  hasResults: boolean;
+}
+
+/** 自动梳理查询计划中的排名缺口（未命中采样） */
+export async function analyzeIndexingPlanGap(planId: string): Promise<IndexingGapAnalysisDto | null> {
+  const plan = await getIndexPlan(planId);
+  if (!plan) return null;
+
+  const allResults = await listIndexResults({ planId });
+  const hitCount = allResults.filter((r) => r.hit).length;
+  const gapResults = allResults.filter((r) => !r.hit);
+
+  const { buildEffectBaselineFromResults } = await import('./article-effect.service.js');
+  const baseline =
+    gapResults.length > 0
+      ? buildEffectBaselineFromResults(planId, gapResults)
+      : allResults.length > 0
+        ? buildEffectBaselineFromResults(planId, allResults)
+        : null;
+
+  return {
+    planId: plan.id,
+    planName: plan.name,
+    planStatus: plan.status,
+    totalCount: allResults.length,
+    hitCount,
+    gapCount: gapResults.length,
+    gapResultIds: gapResults.map((r) => r.id),
+    targetQuestions: baseline?.targetQuestions ?? [],
+    targetPlatforms: baseline?.targetPlatforms ?? plan.platforms,
+    brandMentionRate: baseline?.brandMentionRate ?? 0,
+    competitorMentions: baseline?.competitorMentions ?? [],
+    hasResults: allResults.length > 0,
+  };
+}
+
+export async function resolveIndexingGapResultIds(
+  planId: string,
+  explicitIds?: string[]
+): Promise<string[]> {
+  if (explicitIds?.length) return explicitIds;
+  const analysis = await analyzeIndexingPlanGap(planId);
+  return analysis?.gapResultIds ?? [];
+}

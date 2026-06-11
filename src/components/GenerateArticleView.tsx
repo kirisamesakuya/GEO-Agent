@@ -14,7 +14,12 @@ import ArticleGenerationSummaryPanel, {
 } from './article/ArticleGenerationSummaryPanel';
 import type { ArticleQualityChecks } from '../lib/content-item-meta';
 import { submitPublishDraft } from '../lib/publish-draft-client';
-import { parseIndexingGapFromUrl, parseIndexingGapHint } from '../lib/article-effect-nav';
+import IndexingGapSourcePanel from './common/IndexingGapSourcePanel';
+import {
+  parseIndexingGapFromUrl,
+  parseIndexingGapHint,
+  resolveIndexingGapHint,
+} from '../lib/article-effect-nav';
 import { ARTICLE_PUBLISH_PLATFORM_LABELS } from '../../lib/media-platforms';
 import { platformMatches } from '../lib/content-library-platforms';
 import ArticlePlatformPicker from './article/ArticlePlatformPicker';
@@ -193,8 +198,7 @@ export default function GenerateArticleView({
   const isProviderTool = audience === 'provider';
   const [useReferenceRewrite, setUseReferenceRewrite] = useState(false);
   const gapFromHint =
-    parseIndexingGapHint(indexingGapHint) ??
-    parseIndexingGapFromUrl();
+    parseIndexingGapHint(resolveIndexingGapHint(indexingGapHint)) ?? parseIndexingGapFromUrl();
   const [sourceType, setSourceType] = useState<'brand_profile' | 'geo_report' | 'indexing_result'>(
     gapFromHint ? 'indexing_result' : 'brand_profile'
   );
@@ -302,6 +306,15 @@ export default function GenerateArticleView({
       .then((rows) => setAccounts(rows.map(toAccountBindingShape)))
       .catch(() => setAccounts([]));
   }, [brandName]);
+
+  useEffect(() => {
+    const resolved = resolveIndexingGapHint(indexingGapHint);
+    const gap = parseIndexingGapHint(resolved);
+    if (!gap) return;
+    setSourceType('indexing_result');
+    setSourceIndexPlanId(gap.planId);
+    setSourceIndexResultIds(gap.resultIds);
+  }, [indexingGapHint]);
 
   const handleTaskUpdate = useCallback(
     (task: AgentTask) => {
@@ -606,18 +619,16 @@ export default function GenerateArticleView({
                   </div>
 
                   {sourceType === 'indexing_result' && (
-                    <div className="text-xs geo-callout-warning p-3 space-y-1">
-                      <p>
-                        已绑定 <strong>{sourceIndexResultIds.length}</strong> 条排名采样
-                        {sourceIndexPlanId ? `（计划 ${sourceIndexPlanId.slice(0, 8)}…）` : ''}
-                      </p>
-                      <p>发布后自动创建 T+7 / T+14 / T+30 复测计划</p>
-                      {!sourceIndexResultIds.length && onNavigate && (
-                        <button type="button" className="geo-link" onClick={() => onNavigate('indexing_rank')}>
-                          去排名监控选择
-                        </button>
-                      )}
-                    </div>
+                    <IndexingGapSourcePanel
+                      planId={sourceIndexPlanId}
+                      resultIds={sourceIndexResultIds}
+                      onNavigate={onNavigate}
+                      returnView="generate_article"
+                      gapSummary={inputPreview?.indexingGapSummary ?? null}
+                      summaryLoading={previewLoading}
+                      showScheduleNote
+                      emptyHint="请先在排名监控勾选采样结果，再返回本页生成补缺文章。"
+                    />
                   )}
 
                   {sourceType === 'geo_report' && (

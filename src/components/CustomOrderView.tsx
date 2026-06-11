@@ -120,13 +120,13 @@ export default function CustomOrderView({
         toast(error, 'error');
         return;
       }
-      toast('写作任务已发布，请在任务交付跟踪审稿与验收', 'success');
+      toast('写作任务已发布，请在发单管理查看待接单', 'success');
       setTitle('');
       setKeywords('');
       setReferenceNote('');
       setReviewNote('');
       loadPending();
-      if (onNavigate && order?.id) onNavigate('content_delivery', order.id);
+      if (onNavigate && order?.id) onNavigate('content_delivery', 'order_manage:published');
     } catch {
       toast('发布失败，请稍后重试', 'error');
     } finally {
@@ -292,9 +292,9 @@ export default function CustomOrderView({
             <button
               type="button"
               className="geo-btn-secondary text-sm"
-              onClick={() => onNavigate('content_delivery', 'pending_provider')}
+              onClick={() => onNavigate('content_delivery', 'order_manage')}
             >
-              任务交付
+              发单管理
             </button>
           )}
         </div>

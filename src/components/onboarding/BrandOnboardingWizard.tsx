@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import type { ViewType } from '../../types';
 import type { OnboardingGoal } from '../../lib/brand-clue';
@@ -28,6 +28,8 @@ interface Props {
   onWorkspaceSwitch: (name: string) => void | Promise<void>;
   onNavigate: (view: ViewType, hint?: string) => void;
   onExit?: () => void;
+  /** 退出向导（如返回品牌管理）；优先于 onExit */
+  onBack?: () => void;
 }
 
 export default function BrandOnboardingWizard({
@@ -38,8 +40,10 @@ export default function BrandOnboardingWizard({
   onWorkspaceSwitch,
   onNavigate,
   onExit,
+  onBack,
 }: Props) {
   const [step, setStep] = useState<WizardStep>(initialStep);
+  const clueBackHandlerRef = useRef<(() => boolean) | null>(null);
   const [draftBrandName, setDraftBrandName] = useState(initialBrandName ?? '');
   const [goal, setGoal] = useState<OnboardingGoal>('geo_quick_start');
   const [geoTaskId, setGeoTaskId] = useState(initialTaskId);
@@ -128,8 +132,15 @@ export default function BrandOnboardingWizard({
       setStep('clue');
       return;
     }
+    if (step === 'clue' && clueBackHandlerRef.current?.()) {
+      return;
+    }
+    if (onBack) {
+      onBack();
+      return;
+    }
     if (onExit) onExit();
-    else onNavigate('workbench');
+    else onNavigate('brand_list');
   };
 
   const displayBrand = workspaceBrand || draftBrandName;
@@ -156,6 +167,9 @@ export default function BrandOnboardingWizard({
           deferApi
           onNavigate={onNavigate}
           onComplete={handleClueComplete}
+          onRegisterBackHandler={(handler) => {
+            clueBackHandlerRef.current = handler;
+          }}
         />
       )}
 
