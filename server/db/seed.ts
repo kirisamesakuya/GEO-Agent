@@ -187,6 +187,9 @@ export async function seedDatabase() {
   const { ensureRuntimeDefaults } = await import('./bootstrap.js');
   await ensureRuntimeDefaults();
 
+  const { seedMediaPriceBands } = await import('./seed-media-price-bands.js');
+  await seedMediaPriceBands(prisma);
+
   console.log('Database seeded with default brand:', brand.name);
 }
 

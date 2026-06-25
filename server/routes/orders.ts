@@ -22,6 +22,14 @@ import { checkBudget, freezeBudget } from '../services/budget.service.js';
 import { validateTaskLobbyPublish } from '../services/gate.service.js';
 import { countTaskOrdersByStage } from '../services/article-delivery-list.service.js';
 import type { ArticleDeliveryStageFilter } from '../lib/article-delivery-stage.js';
+import { appendAuditLog } from '../services/audit.service.js';
+import { BRAND_AGREEMENT_VERSION } from '../../lib/marketplace-agreements.js';
+import {
+  acceptTaskOrderQuote,
+  getOrderWithQuotesForPublisher,
+  rejectTaskOrderQuote,
+  QuoteError,
+} from '../services/quote.service.js';
 
 const STAGE_FILTERS = new Set<ArticleDeliveryStageFilter>([
   'all',
@@ -76,14 +84,17 @@ export function registerOrderRoutes(app: Express) {
   });
 
   app.get('/api/orders/:id', async (req, res) => {
+    const brandName = getAuthMode() === 'session' ? await requireBrandName(req, res) : null;
+    if (getAuthMode() === 'session' && !brandName) return;
+
+    if (brandName) {
+      const orderWithQuotes = await getOrderWithQuotesForPublisher(req.params.id, brandName);
+      if (!orderWithQuotes) return res.status(404).json({ error: '订单不存在' });
+      return res.json({ order: orderWithQuotes });
+    }
+
     const order = await getOrder(req.params.id);
     if (!order) return res.status(404).json({ error: '订单不存在' });
-    if (getAuthMode() === 'session') {
-      const brandName = await requireBrandName(req, res);
-      if (!brandName || brandName !== order.brandName) {
-        return res.status(403).json({ error: '无权访问该订单' });
-      }
-    }
     res.json({ order });
   });
 
@@ -91,16 +102,22 @@ export function registerOrderRoutes(app: Express) {
     const brandName = await requireBrandName(req, res);
     if (!brandName) return;
     const input = req.body ?? {};
-    if (!input.title || !input.budget) {
+    if (!input.title) {
       return res.status(400).json({ error: '缺少必填字段' });
     }
 
-    const budgetAmount = Number(input.budget);
-    const lobbyGate = await validateTaskLobbyPublish(brandName, budgetAmount);
-    if (!lobbyGate.ok) return res.status(400).json({ error: lobbyGate.error });
+    const pricingMode = input.pricingMode ?? 'provider_quote';
+    const isQuote = pricingMode === 'provider_quote';
 
-    const budgetCheck = await checkBudget(brandName, budgetAmount);
-    if (!budgetCheck.ok) return res.status(400).json({ error: budgetCheck.error });
+    if (!isQuote) {
+      if (!input.budget) return res.status(400).json({ error: '缺少预算' });
+      const budgetAmount = Number(input.budget);
+      const lobbyGate = await validateTaskLobbyPublish(brandName, budgetAmount);
+      if (!lobbyGate.ok) return res.status(400).json({ error: lobbyGate.error });
+
+      const budgetCheck = await checkBudget(brandName, budgetAmount);
+      if (!budgetCheck.ok) return res.status(400).json({ error: budgetCheck.error });
+    }
 
     const platform = input.platform ?? '小红书';
 
@@ -109,15 +126,70 @@ export function registerOrderRoutes(app: Express) {
       title: input.title,
       type: input.type ?? '达人',
       platform,
-      budget: Number(input.budget),
+      budget: isQuote ? 0 : Number(input.budget),
       deliverable: input.deliverable ?? input.description ?? '按任务描述交付',
       acceptance: input.acceptance ?? '截图证明 / 链接回传',
       deadline: input.deadline,
+      pricingMode,
+      hiddenBudgetMaxCents: input.hiddenBudgetMaxCents,
+      perTaskBudgetCapCents: input.perTaskBudgetCapCents,
+      taskBriefJson: input.taskBriefJson ? JSON.stringify(input.taskBriefJson) : undefined,
+      description: input.description,
+      industry: input.industry,
+      city: input.city,
     });
-    const freeze = await freezeBudget(brandName, Number(input.budget), order.id);
-    if (!freeze.ok) return res.status(400).json({ error: freeze.error });
+
+    if (!isQuote) {
+      const freeze = await freezeBudget(brandName, Number(input.budget), order.id);
+      if (!freeze.ok) return res.status(400).json({ error: freeze.error });
+    }
+
+    if (input.agreementVersion === BRAND_AGREEMENT_VERSION) {
+      await appendAuditLog({
+        action: 'brand_transaction_agreement_accept',
+        entity: 'TaskOrder',
+        entityId: order.id,
+        detail: `agreement:${BRAND_AGREEMENT_VERSION}`,
+        source: 'publisher',
+      });
+    }
 
     res.status(201).json({ order });
+  });
+
+  app.post('/api/orders/:id/quotes/:quoteId/accept', async (req, res) => {
+    const brandName = await requireBrandName(req, res);
+    if (!brandName) return;
+    if (!(await ensureTaskOrderScope(req, res, req.params.id))) return;
+    const { idempotencyKey } = req.body ?? {};
+    try {
+      const order = await acceptTaskOrderQuote(
+        req.params.id,
+        req.params.quoteId,
+        brandName,
+        idempotencyKey
+      );
+      res.json({ order });
+    } catch (err) {
+      if (err instanceof QuoteError) {
+        return res.status(err.httpStatus).json({ error: err.message, code: err.code });
+      }
+      res.status(400).json({ error: err instanceof Error ? err.message : '确认失败' });
+    }
+  });
+
+  app.post('/api/orders/:id/quotes/:quoteId/reject', async (req, res) => {
+    const brandName = await requireBrandName(req, res);
+    if (!brandName) return;
+    if (!(await ensureTaskOrderScope(req, res, req.params.id))) return;
+    try {
+      res.json(await rejectTaskOrderQuote(req.params.id, req.params.quoteId, brandName));
+    } catch (err) {
+      if (err instanceof QuoteError) {
+        return res.status(err.httpStatus).json({ error: err.message, code: err.code });
+      }
+      res.status(400).json({ error: err instanceof Error ? err.message : '拒绝失败' });
+    }
   });
 
   app.post('/api/orders/:id/withdraw', async (req, res) => {
@@ -179,5 +251,21 @@ export function registerOrderRoutes(app: Express) {
 
   app.get('/api/providers', async (_req, res) => {
     res.json({ providers: await listProviders() });
+  });
+
+  app.get('/api/providers/:id', async (req, res) => {
+    const { getProvider } = await import('../services/provider.service.js');
+    const provider = await getProvider(req.params.id);
+    if (!provider) return res.status(404).json({ error: '接单方不存在' });
+    res.json({
+      provider: {
+        id: provider.id,
+        name: provider.name,
+        platforms: provider.platforms,
+        industryTags: provider.industryTags,
+        caseLinks: provider.caseLinks,
+        capabilities: provider.capabilities,
+      },
+    });
   });
 }

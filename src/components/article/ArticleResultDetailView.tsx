@@ -8,6 +8,9 @@ import { platformMatches } from '../../lib/content-library-platforms';
 import { submitPublishDraft } from '../../lib/publish-draft-client';
 import { waitForHermesAgentTask } from '../../lib/hermes-publish-client';
 import HermesWorkingOverlay from '../common/HermesWorkingOverlay';
+import PublishPlatformUnavailableDialog from '../agent/PublishPlatformUnavailableDialog';
+import { getHermesAutoPublishBlockedPlatforms } from '../../lib/hermes-auto-publish-gate';
+import type { PublishUnavailableDialogState } from '../../lib/publish-unavailable-dialog-state';
 import TaskStatusPill from '../common/TaskStatusPill';
 
 interface Props {
@@ -31,6 +34,8 @@ export default function ArticleResultDetailView({ brandName, contentItemId, onNa
     message: '',
     detail: '',
   });
+  const [publishUnavailableDialog, setPublishUnavailableDialog] =
+    useState<PublishUnavailableDialogState | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +100,15 @@ export default function ArticleResultDetailView({ brandName, contentItemId, onNa
       toast('请选择发布账号', 'error');
       return;
     }
+    const blocked = getHermesAutoPublishBlockedPlatforms([batch.platform]);
+    if (blocked.length > 0) {
+      const body = editContent || item.fullContent || item.previewText || '';
+      setPublishUnavailableDialog({
+        unsupported: blocked,
+        copyText: body ? `# ${item.title}\n\n${body}` : `# ${item.title}`,
+      });
+      return;
+    }
     setPublishing(true);
     try {
       const draft = await submitPublishDraft({
@@ -111,7 +125,7 @@ export default function ArticleResultDetailView({ brandName, contentItemId, onNa
       setHermesWork((h) => ({ ...h, open: false }));
       if (task.status === 'succeeded') {
         toast('发布任务已提交，请在发布记录查看结果', 'success');
-        onNavigate?.('content_delivery');
+        onNavigate?.('content_delivery', 'article');
       } else {
         toast('发布未成功，请查看发布记录', 'error');
       }
@@ -141,10 +155,16 @@ export default function ArticleResultDetailView({ brandName, contentItemId, onNa
         message={hermesWork.message}
         detail={hermesWork.detail}
       />
+      <PublishPlatformUnavailableDialog
+        open={Boolean(publishUnavailableDialog?.unsupported.length)}
+        state={publishUnavailableDialog}
+        brandName={brandName}
+        onClose={() => setPublishUnavailableDialog(null)}
+      />
       <button
         type="button"
         className="geo-btn-secondary geo-btn-sm flex items-center gap-2"
-        onClick={() => onNavigate?.('content_delivery')}
+        onClick={() => onNavigate?.('content_delivery', 'article')}
       >
         <ArrowLeft className="w-4 h-4" />
         返回文章交付

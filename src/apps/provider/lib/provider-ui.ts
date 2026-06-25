@@ -1,3 +1,5 @@
+import { PROVIDER_SETTLEMENT_STATUS_LABEL } from '../../../../lib/provider-finance-labels';
+
 export const ORDER_STATUS_LABEL: Record<string, string> = {
   published: '待接单',
   in_progress: '写作中',
@@ -31,11 +33,7 @@ export const APPLICATION_STATUS_LABEL: Record<string, string> = {
   withdrawn: '已撤回',
 };
 
-export const SETTLEMENT_LABEL: Record<string, string> = {
-  pending_platform: '待平台确认',
-  pending_offline: '待线下结算',
-  settled: '已结算',
-};
+export const SETTLEMENT_LABEL: Record<string, string> = PROVIDER_SETTLEMENT_STATUS_LABEL;
 
 export const PLATFORM_SHORT: Record<string, string> = {
   小红书: '小红书',
@@ -51,6 +49,17 @@ export const PLATFORM_SHORT: Record<string, string> = {
   大风网: '大风网',
   一点号: '一点号',
   官媒: '官媒',
+  行业媒体: '行业',
+  '36氪': '36氪',
+  亿欧: '亿欧',
+  艾瑞: '艾瑞',
+  虎嗅: '虎嗅',
+  创业邦: '创业邦',
+  钛媒体: '钛媒体',
+  界面新闻: '界面',
+  品玩: '品玩',
+  极客公园: '极客',
+  投资界: '投资界',
 };
 
 export function parseJsonArray(raw: string | null | undefined): string[] {

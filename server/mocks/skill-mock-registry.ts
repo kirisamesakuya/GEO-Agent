@@ -49,7 +49,7 @@ function mockGateFor(entry: SkillSampleEntry): string {
     return '设置 userConfirmedExecution: true，或开启 GEO_SKILL_MOCK_DEMO=true';
   }
   if (entry.taskType === 'hermes_publish') {
-    return 'mockHermes: true 且 userConfirmed: true';
+    return 'GEO_SKILL_MOCK_DEMO=true 且 mockHermes: true';
   }
   if (entry.taskType === 'account_verify') {
     return 'mockVerify: true 或 bindSessionId';

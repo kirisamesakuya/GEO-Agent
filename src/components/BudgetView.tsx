@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import AgentInputCard from './common/AgentInputCard';
-import { useToast } from '../context/ToastContext';
+import { DUAL_ACCOUNT_HINT, DELIVERY_ACCOUNT_HINT } from '../../lib/platform-legal-copy';
 
 interface Props {
   brandName: string;
@@ -74,7 +74,7 @@ export default function BudgetView({ brandName }: Props) {
   return (
     <div className="geo-page-content max-w-3xl space-y-4">
       <div className="geo-card p-4 text-xs" style={{ color: 'var(--neutral-text-02)' }}>
-        <strong>投放余额</strong>用于任务包预算、接单任务与网页任务冻结/结算，与 AI 算力分池，不可互相抵扣。
+        <strong>投放余额</strong>用于任务包预算、接单任务冻结与结算；{DUAL_ACCOUNT_HINT}
       </div>
 
       <div className="grid grid-cols-3 gap-4">
@@ -90,7 +90,7 @@ export default function BudgetView({ brandName }: Props) {
         ))}
       </div>
 
-      <AgentInputCard title="充值投放余额" description="在本平台完成充值（演示环境模拟支付即时到账）">
+      <AgentInputCard title="充值投放余额" description={DELIVERY_ACCOUNT_HINT}>
         <div className="flex gap-3 items-end">
           <div className="flex-1">
             <label className="text-xs block mb-1">充值金额（元）</label>

@@ -28,12 +28,18 @@ const VIEW_TITLES: Record<ViewType, string> = {
   publish_schedule: '自有账号发布',
   publish_records: '内容交付 · 发布记录',
   content_publish: '发布任务',
-  create_order: '发布任务',
+  create_order: '付费信源发单',
+  paid_source_tasks: '付费信源发单 · 任务管理',
+  quote_compare: '任务比价',
+  quote_detail: '报价详情',
+  free_source_publish: '免费信源发单',
+  site_optimize: '自有网站优化',
+  new_site_build: '新建网站',
   self_account_publish: '自有账号发布',
-  generate_article: '生成 GEO 文章',
+  generate_article: '免费信源发单',
   geo_analysis: 'GEO 分析',
-  delivery_plan: '发布任务',
-  create_website: '发布网页改装',
+  delivery_plan: '付费信源发单',
+  create_website: '新建网站',
   brand_list: '品牌管理',
   content_library: '生成 GEO 文章 · 内容交付',
   content_delivery: '内容交付',
@@ -68,16 +74,16 @@ function resolvePageTitle(activeView: ViewType): string {
     const geoTab = params.get('geoTab');
     if (geoTab === 'history') return 'GEO 分析 · 报告历史';
   }
-  if (activeView === 'content_delivery' || activeView === 'content_library' || activeView === 'order_delivery') {
+  if (activeView === 'content_delivery' || activeView === 'content_library' || activeView === 'order_delivery' || activeView === 'quote_compare' || activeView === 'quote_detail') {
     if (hint.startsWith('delivery:content:')) return '内容交付 · 文章交付 · 详情';
-    if (hint.startsWith('delivery:order:')) return '内容交付 · 文章交付 · 任务详情';
+    if (hint.startsWith('delivery:order:')) return '内容交付 · 发单管理 · 执行详情';
     if (hint.startsWith('content:')) return '内容交付 · 文章交付 · 详情';
     if (hint.startsWith('publish:')) return '内容交付 · 发布详情';
-    if (hint.startsWith('order:')) return '内容交付 · 文章交付 · 任务详情';
+    if (hint.startsWith('order:')) return '内容交付 · 发单管理 · 报价确认';
     if (hint.startsWith('website_req:')) return '内容交付 · 网页需求详情';
     const deliveryTab = params.get('deliveryTab');
     const tabMeta = CONTENT_DELIVERY_TABS.find((t) => t.id === deliveryTab);
-    if (tabMeta) return `内容交付 · ${tabMeta.label}`;
+    if (tabMeta) return tabMeta.label;
     if (params.get('contentTab') === 'publish_records') return '内容交付 · 文章交付';
     if (params.get('orderTab') === 'website') return '内容交付 · 网页需求';
     if (params.get('orderTab') === 'task') return '内容交付 · 文章交付';

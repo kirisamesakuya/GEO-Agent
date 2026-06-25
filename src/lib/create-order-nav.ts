@@ -70,17 +70,20 @@ export function isContentPublishView(view: ViewType): boolean {
 
 /** 一期关闭自定义发布时，将旧 URL / hint 映射到仍开放的视图 */
 export function resolveCreateOrderEntry(hint?: string): { view: ViewType; hint?: string } {
+  if (hint === 'paid_quote') {
+    return { view: 'create_order', hint: 'paid_quote' };
+  }
   if (CUSTOM_PUBLISH_ENABLED) {
     const mode = createOrderModeFromHint(hint);
     if (mode === 'custom') {
       return { view: 'create_order', hint: hint ?? 'article_writing' };
     }
-    return { view: 'create_order', hint: hint ?? 'ai' };
+    return { view: 'create_order', hint: hint ?? 'paid_quote' };
   }
   const kind = normalizeCustomTaskKind(parseCustomTaskKindFromHint(hint) ?? undefined);
   if (kind === 'website') return { view: 'create_website' };
   if (hint === 'article_writing' || hint === 'article') return { view: 'generate_article' };
   if (hint?.startsWith('geo:') || hint?.startsWith('plan:') || hint?.startsWith('index:'))
     return { view: 'create_order', hint };
-  return { view: 'create_order', hint: 'ai' };
+  return { view: 'create_order', hint: 'paid_quote' };
 }

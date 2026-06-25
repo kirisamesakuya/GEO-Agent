@@ -1,7 +1,6 @@
 import { prisma } from '../db/client.js';
 import { findBrandRow } from './brand.service.js';
 import { validateAutoPublish } from './gate.service.js';
-import { createAndEnqueueTask } from '../agent/worker.js';
 
 export interface PublishPlanDto {
   id: string;
@@ -197,6 +196,13 @@ export async function createSelfAccountPublishFromBatch(input: {
   });
   if (!batch) throw new Error('内容批次不存在');
 
+  const { buildHermesAutoPublishBlockedMessage, isHermesAutoPublishSupported } = await import(
+    '../../lib/publish-platform-capability.js'
+  );
+  if (!isHermesAutoPublishSupported(batch.platform)) {
+    throw new Error(buildHermesAutoPublishBlockedMessage([batch.platform]));
+  }
+
   const selectedItems = input.contentItemIds?.length
     ? batch.items.filter((item) => input.contentItemIds?.includes(item.id))
     : batch.items;
@@ -234,23 +240,25 @@ export async function createSelfAccountPublishFromBatch(input: {
     },
   });
 
-  const task = await createAndEnqueueTask({
-    type: 'hermes_publish',
-    title: `${brand.name} · ${batch.platform} 自有账号发布`,
+  const { buildHermesPublishInput, createHermesPublishTask } = await import('../lib/hermes-publish.js');
+
+  const publishInput = buildHermesPublishInput({
     brandName: brand.name,
-    input: {
-      contentBatchId: batch.id,
-      contentItemIds: selectedItems.map((item) => item.id),
-      contentTitles: selectedItems.map((item) => item.title),
-      targetPlatform: batch.platform,
-      accountBindingId: account.id,
-      accountName: account.accountName,
+    batchId: batch.id,
+    platform: batch.platform,
+    account,
+    items: selectedItems,
+    extra: {
       planId: plan.id,
       publishRecordId: record.id,
-      userConfirmed: true,
-      mockHermes: true,
       requiredEvidence: ['published_url', 'screenshot', 'platform_message'],
     },
+  });
+
+  const task = await createHermesPublishTask({
+    title: `${brand.name} · ${batch.platform} 自有账号发布`,
+    brandName: brand.name,
+    input: publishInput,
     businessRef: plan.id,
   });
 
@@ -303,17 +311,36 @@ export async function executePublishPlan(planId: string, brandName: string): Pro
     return mapRecord(rec);
   }
 
-  const task = await createAndEnqueueTask({
-    type: 'hermes_publish',
+  const accountBindingId = JSON.parse(plan.targetAccountIds || '[]')[0] as string | undefined;
+  const { resolvePublishBindingForBrand } = await import('./ad-account.service.js');
+  const account = accountBindingId
+    ? await resolvePublishBindingForBrand(brand.name, accountBindingId)
+    : null;
+
+  const { buildHermesPublishInput, createHermesPublishTask } = await import('../lib/hermes-publish.js');
+  const publishInput = buildHermesPublishInput({
+    brandName: brand.name,
+    batchId: plan.sourceRef ?? '',
+    platform,
+    account: {
+      id: account?.id ?? accountBindingId ?? '',
+      accountName: account?.accountName ?? '',
+    },
+    items: batch?.items?.length
+      ? batch.items.map((item) => ({
+          id: item.id,
+          title: item.title,
+          fullContent: item.fullContent,
+          previewText: item.previewText,
+        }))
+      : [],
+    extra: { planId: plan.id },
+  });
+
+  const task = await createHermesPublishTask({
     title: `发布计划：${plan.name}`,
     brandName: brand.name,
-    input: {
-      contentBatchId: plan.sourceRef,
-      targetPlatform: platform,
-      accountBindingId: JSON.parse(plan.targetAccountIds || '[]')[0],
-      userConfirmed: true,
-      planId: plan.id,
-    },
+    input: publishInput,
     businessRef: plan.id,
   });
 
@@ -629,27 +656,37 @@ export async function processDuePublishJobs(): Promise<number> {
       },
     });
 
-    const task = await createAndEnqueueTask({
-      type: 'hermes_publish',
-      title: `${brand.name} · ${item.title.slice(0, 24)}`,
+    const { buildHermesPublishInput, createHermesPublishTask } = await import('../lib/hermes-publish.js');
+    const publishInput = buildHermesPublishInput({
       brandName: brand.name,
-      input: {
+      batchId: item.batchId,
+      platform: job.platform,
+      account,
+      items: [
+        {
+          id: item.id,
+          title: item.title,
+          fullContent: item.fullContent,
+          previewText: item.previewText,
+        },
+      ],
+      extra: {
         geoProjectId: job.projectId ?? undefined,
-        contentBatchId: item.batchId,
-        contentItemIds: [item.id],
         contentItemId: item.id,
         publishRecordId: record.id,
         publishJobId: job.id,
-        targetPlatform: job.platform,
-        accountBindingId: account.id,
-        accountName: account.accountName,
         title: item.title,
         content: item.fullContent,
         scheduledAt: job.scheduledAt.toISOString(),
         planId: job.planId,
-        userConfirmed: true,
         requiredEvidence: ['published_url', 'screenshot', 'platform_message'],
       },
+    });
+
+    const task = await createHermesPublishTask({
+      title: `${brand.name} · ${item.title.slice(0, 24)}`,
+      brandName: brand.name,
+      input: publishInput,
       businessRef: job.id,
     });
 

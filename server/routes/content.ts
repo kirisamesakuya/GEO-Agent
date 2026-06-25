@@ -112,8 +112,10 @@ export function registerContentRoutes(app: Express) {
       });
       res.status(201).json({
         success: true,
-        mode: 'hermes_mock',
-        message: '已提交 Hermes 模拟发布任务（不经过平台官方接口）',
+        mode: result.mock ? 'hermes_mock' : 'hermes_gateway',
+        message: result.mock
+          ? '已提交 Hermes 模拟发布任务（GEO_SKILL_MOCK_DEMO）'
+          : '已提交 Hermes 发布任务，等待本机执行',
         ...result,
       });
     } catch (err) {

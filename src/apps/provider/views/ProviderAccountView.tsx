@@ -2,7 +2,7 @@
 import { Plus, Link2, Layers } from 'lucide-react';
 import { useToast } from '../../../context/ToastContext';
 import { parseJsonArray } from '../lib/provider-ui';
-import { PROVIDER_TASK_HALL_FILTER_PLATFORMS } from '../../../lib/publish-content-platforms';
+import { PROVIDER_TASK_HALL_FILTER_PLATFORMS, PROVIDER_INDUSTRY_MEDIA_OUTLETS } from '../../../lib/publish-content-platforms';
 import { PROVIDER_CASE_SUBMISSION_ENABLED } from '../provider-feature-flags';
 
 const PLATFORMS = [...PROVIDER_TASK_HALL_FILTER_PLATFORMS];
@@ -162,6 +162,27 @@ export default function ProviderAccountView({ providerId }: Props) {
               </button>
             ))}
           </div>
+          {platforms.includes('行业媒体') && (
+            <div className="mt-3 pt-3 border-t border-provider-subtle">
+              <p className="text-[11px] text-provider-muted mb-2">行业媒体子项（可选，勾选后匹配更精准）</p>
+              <div className="flex flex-wrap gap-2">
+                {PROVIDER_INDUSTRY_MEDIA_OUTLETS.map((outlet) => (
+                  <button
+                    key={outlet}
+                    type="button"
+                    onClick={() => toggle(platforms, setPlatforms, outlet)}
+                    className={`text-xs px-2.5 py-1 rounded-lg font-medium ${
+                      platforms.includes(outlet)
+                        ? 'provider-nav-active'
+                        : 'provider-nav-item border border-provider'
+                    }`}
+                  >
+                    {outlet}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <div>
           <label className="text-xs text-provider-secondary block mb-2">行业标签</label>

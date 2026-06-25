@@ -6,7 +6,38 @@ import {
 } from './demo-provider-finance-fixtures.js';
 
 const DEMO_FINANCE_KEY = 'demo_finance_v';
-const DEMO_FINANCE_VERSION = '5';
+const DEMO_FINANCE_VERSION = '6';
+
+/** 收益中心演示：已完成且已结算的订单（标题不含订单阶段前缀） */
+const DEMO_EARNINGS_ORDER_SPECS = [
+  {
+    providerName: '晨光传媒',
+    brandName: '云杉口腔',
+    title: '[演示] 小红书探店 · 河西门店体验',
+    type: '探店',
+    platform: '小红书',
+    budget: 4200,
+    daysAgo: 18,
+  },
+  {
+    providerName: '晨光传媒',
+    brandName: '云杉口腔',
+    title: '[演示] 知乎问答 · 种植牙选购指南',
+    type: '问答覆盖',
+    platform: '知乎',
+    budget: 1500,
+    daysAgo: 25,
+  },
+  {
+    providerName: '蓝海内容',
+    brandName: '云杉口腔',
+    title: '[演示] 公众号软文 · 暑期矫正活动',
+    type: '文章',
+    platform: '公众号',
+    budget: 2200,
+    daysAgo: 20,
+  },
+] as const;
 
 function profileData(profile: (typeof DEMO_PROVIDER_PAYOUT_PROFILES)[number]) {
   return {
@@ -75,6 +106,42 @@ async function settleProviderOrders(providerName: string, take = 3) {
   }
 }
 
+async function seedDemoEarningsOrders() {
+  const now = Date.now();
+  const dayMs = 86400000;
+
+  for (const spec of DEMO_EARNINGS_ORDER_SPECS) {
+    const exists = await prisma.taskOrder.findFirst({ where: { title: spec.title } });
+    if (exists) continue;
+
+    const provider = await prisma.provider.findFirst({ where: { name: spec.providerName } });
+    if (!provider) continue;
+
+    const updatedAt = new Date(now - spec.daysAgo * dayMs);
+    await prisma.taskOrder.create({
+      data: {
+        brandName: spec.brandName,
+        title: spec.title,
+        type: spec.type,
+        platform: spec.platform,
+        budget: spec.budget,
+        deliverable: '演示结算订单',
+        acceptance: '链接回传',
+        status: 'completed',
+        providerId: provider.id,
+        providerName: provider.name,
+        updatedAt,
+        settlement: {
+          create: {
+            status: 'settled',
+            amount: spec.budget,
+          },
+        },
+      },
+    });
+  }
+}
+
 async function seedDemoWithdrawals() {
   const now = Date.now();
   const dayMs = 86400000;
@@ -130,6 +197,7 @@ async function seedDemoWithdrawals() {
 
 export async function ensureDemoFinance(): Promise<void> {
   await syncDemoProviderFinanceProfiles();
+  await seedDemoEarningsOrders();
 
   const marker = await prisma.systemConfig.findUnique({ where: { key: DEMO_FINANCE_KEY } });
   if (marker?.value === DEMO_FINANCE_VERSION) return;

@@ -268,6 +268,113 @@ export async function createIndexPlan(
   return mapPlan(row);
 }
 
+export async function updateIndexPlan(
+  planId: string,
+  brandName: string,
+  data: {
+    name?: string;
+    platforms?: string[];
+    keywordIds?: string[];
+    queryAt?: string;
+    scheduleFrequency?: string | null;
+    scheduleRunTime?: string | null;
+    scheduleWeekday?: number | null;
+    scheduleMonthDay?: number | null;
+  }
+): Promise<IndexPlanDto> {
+  const brand = await findBrandRow(brandName);
+  if (!brand) throw new Error('品牌不存在');
+  const existing = await prisma.indexQueryPlan.findFirst({
+    where: { id: planId, brandId: brand.id },
+    include: { brand: true },
+  });
+  if (!existing) throw new Error('计划不存在');
+  if (existing.status === 'running') throw new Error('执行中的计划不可编辑');
+
+  const patch: {
+    name?: string;
+    platforms?: string;
+    keywordIds?: string;
+    queryAt?: Date;
+    scheduledAt?: Date | null;
+    scheduleFrequency?: string | null;
+    scheduleRunTime?: string | null;
+    scheduleWeekday?: number | null;
+    scheduleMonthDay?: number | null;
+  } = {};
+
+  if (data.name !== undefined) {
+    const name = data.name.trim();
+    if (!name) throw new Error('计划名称不能为空');
+    patch.name = name;
+  }
+  if (data.platforms !== undefined) {
+    if (!data.platforms.length) throw new Error('请至少选择一个 AI 平台');
+    patch.platforms = JSON.stringify(data.platforms);
+  }
+  if (data.keywordIds !== undefined) {
+    if (!data.keywordIds.length) throw new Error('请至少选择一个关键词');
+    patch.keywordIds = JSON.stringify(data.keywordIds);
+  }
+  if (data.queryAt !== undefined) {
+    patch.queryAt = parseOptionalDate(data.queryAt) ?? existing.queryAt;
+  }
+
+  if (
+    data.scheduleFrequency !== undefined ||
+    data.scheduleRunTime !== undefined ||
+    data.scheduleWeekday !== undefined ||
+    data.scheduleMonthDay !== undefined
+  ) {
+    const freq =
+      data.scheduleFrequency !== undefined
+        ? String(data.scheduleFrequency ?? '').trim()
+        : (existing.scheduleFrequency ?? '').trim();
+    const runTime =
+      data.scheduleRunTime !== undefined
+        ? String(data.scheduleRunTime ?? '').trim()
+        : (existing.scheduleRunTime ?? '').trim();
+    const weekday =
+      data.scheduleWeekday !== undefined
+        ? parseScheduleWeekday(data.scheduleWeekday)
+        : (existing.scheduleWeekday ?? undefined);
+    const monthDay =
+      data.scheduleMonthDay !== undefined
+        ? parseScheduleMonthDay(data.scheduleMonthDay)
+        : (existing.scheduleMonthDay ?? undefined);
+
+    if (!freq || !runTime) {
+      patch.scheduledAt = null;
+      patch.scheduleFrequency = null;
+      patch.scheduleRunTime = null;
+      patch.scheduleWeekday = null;
+      patch.scheduleMonthDay = null;
+    } else {
+      if (freq === 'weekly' && weekday === undefined) {
+        throw new Error('每周执行需选择星期');
+      }
+      if (freq === 'monthly' && monthDay === undefined) {
+        throw new Error('每月执行需选择日期');
+      }
+      patch.scheduledAt = computeNextScheduledAt(freq, runTime, weekday, monthDay) ?? null;
+      patch.scheduleFrequency = freq;
+      patch.scheduleRunTime = runTime;
+      patch.scheduleWeekday = freq === 'weekly' ? (weekday ?? null) : null;
+      patch.scheduleMonthDay = freq === 'monthly' ? (monthDay ?? null) : null;
+    }
+  }
+
+  const row = await prisma.indexQueryPlan.update({
+    where: { id: planId },
+    data: patch,
+    include: { brand: true, _count: { select: { results: true } } },
+  });
+  const kwIds = JSON.parse(row.keywordIds || '[]') as string[];
+  const entries = await prisma.keywordEntry.findMany({ where: { id: { in: kwIds } } });
+  const keywords = entries.length ? entries.map((e) => e.term) : kwIds;
+  return mapPlan(row, keywords);
+}
+
 export async function runIndexPlan(planId: string, brandName: string): Promise<IndexPlanDto> {
   const brand = await findBrandRow(brandName);
   if (!brand) throw new Error('品牌不存在');

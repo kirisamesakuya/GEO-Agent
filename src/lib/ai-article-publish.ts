@@ -3,6 +3,7 @@ import { platformMatches } from './content-library-platforms';
 import { isPublishReady } from './publish-account-login-status';
 import { submitPublishDraft } from './publish-draft-client';
 import { waitForHermesAgentTask } from './hermes-publish-client';
+import { isHermesAutoPublishSupported } from './hermes-auto-publish-gate';
 import type { AiPublishGroup } from './article-delivery-unified';
 
 export type { AiPublishGroup };
@@ -91,6 +92,10 @@ export async function executeAiArticlePublish(
 
   for (let gi = 0; gi < groups.length; gi++) {
     const group = groups[gi];
+    if (!isHermesAutoPublishSupported(group.platform)) {
+      errors.push(`${group.platform}: 该平台暂不支持 Hermes 自动发布`);
+      continue;
+    }
     const account = resolveAccountForPlatform(
       accounts,
       group.platform,

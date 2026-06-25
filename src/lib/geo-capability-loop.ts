@@ -43,7 +43,7 @@ export function buildLoopNavigateHint(
     case 'retest':
       return { view: 'indexing_rank' };
     case 'assets':
-      return { view: 'geo_analysis', hint: 'assets', urlParams: { geoTab: 'assets' } };
+      return { view: 'site_optimize' };
     default:
       return { view: 'workbench' };
   }
@@ -64,7 +64,7 @@ export const GEO_LOOP_STEP_LABELS: Record<GeoCapabilityLoopStep, string> = {
   write: '生成文章',
   publish: '自有账号发布',
   retest: '效果复测',
-  assets: '网站 GEO 资产',
+  assets: '自有网站优化',
 };
 
 /** 推荐下一步（能力验证默认链路） */

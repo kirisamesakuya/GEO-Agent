@@ -21,6 +21,7 @@ import {
   type DeliveryLogStep,
 } from './article-delivery-detail-shell';
 import { DELIVERY_REVIEW_STATUS_LABEL, formatTaskOrderListTime } from '../../lib/task-order-flow';
+import { isQuotePricingMode, QUOTE_STATUS_LABELS } from '../../../lib/quote-order';
 import OrderRevisionRequestDialog from './OrderRevisionRequestDialog';
 
 interface TaskOrder {
@@ -29,6 +30,9 @@ interface TaskOrder {
   platform: string;
   budget: number;
   status: string;
+  pricingMode?: string;
+  publisherPayAmountCents?: number | null;
+  publisherPayAmountYuan?: string | null;
   deliverable?: string;
   acceptance?: string;
   providerName?: string;
@@ -50,9 +54,15 @@ interface TaskOrder {
 interface Props {
   orderId: string;
   onNavigate?: (view: ViewType, hint?: string) => void;
+  /** 从发单管理进入时使用内嵌布局与返回发单管理 */
+  detailContext?: 'order_manage' | 'article';
 }
 
-export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: Props) {
+export default function ArticleDeliveryOrderDetailView({
+  orderId,
+  onNavigate,
+  detailContext = 'article',
+}: Props) {
   const { toast } = useToast();
   const [order, setOrder] = useState<TaskOrder | null>(null);
   const [draftRevisionNote, setDraftRevisionNote] = useState('');
@@ -73,6 +83,14 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
   }, [orderId]);
 
   const stage: ArticleDeliveryStage = order ? mapManualOrderStage(order.status) : 'writing';
+  const isQuote = order ? isQuotePricingMode(order.pricingMode) : false;
+  const frozenYuan =
+    order?.publisherPayAmountYuan ??
+    (order?.publisherPayAmountCents != null
+      ? (order.publisherPayAmountCents / 100).toFixed(2)
+      : order?.budget != null
+        ? String(order.budget)
+        : '—');
 
   const latestDraft = useMemo(() => {
     if (!order?.deliveries?.length) return null;
@@ -215,10 +233,14 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
   const ownerLabel = order.providerName ?? '待接单';
   const metaLine =
     stage === 'pending_provider'
-      ? `发单时间 ${formatTaskOrderListTime(order.createdAt)} · 预算 ¥${order.budget}`
+      ? isQuote
+        ? `发单时间 ${formatTaskOrderListTime(order.createdAt)} · 待报价撮合`
+        : `发单时间 ${formatTaskOrderListTime(order.createdAt)} · 预算 ¥${order.budget}`
       : stage === 'cancelled'
         ? `已于 ${formatArticleDeliveryTime(order.updatedAt ?? order.createdAt)} 撤回`
-        : `${ownerLabel} · 更新时间 ${formatArticleDeliveryTime(order.updatedAt ?? order.createdAt)}`;
+        : isQuote
+          ? `${ownerLabel} · 冻结 ¥${frozenYuan} · 更新 ${formatArticleDeliveryTime(order.updatedAt ?? order.createdAt)}`
+          : `${ownerLabel} · 更新时间 ${formatArticleDeliveryTime(order.updatedAt ?? order.createdAt)}`;
 
   const badges = (
     <>
@@ -235,8 +257,15 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
       <span
         className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium ${articleDeliveryStageClass(stage)}`}
       >
-        {ARTICLE_DELIVERY_STAGE_LABEL[stage]}
+        {isQuote && QUOTE_STATUS_LABELS[order.status]
+          ? QUOTE_STATUS_LABELS[order.status]
+          : ARTICLE_DELIVERY_STAGE_LABEL[stage]}
       </span>
+      {isQuote && (
+        <span className="inline-flex rounded-md px-2 py-0.5 text-xs font-medium bg-violet-50 text-violet-700">
+          报价撮合
+        </span>
+      )}
     </>
   );
 
@@ -272,7 +301,41 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
 
   const mainLink = stage === 'pending_acceptance' ? latestFinal?.link : undefined;
 
-  const logSteps: DeliveryLogStep[] = [
+  const logSteps: DeliveryLogStep[] = isQuote
+    ? [
+        {
+          label: '报价开放',
+          time: formatTaskOrderListTime(order.createdAt).split(' ')[1] ?? '—',
+          done: true,
+        },
+        {
+          label: '确认并冻结',
+          time:
+            order.publisherPayAmountCents != null && order.updatedAt
+              ? formatArticleDeliveryTime(order.updatedAt).split(' ')[1] ?? '—'
+              : '—',
+          done: Boolean(order.publisherPayAmountCents),
+        },
+        {
+          label: '撰写草稿',
+          time: latestDraft ? formatArticleDeliveryTime(latestDraft.createdAt).split(' ')[1] ?? '—' : '—',
+          done: Boolean(latestDraft),
+        },
+        {
+          label: '平台发布',
+          time: latestFinal ? formatArticleDeliveryTime(latestFinal.createdAt).split(' ')[1] ?? '—' : '—',
+          done: Boolean(latestFinal?.link),
+        },
+        {
+          label: '验收完成',
+          time:
+            order.status === 'completed'
+              ? formatArticleDeliveryTime(order.updatedAt).split(' ')[1] ?? '—'
+              : '—',
+          done: order.status === 'completed',
+        },
+      ]
+    : [
     { label: '任务发布', time: formatTaskOrderListTime(order.createdAt).split(' ')[1] ?? '—', done: true },
     {
       label: '接单认领',
@@ -369,7 +432,8 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
           <ArticleDeliveryDetailPanel title="发单信息">
             <div className="text-xs space-y-2">
               <p>
-                <span className="text-[var(--neutral-text-03)]">预算：</span>¥{order.budget}
+                <span className="text-[var(--neutral-text-03)]">{isQuote ? '冻结金额 G：' : '预算：'}</span>
+                ¥{isQuote ? frozenYuan : order.budget}
               </p>
               <p>
                 <span className="text-[var(--neutral-text-03)]">发单时间：</span>
@@ -405,7 +469,8 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
                 {ownerLabel}
               </p>
               <p>
-                <span className="text-[var(--neutral-text-03)]">预算：</span>¥{order.budget}
+                <span className="text-[var(--neutral-text-03)]">{isQuote ? '冻结金额 G：' : '预算：'}</span>
+                ¥{isQuote ? frozenYuan : order.budget}
               </p>
             </div>
           </ArticleDeliveryDetailPanel>
@@ -444,7 +509,8 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
                 {ownerLabel}
               </p>
               <p>
-                <span className="text-[var(--neutral-text-03)]">预算：</span>¥{order.budget}
+                <span className="text-[var(--neutral-text-03)]">{isQuote ? '冻结金额 G：' : '预算：'}</span>
+                ¥{isQuote ? frozenYuan : order.budget}
               </p>
             </div>
           </ArticleDeliveryDetailPanel>
@@ -615,7 +681,13 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
         onConfirm={() => void requestRevision()}
       />
       <ArticleDeliveryDetailShell
-      onBack={() =>
+      layout={detailContext === 'order_manage' ? 'inline' : 'drawer'}
+      backLabel={detailContext === 'order_manage' ? '返回发单管理' : '返回文章交付'}
+      onBack={() => {
+        if (detailContext === 'order_manage') {
+          onNavigate?.('content_delivery', 'order_manage');
+          return;
+        }
         onNavigate?.(
           'content_delivery',
           stage === 'pending_provider'
@@ -624,9 +696,9 @@ export default function ArticleDeliveryOrderDetailView({ orderId, onNavigate }: 
               ? 'order_manage:cancelled'
               : stage === 'writing'
                 ? 'writing'
-                : undefined
-        )
-      }
+                : 'article'
+        );
+      }}
       actions={renderActions()}
       title={order.title}
       badges={badges}

@@ -13,6 +13,10 @@ import PlatformStatusTag from '../components/PlatformStatusTag';
 import PlatformTabBar from '../components/PlatformTabBar';
 import { PlatformTableAction, PlatformTableActions } from '../components/PlatformTableActions';
 import { payoutChannelLabel } from '../../../../lib/provider-payout';
+import {
+  PROVIDER_WITHDRAWAL_STATUS_LABEL,
+  PROVIDER_SETTLEMENT_STATUS_LABEL,
+} from '../../../../lib/provider-finance-labels';
 
 interface WithdrawalRow {
   id: string;
@@ -41,10 +45,10 @@ interface WithdrawalRow {
 }
 
 const WITHDRAWAL_STATUS: Record<string, { label: string; kind: 'pending' | 'warning' | 'success' | 'danger' }> = {
-  pending: { label: '待审核', kind: 'pending' },
-  approved: { label: '待线下打款', kind: 'warning' },
-  paid: { label: '已打款', kind: 'success' },
-  rejected: { label: '已驳回', kind: 'danger' },
+  pending: { label: PROVIDER_WITHDRAWAL_STATUS_LABEL.pending, kind: 'pending' },
+  approved: { label: PROVIDER_WITHDRAWAL_STATUS_LABEL.approved, kind: 'warning' },
+  paid: { label: PROVIDER_WITHDRAWAL_STATUS_LABEL.paid, kind: 'success' },
+  rejected: { label: PROVIDER_WITHDRAWAL_STATUS_LABEL.rejected, kind: 'danger' },
 };
 
 const SETTLEMENT_TAB = [{ id: 'settlement_review', label: '订单结算' }];
@@ -78,9 +82,9 @@ interface SettlementBatchRow {
 }
 
 const SETTLEMENT_STATUS: Record<string, { label: string; kind: 'pending' | 'warning' | 'success' }> = {
-  pending_platform: { label: '待平台确认', kind: 'pending' },
-  pending_offline: { label: '待线下结算', kind: 'warning' },
-  settled: { label: '已结算', kind: 'success' },
+  pending_platform: { label: PROVIDER_SETTLEMENT_STATUS_LABEL.pending_platform, kind: 'pending' },
+  pending_offline: { label: PROVIDER_SETTLEMENT_STATUS_LABEL.pending_offline, kind: 'warning' },
+  settled: { label: PROVIDER_SETTLEMENT_STATUS_LABEL.settled, kind: 'success' },
 };
 
 export default function PlatformFundsView({ section = 'settlement' }: ViewProps) {

@@ -18,7 +18,8 @@
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
     "sync:demo-marketplace": "tsx scripts/sync-demo-marketplace.ts",
-    "test:minimax": "tsx scripts/test-minimax.ts"
+    "test:minimax": "tsx scripts/test-minimax.ts",
+    "test:platform-fee": "tsx scripts/test-platform-fee.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

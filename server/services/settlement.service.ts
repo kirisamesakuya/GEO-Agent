@@ -10,11 +10,33 @@ export const SETTLEMENT_STATUS_LABELS: Record<SettlementStatus, string> = {
   settled: '已结算',
 };
 
-export async function ensureSettlementOnAcceptance(orderId: string, amount: number) {
+export async function ensureSettlementOnAcceptance(
+  orderId: string,
+  amount: number,
+  snapshot?: {
+    publisherPayAmountCents?: number;
+    platformServiceFeeCents?: number;
+    providerIncomeCents?: number;
+    serviceFeeRateBps?: number;
+    feeChargeSide?: string;
+    isDemoSettlement?: boolean;
+  }
+) {
   const existing = await prisma.settlementRecord.findUnique({ where: { orderId } });
   if (existing) return existing;
   return prisma.settlementRecord.create({
-    data: { orderId, amount, status: 'pending_platform' },
+    data: {
+      orderId,
+      amount,
+      status: 'pending_platform',
+      publisherPayAmountCents: snapshot?.publisherPayAmountCents ?? null,
+      platformServiceFeeCents: snapshot?.platformServiceFeeCents ?? null,
+      providerIncomeCents: snapshot?.providerIncomeCents ?? null,
+      serviceFeeRateBps: snapshot?.serviceFeeRateBps ?? null,
+      feeChargeSide: snapshot?.feeChargeSide ?? null,
+      settlementBaseAmountCents: snapshot?.publisherPayAmountCents ?? null,
+      isDemoSettlement: snapshot?.isDemoSettlement ?? false,
+    },
   });
 }
 

@@ -6,12 +6,17 @@ import {
   Wallet,
   Bell,
   User,
-  Hexagon,
   X,
 } from 'lucide-react';
 import type { ProviderPageId } from '../types';
 import AppModeLinks from '../../../components/common/AppModeLinks';
-import { PROVIDER_APP_NAME } from '../../../lib/app-branding';
+import AppBrandMark from '../../../components/common/AppBrandMark';
+import ProviderLogo from '../../../components/common/ProviderLogo';
+import {
+  PROVIDER_APP_BRAND_PREFIX,
+  PROVIDER_APP_NAME,
+  PROVIDER_APP_PRODUCT_NAME,
+} from '../../../lib/app-branding';
 import { isProviderViewEnabled } from '../provider-feature-flags';
 
 interface Props {
@@ -25,11 +30,12 @@ interface Props {
 }
 
 const MAIN_NAV: { id: ProviderPageId; label: string; icon: typeof Home }[] = [
-  { id: 'home', label: '首页', icon: Home },
-  { id: 'tasks', label: '任务大厅', icon: Target },
-  { id: 'orders', label: '我的订单', icon: FileText },
-  { id: 'accounts', label: '账号资源', icon: Users },
-  { id: 'earnings', label: '收益中心', icon: Wallet },
+  { id: 'home' as const, label: '首页', icon: Home },
+  { id: 'tasks' as const, label: '任务大厅', icon: Target },
+  { id: 'quotes' as const, label: '我的报价', icon: FileText },
+  { id: 'orders' as const, label: '我的订单', icon: FileText },
+  { id: 'accounts' as const, label: '账号资源', icon: Users },
+  { id: 'earnings' as const, label: '收益中心', icon: Wallet },
 ].filter((item) => isProviderViewEnabled(item.id));
 
 export default function ProviderSidebar({
@@ -46,17 +52,15 @@ export default function ProviderSidebar({
       className={`provider-sidebar fixed left-0 top-0 z-20 flex flex-col justify-between h-screen shrink-0 bg-white border-r border-provider shadow-[2px_0_8px_rgba(0,0,0,0.02)] ${open ? 'provider-sidebar--open' : ''}`}
     >
       <div>
-        <div className="h-16 flex items-center px-4 lg:px-6 mb-4 border-b border-provider">
-          <button
-            type="button"
-            className="flex items-center gap-2 cursor-pointer flex-1 min-w-0"
+        <div className="provider-sidebar-brand flex items-center gap-2">
+          <AppBrandMark
+            className="flex-1 min-w-0"
+            logo={<ProviderLogo size={28} />}
+            prefix={PROVIDER_APP_BRAND_PREFIX}
+            productName={PROVIDER_APP_PRODUCT_NAME}
+            fullName={PROVIDER_APP_NAME}
             onClick={() => onTabChange('home')}
-          >
-            <div className="w-8 h-8 bg-brand rounded flex items-center justify-center text-white font-bold text-lg shrink-0">
-              <Hexagon className="w-5 h-5 fill-current" />
-            </div>
-            <span className="text-xs font-bold leading-tight text-provider-title truncate">{PROVIDER_APP_NAME}</span>
-          </button>
+          />
           {onClose && (
             <button
               type="button"

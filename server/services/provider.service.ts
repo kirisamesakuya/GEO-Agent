@@ -5,11 +5,20 @@ import {
 } from '../../lib/provider-identity.js';
 import { isMvpPayoutChannel } from '../../lib/provider-payout.js';
 import { prisma } from '../db/client.js';
+import {
+  hallFilterNeedsInMemoryPlatformMatch,
+  orderMatchesHallPlatformFilter,
+  scoreProviderPlatformMatch,
+} from '../../lib/marketplace-order-platform.js';
 import { appendAuditLog } from './audit.service.js';
 import { createProviderNotification } from './notification.service.js';
 import { paginatedResult, parsePagination } from '../lib/pagination.js';
 import { resolveMarketplaceSlots } from '../lib/marketplace-task-slots.js';
 import { ensureDemoMarketplaceReady } from '../lib/ensure-demo-marketplace.js';
+import { PROVIDER_AGREEMENT_VERSION } from '../../lib/marketplace-agreements.js';
+import { PROVIDER_SERVICE_AGREEMENT_TITLE } from '../../lib/platform-legal-copy.js';
+import { isQuoteOrder, assertQuoteBypassAllowed } from '../../lib/quote-order.js';
+import { HIDE_PUBLISHER_BUDGET } from '../../lib/feature-flags.js';
 
 export async function getProvider(id: string) {
   return prisma.provider.findUnique({
@@ -189,7 +198,7 @@ export async function upsertProviderProfile(
   });
 }
 
-export async function submitProviderApplication(providerId: string) {
+export async function submitProviderApplication(providerId: string, agreementVersion?: string) {
   const provider = await prisma.provider.findUnique({ where: { id: providerId } });
   if (!provider) throw new Error('接单方不存在');
 
@@ -197,6 +206,9 @@ export async function submitProviderApplication(providerId: string) {
   const serviceAreas = JSON.parse(provider.serviceAreas ?? '[]') as string[];
   if (platforms.length === 0) throw new Error('请至少选择一个媒体平台');
   if (serviceAreas.length === 0) throw new Error('请至少选择一个接单地区');
+  if (agreementVersion !== PROVIDER_AGREEMENT_VERSION) {
+    throw new Error(`请阅读并同意最新的《${PROVIDER_SERVICE_AGREEMENT_TITLE}》`);
+  }
 
   const version =
     (await prisma.providerApplication.count({ where: { providerId } })) + 1;
@@ -205,7 +217,7 @@ export async function submitProviderApplication(providerId: string) {
     data: {
       providerId,
       version,
-      payload: JSON.stringify(provider),
+      payload: JSON.stringify({ provider, agreementVersion, agreedAt: new Date().toISOString() }),
       status: 'submitted',
     },
   });
@@ -219,6 +231,7 @@ export async function submitProviderApplication(providerId: string) {
     action: 'provider_application_submit',
     entity: 'Provider',
     entityId: providerId,
+    detail: `agreement:${agreementVersion}`,
   });
 
   return updated;
@@ -300,10 +313,13 @@ export async function listTaskMarketplace(filters: {
     ? { deadline: { lte: new Date(filters.deadlineBefore) } }
     : {};
 
+  const platformFilter = filters.platform?.trim();
+  const useIndustryMemoryFilter = platformFilter && hallFilterNeedsInMemoryPlatformMatch(platformFilter);
+
   const orders = await prisma.taskOrder.findMany({
     where: {
-      status: 'published',
-      ...(filters.platform ? { platform: filters.platform } : {}),
+      status: { in: ['published', 'quote_open', 'quote_review'] },
+      ...(platformFilter && !useIndustryMemoryFilter ? { platform: platformFilter } : {}),
       ...(filters.type ? { type: filters.type } : {}),
       ...(filters.minBudget ? { budget: { gte: filters.minBudget } } : {}),
       ...(filters.industry ? { industry: filters.industry } : {}),
@@ -313,6 +329,11 @@ export async function listTaskMarketplace(filters: {
     orderBy: { createdAt: 'desc' },
   });
 
+  const visibleOrders =
+    useIndustryMemoryFilter
+      ? orders.filter((o) => orderMatchesHallPlatformFilter(o.platform, platformFilter!))
+      : orders;
+
   let provider: Awaited<ReturnType<typeof getProvider>> = null;
   if (filters.providerId) provider = await getProvider(filters.providerId);
 
@@ -321,16 +342,18 @@ export async function listTaskMarketplace(filters: {
     : [];
 
   return Promise.all(
-    orders.map(async (order) => {
-      const matchScore =
-        providerPlatforms.length === 0
-          ? 50
-          : providerPlatforms.includes(order.platform)
-            ? 90
-            : 40;
+    visibleOrders.map(async (order) => {
+      const matchScore = scoreProviderPlatformMatch(providerPlatforms, order.platform);
       const slots = await resolveMarketplaceSlots(order);
-      return {
+      const quoteMode = isQuoteOrder(order);
+      const sanitized = {
         ...order,
+        ...(HIDE_PUBLISHER_BUDGET && quoteMode ? { budget: undefined } : {}),
+        pricingMode: order.pricingMode,
+        isQuoteTask: quoteMode,
+      };
+      return {
+        ...sanitized,
         ...slots,
         matchScore,
         matchLabel:
@@ -356,6 +379,7 @@ export async function applyToTaskOrder(
   if (!order || order.status !== 'published') {
     throw new Error('任务不可申请');
   }
+  assertQuoteBypassAllowed(order, 'applyToTaskOrder');
 
   const existing = await prisma.taskOrderApplication.findFirst({
     where: { orderId, providerId },
@@ -394,6 +418,7 @@ export async function claimTaskOrder(
     if (!row) {
       throw new Error('任务不可领取或已被他人接单');
     }
+    assertQuoteBypassAllowed(row, 'claim');
     if (row.providerId === providerId && row.status === 'in_progress') {
       return row;
     }
@@ -485,6 +510,7 @@ export async function confirmApplication(applicationId: string) {
   if (!app || app.order.status !== 'published') {
     throw new Error('申请无效');
   }
+  assertQuoteBypassAllowed(app.order, 'confirmApplication');
 
   await prisma.taskOrderApplication.update({
     where: { id: applicationId },

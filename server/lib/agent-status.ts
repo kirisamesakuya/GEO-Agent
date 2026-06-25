@@ -113,17 +113,20 @@ export function allowsDirectModelGeoFixtureMock(task: {
   return GEO_FIXTURE_MOCK_TYPES.has(task.type);
 }
 
-/** POC / 开发：允许 direct_model 模拟本机 Hermes 发布与账号校验 */
+/** POC / 开发：仅 GEO_SKILL_MOCK_DEMO + 显式 mock 标记时允许 direct_model 模拟 Hermes */
 export function allowsDirectModelHermesMock(task: {
   type: string;
   input?: Record<string, unknown>;
 }): boolean {
   const input = task.input ?? {};
   if (task.type === 'hermes_publish') {
-    return Boolean(input.mockHermes || input.userConfirmed);
+    return isGeoSkillMockDemoMode() && Boolean(input.mockHermes);
   }
   if (task.type === 'account_verify') {
-    return Boolean(input.mockVerify ?? input.bindSessionId ?? input.userConfirmed);
+    return (
+      isGeoSkillMockDemoMode() &&
+      Boolean(input.mockVerify ?? input.mockHermes ?? input.bindSessionId)
+    );
   }
   return false;
 }

@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import DeliveryRechargeModal from './funds/DeliveryRechargeModal';
+import type { MockRechargeOrder } from '../../lib/delivery-recharge';
+import {
+  DELIVERY_ACCOUNT_HINT,
+  TOKEN_ACCOUNT_HINT,
+} from '../../lib/platform-legal-copy';
 
 const AGENT_CLOUD_RECHARGE_URL = 'https://www.agentsyun.com/hub/keys';
 
@@ -63,6 +69,7 @@ export default function AccountFundsView({ brandName, embedded }: Props) {
   const [rechargeOrders, setRechargeOrders] = useState<Array<{ id: string; amount: number; status: string; createdAt: string }>>([]);
   const [rechargeAmount, setRechargeAmount] = useState(5000);
   const [paying, setPaying] = useState(false);
+  const [pendingRecharge, setPendingRecharge] = useState<MockRechargeOrder | null>(null);
 
   const load = async () => {
     if (!brandName || brandName === '__all__') return;
@@ -101,6 +108,10 @@ export default function AccountFundsView({ brandName, embedded }: Props) {
   }, [brandName]);
 
   const rechargeDelivery = async () => {
+    if (!rechargeAmount || rechargeAmount <= 0) {
+      toast('请输入有效充值金额', 'error');
+      return;
+    }
     setPaying(true);
     const createRes = await fetch('/api/budget/recharge-orders', {
       method: 'POST',
@@ -108,20 +119,18 @@ export default function AccountFundsView({ brandName, embedded }: Props) {
       body: JSON.stringify({ brandName, amount: rechargeAmount, note: '前台充值' }),
     });
     const created = await createRes.json();
+    setPaying(false);
     if (created.error) {
       toast(created.error, 'error');
-      setPaying(false);
       return;
     }
-    const payRes = await fetch(`/api/budget/recharge-orders/${created.order.id}/pay`, { method: 'POST' });
-    const paid = await payRes.json();
-    setPaying(false);
-    if (paid.error) {
-      toast(paid.error, 'error');
-      return;
-    }
-    toast('投放余额充值成功', 'success');
-    void load();
+    setPendingRecharge({
+      id: created.order.id,
+      brandName,
+      amount: rechargeAmount,
+      status: 'pending',
+      createdAt: created.order.createdAt ?? new Date().toISOString(),
+    });
   };
 
   if (!brandName || brandName === '__all__') {
@@ -175,7 +184,7 @@ export default function AccountFundsView({ brandName, embedded }: Props) {
             >
               <h3 className="text-sm font-semibold">充值</h3>
               <p className="text-xs" style={{ color: 'var(--neutral-text-03)' }}>
-                词元余额在 Agent 云 Token 工场充值，用于文章生成、GEO 分析等 AI 任务。
+                {TOKEN_ACCOUNT_HINT}
               </p>
               <a
                 href={AGENT_CLOUD_RECHARGE_URL}
@@ -223,8 +232,13 @@ export default function AccountFundsView({ brandName, embedded }: Props) {
             ))}
           </div>
 
-          <div className="geo-card p-4">
-            <h3 className="text-sm font-semibold mb-3">充值投放余额</h3>
+          <div className="geo-card p-4 space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold">充值投放余额</h3>
+              <p className="text-xs mt-1" style={{ color: 'var(--neutral-text-03)' }}>
+                {DELIVERY_ACCOUNT_HINT}
+              </p>
+            </div>
             <div className="flex gap-3 items-end flex-wrap">
               <div className="flex-1 min-w-[140px]">
                 <label className="geo-label block mb-1">充值金额（元）</label>
@@ -241,9 +255,12 @@ export default function AccountFundsView({ brandName, embedded }: Props) {
                 onClick={() => void rechargeDelivery()}
                 disabled={paying}
               >
-                {paying ? '支付中…' : '确认充值'}
+                {paying ? '创建订单…' : '确认充值'}
               </button>
             </div>
+            <p className="text-[10px]" style={{ color: 'var(--neutral-text-03)' }}>
+              确认后将生成支付二维码；请本人扫码付款，勿代他人支付。付款前请核对商品名称与金额。
+            </p>
           </div>
 
           {rechargeOrders.length > 0 && (
@@ -287,6 +304,17 @@ export default function AccountFundsView({ brandName, embedded }: Props) {
             </table>
           </div>
         </div>
+      )}
+
+      {pendingRecharge && (
+        <DeliveryRechargeModal
+          order={pendingRecharge}
+          onClose={() => setPendingRecharge(null)}
+          onPaid={() => {
+            toast('投放余额充值成功', 'success');
+            void load();
+          }}
+        />
       )}
     </div>
   );

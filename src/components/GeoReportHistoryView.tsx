@@ -390,7 +390,7 @@ export default function GeoReportHistoryView({
                       onClick={() => onNavigate('create_order', `geo:${selected.id}`)}
                     >
                       <FileText className="w-3.5 h-3.5" />
-                      按报告发服务商任务包
+                      按报告发付费信源
                     </button>
                   )}
                 </div>
@@ -567,15 +567,8 @@ export default function GeoReportHistoryView({
                             }
                             onRegenerateAsset={
                               onNavigate
-                                ? (assetType) => {
-                                    const nav = buildLoopNavigateHint('assets', {
-                                      brandName: selected!.brandName,
-                                    });
-                                    const url = new URL(window.location.href);
-                                    url.searchParams.set('geoAssetType', assetType);
-                                    window.history.replaceState({}, '', url);
-                                    if (nav.urlParams) applyLoopNavigateUrl(nav.urlParams);
-                                    onNavigate(nav.view, nav.hint);
+                                ? () => {
+                                    onNavigate('site_optimize');
                                   }
                                 : undefined
                             }
@@ -600,15 +593,9 @@ export default function GeoReportHistoryView({
                           <button
                             type="button"
                             className="geo-btn-secondary geo-btn-xs w-full"
-                            onClick={() => {
-                              const nav = buildLoopNavigateHint('assets', {
-                                brandName: selected.brandName,
-                              });
-                              if (nav.urlParams) applyLoopNavigateUrl(nav.urlParams);
-                              onNavigate(nav.view, nav.hint);
-                            }}
+                            onClick={() => onNavigate('site_optimize')}
                           >
-                            网站 GEO 资产
+                            自有网站优化
                           </button>
                           <button
                             type="button"

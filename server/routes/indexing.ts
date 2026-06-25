@@ -8,6 +8,7 @@ import {
   listIndexResults,
   getIndexPlan,
   analyzeIndexingPlanGap,
+  updateIndexPlan,
 } from '../services/indexing.service.js';
 
 export function registerIndexingRoutes(app: Express) {
@@ -65,6 +66,37 @@ export function registerIndexingRoutes(app: Express) {
     const brandName = planRow.brand.name;
     const plan = await runIndexPlan(req.params.id, brandName);
     res.json(plan);
+  });
+
+  app.patch('/api/indexing/plans/:id', async (req, res) => {
+    const planRow = await ensureIndexPlanScope(req, res, req.params.id);
+    if (!planRow) return;
+    const brandName = planRow.brand.name;
+    const {
+      name,
+      platforms,
+      keywordIds,
+      queryAt,
+      scheduleFrequency,
+      scheduleRunTime,
+      scheduleWeekday,
+      scheduleMonthDay,
+    } = req.body ?? {};
+    try {
+      const plan = await updateIndexPlan(req.params.id, brandName, {
+        name,
+        platforms,
+        keywordIds,
+        queryAt,
+        scheduleFrequency,
+        scheduleRunTime,
+        scheduleWeekday,
+        scheduleMonthDay,
+      });
+      res.json({ plan });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '更新失败' });
+    }
   });
 
   app.get('/api/indexing/plans/:id/gap-analysis', async (req, res) => {

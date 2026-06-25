@@ -5,6 +5,7 @@ import OverlayDrawer from '../common/OverlayDrawer';
 export function ArticleDeliveryDetailShell({
   onBack,
   backLabel = '返回文章交付',
+  layout = 'drawer',
   actions,
   title,
   badges,
@@ -15,6 +16,8 @@ export function ArticleDeliveryDetailShell({
 }: {
   onBack: () => void;
   backLabel?: string;
+  /** drawer：侧滑交付信息；inline：主内容 + 侧栏同屏（发单管理执行详情） */
+  layout?: 'drawer' | 'inline';
   actions?: ReactNode;
   title: string;
   badges: ReactNode;
@@ -26,11 +29,11 @@ export function ArticleDeliveryDetailShell({
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    if (sidebar) setSidebarOpen(true);
-  }, [sidebar]);
+    if (layout === 'drawer' && sidebar) setSidebarOpen(true);
+  }, [sidebar, layout]);
 
-  return (
-    <div className="geo-page-content pb-8">
+  const headerBlock = (
+    <>
       <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <button
           type="button"
@@ -41,7 +44,7 @@ export function ArticleDeliveryDetailShell({
           {backLabel}
         </button>
         <div className="flex flex-wrap gap-2">
-          {sidebar ? (
+          {layout === 'drawer' && sidebar ? (
             <button
               type="button"
               className="geo-btn-secondary geo-btn-sm inline-flex items-center gap-1.5"
@@ -60,6 +63,24 @@ export function ArticleDeliveryDetailShell({
         <div className="flex flex-wrap items-center gap-2">{badges}</div>
         <p className="text-xs text-[var(--neutral-text-03)]">{metaLine}</p>
       </div>
+    </>
+  );
+
+  if (layout === 'inline') {
+    return (
+      <div className="px-6 pb-8">
+        {headerBlock}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+          <div className="lg:col-span-2 geo-card p-5 min-h-[320px]">{mainContent}</div>
+          {sidebar ? <div className="space-y-4">{sidebar}</div> : null}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="geo-page-content pb-8">
+      {headerBlock}
 
       <div className="geo-card p-5 min-h-[320px]">{mainContent}</div>
 

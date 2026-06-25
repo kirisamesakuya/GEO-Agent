@@ -23,6 +23,13 @@ import HermesWorkingOverlay from './common/HermesWorkingOverlay';
 import HermesPublishConfirmDialog, {
   type HermesPublishConfirmPayload,
 } from './agent/HermesPublishConfirmDialog';
+import PublishPlatformUnavailableDialog from './agent/PublishPlatformUnavailableDialog';
+import {
+  isHermesAutoPublishSupported,
+  partitionPublishPlatforms,
+} from '../lib/hermes-auto-publish-gate';
+import { buildManualPublishCopyText } from '../lib/manual-publish-copy';
+import type { PublishUnavailableDialogState } from '../lib/publish-unavailable-dialog-state';
 import RightPreviewPanel from './common/RightPreviewPanel';
 import {
   ChevronDown,
@@ -108,6 +115,13 @@ export default function ContentLibraryView({
     payload: HermesPublishConfirmPayload | null;
     onlyItemId?: string;
   }>({ open: false, payload: null });
+  const [publishUnavailableDialog, setPublishUnavailableDialog] =
+    useState<PublishUnavailableDialogState | null>(null);
+  const [pendingManualDialog, setPendingManualDialog] =
+    useState<PublishUnavailableDialogState | null>(null);
+  const [activePublishGroups, setActivePublishGroups] = useState<
+    Array<{ batchId: string; platform: string; itemIds: string[] }> | null
+  >(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [bulkWorking, setBulkWorking] = useState(false);
   /** 可同时展开多个批次文件夹 */
@@ -506,7 +520,43 @@ export default function ContentLibraryView({
     }
 
     const platformLabels = [...new Set(groups.map((g) => g.platform))];
-    const accountLabels = groups.map((group) => {
+    const { supported, unsupported } = partitionPublishPlatforms(platformLabels);
+
+    if (unsupported.length > 0 && supported.length === 0) {
+      setPublishUnavailableDialog({
+        unsupported,
+        copyText: buildManualPublishCopyText({
+          groups,
+          loadedBatches,
+          platforms: unsupported,
+        }),
+      });
+      return;
+    }
+
+    const effectiveGroups =
+      unsupported.length > 0
+        ? groups.filter((group) => isHermesAutoPublishSupported(group.platform))
+        : groups;
+
+    if (unsupported.length > 0) {
+      setPendingManualDialog({
+        unsupported,
+        autoPublished: supported,
+        copyText: buildManualPublishCopyText({
+          groups,
+          loadedBatches,
+          platforms: unsupported,
+        }),
+      });
+    } else {
+      setPendingManualDialog(null);
+    }
+
+    setActivePublishGroups(effectiveGroups);
+
+    const effectivePlatformLabels = [...new Set(effectiveGroups.map((g) => g.platform))];
+    const accountLabels = effectiveGroups.map((group) => {
       const matching = accounts.filter(
         (a) => platformMatches(group.platform, a.platform) && isPublishReady(a.status)
       );
@@ -522,15 +572,15 @@ export default function ContentLibraryView({
       open: true,
       onlyItemId,
       payload: {
-        articleCount: allItemIds.length,
-        platformLabels,
+        articleCount: effectiveGroups.reduce((sum, g) => sum + g.itemIds.length, 0),
+        platformLabels: effectivePlatformLabels,
         accountLabel: accountLabels.join('；'),
       },
     });
   };
 
   const publishChecked = async (onlyItemId?: string) => {
-    const groups = resolvePublishGroups(onlyItemId);
+    const groups = activePublishGroups ?? resolvePublishGroups(onlyItemId);
 
     if (groups.length === 0) {
       toast('请至少勾选一篇要发布的文章', 'error');
@@ -628,6 +678,10 @@ export default function ContentLibraryView({
           `Hermes 发布完成（${published} 篇）${linkHint}${errors.length ? `；${errors.length} 项需关注` : ''}`,
           errors.length ? 'info' : 'success'
         );
+        if (pendingManualDialog) {
+          setPublishUnavailableDialog(pendingManualDialog);
+          setPendingManualDialog(null);
+        }
         void loadBatches();
         onArticlesChanged?.();
         if (selectedBatch) await fetchBatchDetail(selectedBatch.id);
@@ -636,6 +690,7 @@ export default function ContentLibraryView({
       }
     } finally {
       setPublishing(false);
+      setActivePublishGroups(null);
       setHermesWork({ open: false, progress: 0, message: '' });
     }
   };
@@ -864,6 +919,12 @@ export default function ContentLibraryView({
             setPublishConfirm({ open: false, payload: null });
             void publishChecked(onlyItemId);
           }}
+        />
+        <PublishPlatformUnavailableDialog
+          open={Boolean(publishUnavailableDialog?.unsupported.length)}
+          state={publishUnavailableDialog}
+          brandName={brandName}
+          onClose={() => setPublishUnavailableDialog(null)}
         />
         <div className="grid grid-cols-1 items-start">
           <main className="min-w-0 min-h-0 flex flex-col">
@@ -1215,6 +1276,12 @@ export default function ContentLibraryView({
         setPublishConfirm({ open: false, payload: null });
         void publishChecked(onlyItemId);
       }}
+    />
+    <PublishPlatformUnavailableDialog
+      open={Boolean(publishUnavailableDialog?.unsupported.length)}
+      state={publishUnavailableDialog}
+      brandName={brandName}
+      onClose={() => setPublishUnavailableDialog(null)}
     />
     <div className="flex items-start min-w-0">
       {/* 文章结果：生成批次 + 单篇文章 */}

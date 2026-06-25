@@ -86,14 +86,22 @@ export function filterArticleDeliveryListRows(rows: ArticleDeliveryRow[]): Artic
 
 export const ARTICLE_DELIVERY_SOURCE_OPTIONS: { id: ArticleDeliverySourceFilter; label: string }[] = [
   { id: 'all', label: '全部来源' },
-  { id: 'ai_generated', label: '自有内容（Hermes）' },
-  { id: 'manual_order', label: '服务商交付' },
+  { id: 'ai_generated', label: '免费信源（Hermes）' },
+  { id: 'manual_order', label: '付费信源' },
 ];
 
 /** 列表快捷来源筛选（不含未开放能力） */
 export const ARTICLE_DELIVERY_QUICK_SOURCE_FILTERS: ArticleDeliverySource[] = [
   'ai_generated',
   'manual_order',
+];
+
+export const ARTICLE_DELIVERY_QUICK_SOURCE_TABS: {
+  id: ArticleDeliverySource;
+  label: string;
+}[] = [
+  { id: 'ai_generated', label: '免费信源' },
+  { id: 'manual_order', label: '付费信源' },
 ];
 
 export const ARTICLE_DELIVERY_PLATFORM_OPTIONS = [
@@ -110,12 +118,12 @@ export function buildArticleDeliveryPlatformOptions(labels: string[]) {
 }
 
 export const ARTICLE_DELIVERY_SOURCE_LABEL: Record<ArticleDeliverySource, string> = {
-  ai_generated: '自有·Hermes',
-  manual_order: '服务商',
+  ai_generated: '免费信源',
+  manual_order: '付费信源',
   imported: '导入',
 };
 
-/** 内容交付渠道 Tab：自有 Hermes vs 服务商接单 */
+/** 内容交付渠道 Tab：免费信源 vs 付费信源 */
 export type ArticleDeliveryChannelFilter = 'all' | 'self' | 'provider';
 
 export const ARTICLE_DELIVERY_CHANNEL_TABS: {
@@ -123,9 +131,9 @@ export const ARTICLE_DELIVERY_CHANNEL_TABS: {
   label: string;
   desc: string;
 }[] = [
-  { id: 'all', label: '全部', desc: '自有内容与服务商订单' },
-  { id: 'self', label: '自有内容', desc: 'AI 生成 · Hermes 发布' },
-  { id: 'provider', label: '服务商交付', desc: '接单方写作/发布 · 需验收' },
+  { id: 'all', label: '全部', desc: '免费信源与付费信源订单' },
+  { id: 'self', label: '免费信源', desc: 'AI 生成 · Hermes 发布' },
+  { id: 'provider', label: '付费信源', desc: '接单方写作/发布 · 需验收' },
 ];
 
 export function parseDeliveryChannelFromUrl(): ArticleDeliveryChannelFilter {
@@ -222,6 +230,8 @@ export function mapManualOrderStage(status: string): ArticleDeliveryStage {
   switch (status) {
     case 'published':
       return 'pending_provider';
+    case 'matched':
+      return 'writing';
     case 'in_progress':
       return 'writing';
     case 'draft_review':

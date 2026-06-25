@@ -142,7 +142,7 @@ export default function ArticleGenerationSummaryPanel({
               </button>
               {onOpenProviderOrder && (
                 <button type="button" className="geo-btn-secondary geo-btn-sm" onClick={onOpenProviderOrder}>
-                  改为服务商发单
+                  改为付费信源发单
                 </button>
               )}
             </div>

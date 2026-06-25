@@ -28,11 +28,24 @@ const DEFAULT_SKILL_ROUTE_ENTRIES: SkillRouteEntry[] = [
   { taskType: 'brand_extract', skillName: 'geo-brand-mentions', executor: 'nous_hermes', enabled: true, priority: 1 },
   { taskType: 'index_sampling', skillName: 'geo-platform-ranking-sampling', executor: 'nous_hermes', enabled: true, priority: 1 },
   { taskType: 'keyword_mining', skillName: 'geo-keyword-mining-web', executor: 'nous_hermes', enabled: true, priority: 1 },
-  { taskType: 'hermes_publish', skillName: 'hermes.publish.auto', executor: 'hermes_gateway', enabled: true, priority: 2 },
-  { taskType: 'account_verify', skillName: 'geo.account.verify', executor: 'direct_model', enabled: true, priority: 1 },
+  { taskType: 'hermes_publish', skillName: 'hermes-publish-web', executor: 'nous_hermes', enabled: true, priority: 1 },
+  { taskType: 'account_verify', skillName: 'account-verify-web', executor: 'nous_hermes', enabled: true, priority: 1 },
 ];
 
 const DEFAULT_SKILL_ROUTES = JSON.stringify(DEFAULT_SKILL_ROUTE_ENTRIES);
+
+const SKILL_ROUTE_UPGRADES: Record<string, Partial<SkillRouteEntry>> = {
+  hermes_publish: {
+    skillName: 'hermes-publish-web',
+    executor: 'nous_hermes',
+    enabled: true,
+  },
+  account_verify: {
+    skillName: 'account-verify-web',
+    executor: 'nous_hermes',
+    enabled: true,
+  },
+};
 
 async function mergeSkillRoutes() {
   const row = await prisma.systemConfig.findUnique({ where: { key: 'skill_routes' } });
@@ -46,6 +59,20 @@ async function mergeSkillRoutes() {
     for (const route of DEFAULT_SKILL_ROUTE_ENTRIES) {
       if (!byType.has(route.taskType)) {
         byType.set(route.taskType, route);
+        changed = true;
+      }
+    }
+
+    for (const [taskType, patch] of Object.entries(SKILL_ROUTE_UPGRADES)) {
+      const current = byType.get(taskType);
+      if (!current) continue;
+      const next = { ...current, ...patch };
+      if (
+        next.skillName !== current.skillName ||
+        next.executor !== current.executor ||
+        next.enabled !== current.enabled
+      ) {
+        byType.set(taskType, next);
         changed = true;
       }
     }
@@ -92,6 +119,9 @@ export async function ensureRuntimeDefaults() {
   await mergeSkillRoutes();
   await ensureMediaPlatformCatalogDefaults();
   await ensureAiMonitorPlatformCatalogDefaults();
+
+  const { seedMediaPriceBands } = await import('./seed-media-price-bands.js');
+  await seedMediaPriceBands(prisma);
 
   if (process.env.NODE_ENV !== 'production' || process.env.SEED_DEMO_DATA === 'true') {
     const { ensureDemoMediaPlatforms } = await import('./demo-media-platforms.js');

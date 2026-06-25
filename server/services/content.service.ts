@@ -249,23 +249,35 @@ export async function deleteContentItems(input: {
 }
 
 /**
- * 内容库发布：走 Hermes 任务（Mock 阶段强制 direct_model），不创建发布计划/发布记录接口链路。
+ * 内容库 Hermes 发布：默认走本机 Hermes（nous_hermes）；仅 GEO_SKILL_MOCK_DEMO + mockHermes 时模拟。
  */
 export async function enqueueHermesPublishFromLibrary(input: {
   brandName: string;
   batchId: string;
   contentItemIds: string[];
   accountBindingId: string;
+  mockHermes?: boolean;
 }) {
   const { findBrandRow } = await import('./brand.service.js');
   const { resolvePublishBindingForBrand } = await import('./ad-account.service.js');
-  const { createAndEnqueueTask } = await import('../agent/worker.js');
+  const {
+    buildHermesPublishInput,
+    createHermesPublishTask,
+    allowsHermesPublishMock,
+  } = await import('../lib/hermes-publish.js');
 
   const brand = await findBrandRow(input.brandName);
   if (!brand) throw new Error('品牌不存在');
 
   const batch = await getContentBatch(input.batchId);
   if (!batch || batch.brandName !== brand.name) throw new Error('内容批次不存在');
+
+  const { buildHermesAutoPublishBlockedMessage, isHermesAutoPublishSupported } = await import(
+    '../../lib/publish-platform-capability.js'
+  );
+  if (!isHermesAutoPublishSupported(batch.platform)) {
+    throw new Error(buildHermesAutoPublishBlockedMessage([batch.platform]));
+  }
 
   const selectedItems = input.contentItemIds.length
     ? batch.items.filter((item) => input.contentItemIds.includes(item.id))
@@ -274,27 +286,27 @@ export async function enqueueHermesPublishFromLibrary(input: {
 
   const account = await resolvePublishBindingForBrand(input.brandName, input.accountBindingId);
 
-  const task = await createAndEnqueueTask({
-    type: 'hermes_publish',
+  const publishInput = buildHermesPublishInput({
+    brandName: brand.name,
+    batchId: batch.id,
+    platform: batch.platform,
+    account,
+    items: selectedItems,
+    extra: input.mockHermes ? { mockHermes: true } : undefined,
+  });
+
+  const task = await createHermesPublishTask({
     title: `${brand.name} · ${batch.platform} 内容库 Hermes 发布（${selectedItems.length} 篇）`,
     brandName: brand.name,
-    executor: 'direct_model',
-    input: {
-      contentBatchId: batch.id,
-      contentItemIds: selectedItems.map((i) => i.id),
-      contentTitles: selectedItems.map((i) => i.title),
-      targetPlatform: batch.platform,
-      accountBindingId: account.id,
-      accountName: account.accountName,
-      userConfirmed: true,
-      mockHermes: true,
-    },
+    input: publishInput,
     businessRef: batch.id,
   });
 
+  const mock = allowsHermesPublishMock(publishInput);
+
   return {
     task,
-    mock: true,
+    mock,
     itemCount: selectedItems.length,
     platform: batch.platform,
     accountName: account.accountName,

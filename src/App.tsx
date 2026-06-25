@@ -23,6 +23,9 @@ import {
   parseIndexingGapHint,
 } from './lib/article-effect-nav';
 import CreateWebsiteView from './components/CreateWebsiteView';
+import QuoteCompareView from './components/paid-source/QuoteCompareView';
+import QuoteDetailView from './components/paid-source/QuoteDetailView';
+import SiteOptimizeView from './components/site-optimize/SiteOptimizeView';
 import OrderDeliveryView from './components/OrderDeliveryView';
 import BrandCenterView from './components/BrandCenterView';
 import BrandListView from './components/BrandListView';
@@ -93,6 +96,7 @@ import {
 import TeamSettingsView from './components/TeamSettingsView';
 import NotificationsView from './components/NotificationsView';
 import ShareGeoReportView from './components/ShareGeoReportView';
+import BudgetRechargePayView from './components/funds/BudgetRechargePayView';
 import ProviderApp from './apps/provider/ProviderApp';
 import { isProspectBrandScope } from './lib/brand-scope';
 import PlatformApp from './apps/platform/PlatformApp';
@@ -160,12 +164,12 @@ function resolveInitialRoute(): { view: ViewType; hint?: string } {
     if (indexGap) {
       return { view: 'create_order', hint: buildIndexingGapHint(indexGap.planId, indexGap.resultIds) };
     }
-    return { view: 'create_order', hint: 'ai' };
+    return { view: 'create_order', hint: 'paid_quote' };
   }
   if (v === 'delivery_plan') {
     const planId = params.get('campaignPlanId');
     if (planId) return { view: 'create_order', hint: `plan:${planId}` };
-    return { view: 'create_order', hint: 'ai' };
+    return { view: 'create_order', hint: 'paid_quote' };
   }
   const allowed: ViewType[] = [
     'workbench', 'keyword_library', 'knowledge_base', 'indexing_rank',
@@ -184,9 +188,14 @@ function resolveInitialRoute(): { view: ViewType; hint?: string } {
 }
 
 export default function App() {
-  const shareReportId = new URLSearchParams(window.location.search).get('shareReport');
+  const urlParams = new URLSearchParams(window.location.search);
+  const shareReportId = urlParams.get('shareReport');
   if (shareReportId) {
     return <ShareGeoReportView reportId={shareReportId} />;
+  }
+  const payRechargeId = urlParams.get('payRecharge');
+  if (payRechargeId) {
+    return <BudgetRechargePayView orderId={payRechargeId} />;
   }
   const appMode = resolveAppMode();
   if (appMode === 'provider') return <ProviderApp />;
@@ -255,6 +264,10 @@ function PublisherMain() {
     if (contentDeliveryNorm) {
       targetView = contentDeliveryNorm.view;
     }
+    if (targetView === 'geo_analysis' && targetHint === 'assets') {
+      targetView = 'site_optimize';
+      targetHint = undefined;
+    }
     if (!CUSTOM_PUBLISH_ENABLED && targetView === 'create_order') {
       const resolved = resolveCreateOrderEntry(targetHint);
       targetView = resolved.view;
@@ -313,7 +326,10 @@ function PublisherMain() {
       url.searchParams.delete('reportId');
       url.searchParams.delete('contentTab');
       url.searchParams.delete('orderTab');
-      const deliveryTab = contentDeliveryTabFromHint(targetHint);
+      const deliveryTab =
+        targetHint === 'order_manage' || targetHint === 'article' || targetHint === 'website'
+          ? targetHint
+          : contentDeliveryTabFromHint(targetHint) || parseContentDeliveryTabFromUrl();
       url.searchParams.set('deliveryTab', deliveryTab);
       const dispatchStageFromHint = orderDispatchStageFromHint(targetHint);
       const articleStageFromHint = articleDeliveryStatusFromHint(targetHint);
@@ -327,7 +343,11 @@ function PublisherMain() {
         url.searchParams.delete('articleStage');
         url.searchParams.delete('orderDispatchStage');
       }
-      if (dispatchStageFromHint || articleStageFromHint) {
+      const isTabHint =
+        targetHint === 'order_manage' ||
+        targetHint === 'article' ||
+        targetHint === 'website';
+      if (isTabHint) {
         url.searchParams.delete('hint');
       } else if (
         targetHint?.startsWith('content:') ||
@@ -521,10 +541,58 @@ function PublisherMain() {
           />
         );
       case 'create_website':
+      case 'new_site_build':
         return (
           <CreateWebsiteView
             brandName={effectiveBrand}
             onBrandChange={handleBrandChange}
+            onNavigate={navigate}
+          />
+        );
+      case 'site_optimize':
+        return (
+          <SiteOptimizeView
+            brandName={effectiveBrand}
+            onBrandChange={handleBrandChange}
+            onNavigate={navigate}
+          />
+        );
+      case 'paid_source_tasks':
+        return (
+          <ContentDeliveryView
+            brandName={effectiveBrand}
+            onBrandChange={handleBrandChange}
+            onNavigate={navigate}
+            initialTab="order_manage"
+          />
+        );
+      case 'quote_compare':
+        return (
+          <ContentDeliveryView
+            brandName={effectiveBrand}
+            onBrandChange={handleBrandChange}
+            onNavigate={navigate}
+            initialTab="order_manage"
+            viewHint={viewHint}
+          />
+        );
+      case 'quote_detail':
+        return (
+          <QuoteDetailView
+            brandName={effectiveBrand}
+            onBrandChange={handleBrandChange}
+            orderHint={viewHint}
+            onNavigate={navigate}
+          />
+        );
+      case 'free_source_publish':
+        return (
+          <GenerateArticleView
+            brandName={effectiveBrand}
+            onBrandChange={handleBrandChange}
+            onTaskStatusChange={setHeaderTaskStatus}
+            initialMode="quick"
+            audience="publisher"
             onNavigate={navigate}
           />
         );
@@ -545,9 +613,12 @@ function PublisherMain() {
           : undefined;
 
         if (deliveryDetail?.kind === 'order' && taskOrderId && activeView === 'content_delivery') {
-          return (
-            <ArticleDeliveryOrderDetailView orderId={taskOrderId} onNavigate={navigate} />
-          );
+          const deliveryTab = parseContentDeliveryTabFromUrl();
+          if (deliveryTab !== 'order_manage') {
+            return (
+              <ArticleDeliveryOrderDetailView orderId={taskOrderId} onNavigate={navigate} />
+            );
+          }
         }
         if (deliveryDetail?.kind === 'content' && contentItemId) {
           return (
@@ -585,17 +656,12 @@ function PublisherMain() {
             />
           );
         }
-        if (taskOrderId && activeView === 'content_delivery') {
-          return (
-            <ArticleDeliveryOrderDetailView orderId={taskOrderId} onNavigate={navigate} />
-          );
-        }
-        if (taskOrderId) {
+        if (taskOrderId && activeView !== 'content_delivery') {
           return (
             <TaskOrderDetailView
               orderId={taskOrderId}
               onNavigate={navigate}
-              onBack={() => navigate('content_delivery')}
+              onBack={() => navigate('content_delivery', 'article')}
             />
           );
         }
@@ -634,6 +700,7 @@ function PublisherMain() {
             onNavigate={navigate}
             initialTab={deliveryTab}
             initialProjectId={projectId}
+            viewHint={hintFromUrl ?? viewHint ?? undefined}
           />
         );
       }
@@ -797,6 +864,7 @@ function PublisherMain() {
 
       <Sidebar
         activeView={activeView}
+        viewHint={viewHint}
         onViewChange={(view, hint) => navigate(view, hint)}
         onNewTaskClick={() => setShowNewTaskModal(true)}
         open={sidebarOpen}

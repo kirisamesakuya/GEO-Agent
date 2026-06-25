@@ -1,4 +1,10 @@
 /** 三端产品名称（侧栏、模式切换、报告页脚等） */
-export const PUBLISHER_APP_NAME = 'GEO AI智联项目平台';
-export const PROVIDER_APP_NAME = 'GEO AI智联资源平台';
+export const PUBLISHER_APP_BRAND_PREFIX = '汇智';
+export const PUBLISHER_APP_PRODUCT_NAME = 'GEO-AI智联项目平台';
+export const PUBLISHER_APP_NAME = `${PUBLISHER_APP_BRAND_PREFIX}${PUBLISHER_APP_PRODUCT_NAME}`;
+
+export const PROVIDER_APP_BRAND_PREFIX = '汇智';
+export const PROVIDER_APP_PRODUCT_NAME = 'AIGC媒体收单平台';
+export const PROVIDER_APP_NAME = `${PROVIDER_APP_BRAND_PREFIX}${PROVIDER_APP_PRODUCT_NAME}`;
+
 export const PLATFORM_APP_NAME = 'GEO 投放助手';

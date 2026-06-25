@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1440">
+<title>GEO 投放助手 · 高保真页面集</title>
+<style>
+/* ===== 项目设计 Token（来自 src/index.css）===== */
+:root {
+  --color-primary: #1d4ed8; --color-primary-hover: #1e40af;
+  --color-accent: #0d9488; --color-accent-hover: #0f766e;
+  --color-accent-light: #f0fdfa;
+  --color-title: #0f172a; --color-text: #334155;
+  --color-text-secondary: #64748b; --color-text-placeholder: #94a3b8;
+  --neutral-text-01: #000; --neutral-text-02: #666;
+  --neutral-text-03: #999; --neutral-text-04: #b3b3b3; --neutral-text-05: #ccc;
+  --neutral-divider-01: #e5e5e5; --neutral-divider-02: #eaeaea; --neutral-divider-03: #f3f3f3;
+  --neutral-bg-01: #eaeaea; --neutral-bg-02: #f3f3f3; --neutral-bg-03: #f9f9f9;
+  --color-border: #eaeaea; --color-bg: #f9f9f9; --color-bg-card: #fff;
+  --color-success: #059669; --color-success-bg: #ecfdf5;
+  --color-warning: #d97706; --color-warning-bg: #fffbeb;
+  --color-danger: #dc2626; --color-danger-bg: #fef2f2;
+  --color-info: #2563eb; --color-info-bg: #eff6ff;
+  --font-family: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px;
+  --layout-sidebar-width: 240px; --layout-header-height: 56px;
+  --sp-xs: 4px; --sp-sm: 8px; --sp-md: 12px; --sp-base: 16px; --sp-lg: 24px; --sp-xl: 32px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font-family);font-size:14px;line-height:20px;color:var(--color-text);background:var(--color-bg)}
+/* === 组件类（对齐项目代码）=== */
+.geo-card{background:var(--color-bg-card);border:1px solid var(--neutral-divider-02);border-radius:var(--radius-lg)}
+.geo-btn-primary{display:inline-flex;align-items:center;justify-content:center;background:var(--color-accent);color:#fff;border:1px solid transparent;border-radius:var(--radius-md);font-size:14px;line-height:20px;padding:10px 20px;min-height:40px;cursor:pointer;font-family:inherit;transition:background .2s}
+.geo-btn-primary:hover{background:var(--color-accent-hover)}
+.geo-btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.geo-btn-secondary{display:inline-flex;align-items:center;justify-content:center;background:#fff;color:var(--color-text);border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:14px;line-height:20px;padding:10px 20px;min-height:40px;cursor:pointer;font-family:inherit;transition:all .2s}
+.geo-btn-secondary:hover{border-color:var(--neutral-divider-01);background:var(--neutral-bg-01)}
+.geo-btn-sm{min-height:36px;padding:8px 18px;font-size:13px}
+.geo-btn-xs{min-height:32px;padding:6px 16px;font-size:12px}
+.geo-btn-danger{display:inline-flex;align-items:center;justify-content:center;background:var(--color-danger);color:#fff;border:none;border-radius:var(--radius-md);font-size:14px;padding:10px 20px;min-height:40px;cursor:pointer;font-family:inherit}
+.geo-nav-active{background:var(--color-primary);color:#fff;border-radius:var(--radius-md)}
+.geo-nav-item{color:var(--neutral-text-02);transition:background .15s}
+.geo-nav-item:hover{background:var(--neutral-bg-01)}
+.geo-input{width:100%;padding:8px 12px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:14px;font-family:inherit;color:var(--color-text);background:#fff;outline:none;transition:border-color .15s}
+.geo-input:focus{border-color:var(--color-accent);box-shadow:0 0 0 2px var(--color-accent-light)}
+.geo-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500}
+.geo-badge-accent{background:var(--color-accent-light);color:var(--color-accent)}
+.geo-badge-warning{background:var(--color-warning-bg);color:var(--color-warning)}
+.geo-badge-info{background:var(--color-info-bg);color:var(--color-info)}
+.geo-badge-success{background:var(--color-success-bg);color:var(--color-success)}
+.geo-badge-muted{background:var(--neutral-bg-02);color:var(--neutral-text-03)}
+/* === 壳层布局 === */
+.app-shell{display:flex;min-height:100vh}
+.sidebar{width:var(--layout-sidebar-width);background:var(--neutral-bg-03);border-right:1px solid var(--neutral-divider-02);position:fixed;top:0;left:0;bottom:0;z-index:20;display:flex;flex-direction:column}
+.sidebar-brand{display:flex;align-items:center;gap:10px;padding:0 16px;height:var(--layout-header-height);border-bottom:1px solid var(--neutral-divider-02);flex-shrink:0}
+.sidebar-logo{width:32px;height:32px;background:linear-gradient(135deg,var(--color-primary),var(--color-accent));border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:16px}
+.sidebar-brand-name{font-size:13px;font-weight:700;color:var(--neutral-text-01)}
+.sidebar-nav{flex:1;padding:8px 12px;overflow-y:auto}
+.sidebar-nav button{width:100%;display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--radius-md);font-size:13px;cursor:pointer;border:none;background:none;font-family:inherit;text-align:left;min-height:36px}
+.sidebar-section-label{padding:8px 12px 4px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--neutral-text-04)}
+.sidebar-footer{border-top:1px solid var(--neutral-divider-02);padding:12px 16px;font-size:11px;color:var(--neutral-text-03);flex-shrink:0}
+.header{height:var(--layout-header-height);position:fixed;top:0;left:var(--layout-sidebar-width);right:0;z-index:10;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--neutral-divider-02);display:flex;align-items:center;justify-content:space-between;padding:0 24px}
+.header-left{display:flex;align-items:center;gap:12px}
+.header-title{font-size:18px;font-weight:700;color:var(--neutral-text-01)}
+.header-brand{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--neutral-text-02)}
+.header-brand-select{padding:4px 8px;border:1px solid var(--color-border);border-radius:6px;font-size:12px;color:var(--color-text);background:#fff;cursor:pointer;font-family:inherit}
+.header-right{display:flex;align-items:center;gap:12px}
+.header-avatar{width:32px;height:32px;border-radius:50%;background:var(--neutral-text-01);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px}
+.page-content{margin-left:var(--layout-sidebar-width);padding-top:var(--layout-header-height);min-height:100vh}
+.page-content-inner{padding:var(--sp-xl)}
+/* === 导航 Tab === */
+.nav-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.nav-tab{padding:6px 14px;border-radius:var(--radius-md);font-size:12px;cursor:pointer;border:1px solid var(--color-border);background:#fff;font-family:inherit;color:var(--color-text);transition:all .15s}
+.nav-tab.active{background:var(--color-primary);color:#fff;border-color:var(--color-primary)}
+/* === 表格 === */
+.data-table{width:100%;border-collapse:collapse;font-size:13px}
+.data-table th{padding:12px 16px;text-align:left;font-weight:600;font-size:12px;color:var(--neutral-text-01);background:var(--neutral-bg-02);border-bottom:1px solid var(--neutral-divider-02)}
+.data-table td{padding:12px 16px;border-bottom:1px solid var(--neutral-divider-02);vertical-align:middle}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tbody tr:hover{background:var(--neutral-bg-02)}
+/* === 工具 === */
+.section-title{font-size:16px;font-weight:600;color:var(--color-title);margin-bottom:12px}
+.form-section-title{font-size:14px;font-weight:600;color:var(--color-title);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--neutral-divider-02)}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-grid-full{grid-template-columns:1fr}
+.form-label{font-size:12px;color:var(--neutral-text-03);margin-bottom:4px;display:block}
+.chip-group{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:4px 12px;border-radius:var(--radius-md);font-size:12px;cursor:pointer;border:1px solid var(--color-border);background:#fff;color:var(--color-text);transition:all .15s}
+.chip.active{background:var(--color-primary);color:#fff;border-color:var(--color-primary)}
+.stat-card{background:var(--neutral-bg-02);border-radius:var(--radius-md);padding:12px 16px}
+.stat-label{font-size:11px;color:var(--neutral-text-03)}
+.stat-value{font-size:18px;font-weight:700;color:var(--color-title);margin-top:2px}
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.card-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.task-card{border:1px solid var(--neutral-divider-02);border-radius:var(--radius-xl);padding:16px;display:flex;flex-direction:column;gap:8px}
+.task-card-title{font-size:14px;font-weight:600;color:var(--color-title)}
+.task-card-status{font-size:12px;color:var(--color-accent)}
+.task-card-summary{font-size:12px;color:var(--neutral-text-03)}
+.task-card-action{font-size:12px;color:var(--color-accent);cursor:pointer;font-weight:500;background:none;border:none;text-align:left;padding:0;font-family:inherit}
+.progress-steps{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:16px 0}
+.progress-step{padding:6px 12px;border-radius:20px;font-size:12px;background:var(--neutral-bg-02);color:var(--neutral-text-03)}
+.progress-step.active{background:var(--color-accent);color:#fff}
+.progress-step.done{background:var(--color-success-bg);color:var(--color-success)}
+.progress-arrow{color:var(--neutral-text-04);font-size:12px}
+.mb-12{margin-bottom:12px}.mb-16{margin-bottom:16px}.mb-24{margin-bottom:24px}
+.gap-8{gap:8px}.gap-12{gap:12px}.gap-16{gap:16px}
+.flex-between{display:flex;justify-content:space-between;align-items:center}
+.text-accent{color:var(--color-accent)}.text-muted{color:var(--neutral-text-03)}
+.text-xs{font-size:12px}.text-sm{font-size:13px}.text-lg{font-size:16px}
+.font-bold{font-weight:700}.font-semibold{font-weight:600}
+.btn-link{background:none;border:none;color:var(--color-accent);font-size:12px;cursor:pointer;font-family:inherit;padding:0}
+/* === 页面切换导航 === */
+.page-nav{position:fixed;bottom:16px;right:16px;z-index:50;background:var(--color-bg-card);border:1px solid var(--neutral-divider-02);border-radius:var(--radius-lg);padding:8px;display:flex;flex-direction:column;gap:4px;max-height:400px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.page-nav button{text-align:left;padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer;border:none;background:none;font-family:inherit;white-space:nowrap}
+.page-nav button:hover{background:var(--neutral-bg-02)}
+.page-nav button.active{background:var(--color-primary);color:#fff}
+/* 隐藏所有页面，只显示 active */
+.page-panel{display:none}
+.page-panel.active{display:block}
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <!-- ====== 统一 Sidebar ====== -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="sidebar-logo">G</div>
+      <span class="sidebar-brand-name">GEO 投放助手</span>
+    </div>
+    <div class="sidebar-nav">
+      <button class="geo-nav-active" onclick="switchPage('workbench')">🏠 工作台</button>
+      <button class="geo-nav-item" onclick="switchPage('workbench')">🏢 品牌管理</button>
+      <button class="geo-nav-item" onclick="switchPage('workbench')">📊 GEO 分析</button>
+      <button class="geo-nav-item" onclick="switchPage('workbench')">📡 GEO 监控</button>
+      <div class="sidebar-section-label">业务发单</div>
+      <button class="geo-nav-item" onclick="switchPage('publish-form')">📝 付费信源发单</button>
+      <button class="geo-nav-item" onclick="switchPage('workbench')">📄 免费信源发单</button>
+      <button class="geo-nav-item" onclick="switchPage('site-optimize')">🔧 自有网站优化</button>
+      <button class="geo-nav-item" onclick="switchPage('new-site')">🏗 新建网站</button>
+      <button class="geo-nav-item" onclick="switchPage('workbench')">📦 内容交付</button>
+      <button class="geo-nav-item">📋 Hermes 日志</button>
+      <div class="sidebar-section-label">账户资金</div>
+      <button class="geo-nav-item">👤 发布账号</button>
+      <button class="geo-nav-item">💰 账户余额</button>
+    </div>
+    <div class="sidebar-footer">发布端 · v2.2</div>
+  </aside>
+
+  <!-- ====== 统一 Header ====== -->
+  <header class="header">
+    <div class="header-left">
+      <h1 class="header-title" id="pageTitle">工作台</h1>
+      <div class="header-brand">
+        品牌：<select class="header-brand-select"><option>云杉口腔</option></select>
+        <button class="geo-btn-secondary geo-btn-xs">切换</button>
+      </div>
+    </div>
+    <div class="header-right">
+      <span style="font-size:12px;color:var(--neutral-text-03)">🔔 3</span>
+      <span style="font-size:12px;color:var(--color-accent);background:var(--color-accent-light);padding:4px 10px;border-radius:10px">Hermes 在线</span>
+      <div class="header-avatar">张</div>
+    </div>
+  </header>
+
+  <!-- ====== 主内容区 ====== -->
+  <main class="page-content">
+    <div class="page-content-inner" id="pageContainer">
+      <!-- 页面通过 JS 动态注入 -->
+    </div>
+  </main>
+</div>
+
+<!-- 页面导航 -->
+<div class="page-nav" id="pageNav"></div>
+
+<script>
+const PAGES = {
+  // ========== 1. 工作台 ==========
+  'workbench': {
+    title: '工作台',
+    html: `
+<div style="margin-bottom:24px">
+  <div class="geo-card" style="padding:20px">
+    <div class="flex-between mb-16">
+      <div>
+        <h2 class="text-lg font-bold">云杉口腔</h2>
+        <p class="text-xs text-muted" style="margin-top:4px">进行中 3 · 待处理 5 · 本周完成 12</p>
+      </div>
+      <button class="geo-btn-secondary geo-btn-sm">管理品牌</button>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">词元账户余额</div><div class="stat-value">128,000</div></div>
+      <div class="stat-card"><div class="stat-label">投放账户余额</div><div class="stat-value">¥86,500</div></div>
+      <div class="stat-card"><div class="stat-label">可用发布账户</div><div class="stat-value">12</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="two-col mb-24">
+  <div class="geo-card" style="padding:20px">
+    <h3 class="section-title" style="font-size:14px;margin-bottom:12px">待你处理</h3>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="flex-between"><span style="font-size:13px">1. 确认3个媒体报价</span><button class="btn-link">去处理 →</button></div>
+      <div class="flex-between"><span style="font-size:13px">2. 审核官网优化建议</span><button class="btn-link">去处理 →</button></div>
+      <div class="flex-between"><span style="font-size:13px">3. 确认建站方案</span><button class="btn-link">去处理 →</button></div>
+    </div>
+  </div>
+  <div class="geo-card" style="padding:20px">
+    <h3 class="section-title" style="font-size:14px;margin-bottom:12px">最近完成</h3>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="flex-between"><span style="font-size:13px">品牌词问答覆盖</span><span class="geo-badge geo-badge-success">已完成</span></div>
+      <div class="flex-between"><span style="font-size:13px">城市专题站</span><span class="geo-badge geo-badge-success">已上线</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="geo-card" style="padding:20px">
+  <div class="flex-between mb-16">
+    <h3 class="section-title" style="font-size:14px;margin-bottom:0">优化任务看板</h3>
+    <button class="btn-link">查看全部</button>
+  </div>
+  <div class="card-grid">
+    <div class="task-card">
+      <div class="task-card-title">品牌权威内容铺设</div>
+      <div class="task-card-status">报价确认中</div>
+      <div class="task-card-summary">已完成 2 · 待确认 3 · 执行 4</div>
+      <button class="task-card-action" onclick="switchPage('bid-compare')">查看报价 →</button>
+    </div>
+    <div class="task-card">
+      <div class="task-card-title">官网口腔种植页优化</div>
+      <div class="task-card-status">待工程排期</div>
+      <div class="task-card-summary">建议已出 1 · 待处理 1</div>
+      <button class="task-card-action" onclick="switchPage('site-optimize')">查看建议 →</button>
+    </div>
+    <div class="task-card">
+      <div class="task-card-title">重点医生口碑问答覆盖</div>
+      <div class="task-card-status">执行发布中</div>
+      <div class="task-card-summary">已完成 5 · 执行中 6 · 待验收 2</div>
+      <button class="task-card-action">查看进度 →</button>
+    </div>
+    <div class="task-card">
+      <div class="task-card-title">城市专题新站搭建</div>
+      <div class="task-card-status">方案确认中</div>
+      <div class="task-card-summary">待确认 1 · 开发中 0</div>
+      <button class="task-card-action" onclick="switchPage('new-site')">查看方案 →</button>
+    </div>
+  </div>
+</div>`
+  },
+
+  // ========== 2. 任务发布表单 ==========
+  'publish-form': {
+    title: '付费信源发单',
+    html: `
+<div class="geo-card" style="padding:24px;max-width:800px">
+  <div class="flex-between mb-24">
+    <h2 class="text-lg font-bold">付费信源发单</h2>
+    <div style="display:flex;gap:8px">
+      <button class="geo-btn-secondary geo-btn-sm">保存草稿</button>
+      <button class="geo-btn-primary geo-btn-sm">下一步</button>
+    </div>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">一、任务基础信息</h3>
+    <div class="form-grid">
+      <div style="grid-column:1/-1"><label class="form-label">任务名称</label><input class="geo-input" value="品牌权威内容铺设"></div>
+      <div><label class="form-label">任务类型</label><select class="geo-input"><option>官方媒体</option><option>行业媒体</option><option>问答</option><option>测评</option><option>探店</option><option>综合投放</option></select></div>
+      <div><label class="form-label">需求来源</label><select class="geo-input"><option>按品牌资料</option><option>根据 GEO 报告</option><option>根据排名缺口</option></select></div>
+    </div>
+    <div class="chip-group" style="margin-top:12px">
+      <div class="chip active">官方媒体</div><div class="chip">行业媒体</div><div class="chip">知乎</div><div class="chip">小红书</div><div class="chip">网站</div>
+    </div>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">二、品牌与内容判断信息</h3>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <textarea class="geo-input" style="min-height:60px" placeholder="品牌介绍">云杉口腔主营种植牙、隐形矫正……</textarea>
+      <textarea class="geo-input" style="min-height:60px" placeholder="产品/服务卖点">医生团队 / 城市连锁 / 种植技术……</textarea>
+      <input class="geo-input" value="种植牙 / 隐形矫正 / 口腔医院排名" placeholder="目标关键词（逗号分隔）">
+      <input class="geo-input" value="https://yunshan.dental" placeholder="官网链接">
+    </div>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">三、交付要求</h3>
+    <div class="form-grid">
+      <select class="geo-input"><option>1200-2000</option><option>800-1200</option><option>自定义</option></select>
+      <select class="geo-input"><option>72小时</option><option>24小时</option><option>48小时</option></select>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px"><input type="checkbox" checked> 必须带链接</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px"><input type="checkbox" checked> 必须带截图</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px"><input type="checkbox"> 必须带收录证明</label>
+    </div>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">四、限制与预算控制</h3>
+    <div class="form-grid">
+      <input class="geo-input" value="医疗健康" placeholder="行业限制">
+      <input class="geo-input" value="南京 / 苏州" placeholder="地区限制">
+      <div style="grid-column:1/-1"><textarea class="geo-input" style="min-height:48px" placeholder="禁用词/合规要求">不得使用"最权威""保证疗效"等字样</textarea></div>
+      <div><label class="form-label">隐藏总上限（元）</label><input type="number" class="geo-input" value="20000"></div>
+      <div><label class="form-label">单任务上限（元）</label><input type="number" class="geo-input" value="3000"></div>
+    </div>
+    <p class="text-xs text-muted" style="margin-top:8px">确认报价后才冻结，不在发布时冻结。</p>
+  </div>
+
+  <div style="display:flex;gap:8px;justify-content:flex-end">
+    <button class="geo-btn-secondary geo-btn-sm">预览发单详情</button>
+    <button class="geo-btn-primary geo-btn-sm">生成报价任务</button>
+  </div>
+</div>`
+  },
+
+  // ========== 3. 方案拆单页 ==========
+  'plan-split': {
+    title: '付费信源发单',
+    html: `
+<div class="geo-card" style="padding:24px;max-width:800px">
+  <h2 class="text-lg font-bold mb-16">付费信源发单 · 方案拆单</h2>
+  <p class="text-sm text-muted mb-24">品牌：云杉口腔 &nbsp;|&nbsp; 来源：品牌资料 / GEO报告 / 排名缺口</p>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">投放方向建议</h3>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="geo-card" style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between">
+        <div><span style="font-weight:600">1. 品牌权威内容铺设</span><span class="text-xs text-muted" style="margin-left:12px">官方媒体 · 篇数 3</span></div>
+        <span class="geo-badge geo-badge-accent">建议投放</span>
+      </div>
+      <div class="geo-card" style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between">
+        <div><span style="font-weight:600">2. 医生口碑问答覆盖</span><span class="text-xs text-muted" style="margin-left:12px">知乎/问答 · 篇数 5</span></div>
+        <span class="geo-badge geo-badge-accent">建议投放</span>
+      </div>
+      <div class="geo-card" style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between">
+        <div><span style="font-weight:600">3. 种植牙科普测评</span><span class="text-xs text-muted" style="margin-left:12px">垂类媒体 · 篇数 2</span></div>
+        <span class="geo-badge geo-badge-muted">可选</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">发单信息补充</h3>
+    <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;color:var(--neutral-text-02)">
+      <div><strong>品牌目标：</strong>提高品牌权威回答覆盖 / 指定关键词触达</div>
+      <div><strong>必带资料：</strong>品牌介绍、产品卖点、禁用词、参考文章、资质材料、官网链接</div>
+      <div><strong>交付要求：</strong>带链接 / 带截图 / 3天内上线</div>
+      <div><strong>接单判断：</strong>平台类型、内容方向、字数要求、行业限制、地区限制</div>
+    </div>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">隐藏控制</h3>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">总隐藏上限</div><div class="stat-value" style="font-size:16px">¥20,000</div></div>
+      <div class="stat-card"><div class="stat-label">单任务上限</div><div class="stat-value" style="font-size:16px">¥3,000</div></div>
+      <div></div>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end">
+    <button class="geo-btn-primary">生成报价任务</button>
+  </div>
+</div>`
+  },
+
+  // ========== 4. 比价页 ==========
+  'bid-compare': {
+    title: '任务比价',
+    html: `
+<div>
+  <div class="flex-between mb-16">
+    <div><h2 class="text-lg font-bold">任务比价：品牌权威内容铺设</h2><p class="text-xs text-muted" style="margin-top:4px">官方媒体 / 品牌介绍稿 / 预计3天上线</p></div>
+    <button class="geo-btn-secondary geo-btn-sm" onclick="switchPage('task-list')">返回列表</button>
+  </div>
+  <div class="geo-card" style="overflow-x:auto;margin-bottom:16px">
+    <table class="data-table">
+      <thead><tr><th>接单方</th><th>媒体</th><th>成交支付价 G</th><th>预计上线</th><th>交付证明</th><th>操作</th></tr></thead>
+      <tbody>
+        <tr><td style="font-weight:600">晨光传媒</td><td>某行业站点</td><td style="font-weight:700;color:var(--color-accent)">¥1,428.58</td><td>2天</td><td>链接+截图</td><td><button class="geo-btn-primary geo-btn-sm">确认并冻结</button></td></tr>
+        <tr><td style="font-weight:600">蓝海内容</td><td>某品牌号</td><td style="font-weight:700;color:var(--color-accent)">¥1,600.00</td><td>1天</td><td>链接+截图+收录</td><td><button class="geo-btn-primary geo-btn-sm">确认并冻结</button></td></tr>
+        <tr><td style="font-weight:600">北辰工作室</td><td>某官方媒体</td><td style="font-weight:700;color:var(--color-accent)">¥1,980.00</td><td>3天</td><td>链接+截图</td><td><button class="geo-btn-primary geo-btn-sm">确认并冻结</button></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="text-xs text-muted">确认后冻结成交支付价 G；发布方不展示接单方到手价与平台服务费。</p>
+</div>`
+  },
+
+  // ========== 5. 任务管理列表 ==========
+  'task-list': {
+    title: '付费信源发单 · 任务管理',
+    html: `
+<div>
+  <div class="flex-between mb-16">
+    <h2 class="text-lg font-bold">付费信源发单 · 任务管理</h2>
+    <button class="geo-btn-primary geo-btn-sm" onclick="switchPage('publish-form')">新建任务</button>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active">全部</button>
+    <button class="nav-tab">待报价</button>
+    <button class="nav-tab">报价中</button>
+    <button class="nav-tab">待确认</button>
+    <button class="nav-tab">执行中</button>
+    <button class="nav-tab">待验收</button>
+    <button class="nav-tab">已完成</button>
+  </div>
+  <div class="geo-card" style="overflow:hidden">
+    <table class="data-table">
+      <thead><tr><th>任务名称</th><th>平台类型</th><th>发布时间</th><th>当前状态</th><th>报价数</th><th>操作</th></tr></thead>
+      <tbody>
+        <tr><td style="font-weight:600">品牌权威内容铺设</td><td>官方媒体</td><td>2026/06/25</td><td><span class="geo-badge geo-badge-warning">报价中</span></td><td>3</td><td><button class="btn-link" onclick="switchPage('bid-compare')">比价</button> <button class="btn-link" style="margin-left:8px" onclick="switchPage('bid-detail')">详情</button></td></tr>
+        <tr><td style="font-weight:600">医生口碑问答覆盖</td><td>知乎</td><td>2026/06/25</td><td><span class="geo-badge geo-badge-info">待确认</span></td><td>5</td><td><button class="btn-link">比价</button></td></tr>
+        <tr><td style="font-weight:600">种植牙科普测评</td><td>垂类媒体</td><td>2026/06/25</td><td><span class="geo-badge geo-badge-accent">执行中</span></td><td>1</td><td><button class="btn-link" onclick="switchPage('exec-detail')">查看</button></td></tr>
+        <tr><td style="font-weight:600">城市口腔专题稿</td><td>官方媒体</td><td>2026/06/24</td><td><span class="geo-badge geo-badge-muted">待验收</span></td><td>1</td><td><button class="btn-link">验收</button></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>`
+  },
+
+  // ========== 6. 报价详情/接单方对比 ==========
+  'bid-detail': {
+    title: '报价详情',
+    html: `
+<div>
+  <div class="flex-between mb-16">
+    <div><h2 class="text-lg font-bold">报价详情：品牌权威内容铺设</h2><p class="text-xs text-muted" style="margin-top:4px">官方媒体 / 品牌介绍稿 / 3天上线</p></div>
+    <button class="geo-btn-secondary geo-btn-sm" onclick="switchPage('bid-compare')">返回比价</button>
+  </div>
+  <div class="two-col">
+    <div class="geo-card" style="padding:20px">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:12px">接单方 A：晨光传媒</h3>
+      <p style="font-size:22px;font-weight:700;color:var(--color-accent);margin-bottom:12px">¥1,428.58</p>
+      <div style="font-size:13px;color:var(--neutral-text-02);display:flex;flex-direction:column;gap:6px">
+        <div>⏱ 预计上线：<strong>2天</strong></div>
+        <div>📎 交付承诺：<strong>链接 + 截图</strong></div>
+        <div>📋 案例：医疗行业稿件 / 品牌口碑问答 / 官方媒体案例</div>
+        <div>💡 资源说明：医疗行业媒体资源、南京本地内容经验</div>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:8px">
+        <button class="geo-btn-secondary geo-btn-sm">查看完整资料</button>
+        <button class="geo-btn-primary geo-btn-sm">确认并冻结</button>
+      </div>
+    </div>
+    <div class="geo-card" style="padding:20px">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:12px">接单方 B：蓝海内容</h3>
+      <p style="font-size:22px;font-weight:700;color:var(--color-accent);margin-bottom:12px">¥1,600.00</p>
+      <div style="font-size:13px;color:var(--neutral-text-02);display:flex;flex-direction:column;gap:6px">
+        <div>⏱ 预计上线：<strong>1天</strong></div>
+        <div>📎 交付承诺：<strong>链接 + 截图 + 收录证明</strong></div>
+        <div>📋 案例：知乎问答案例 / 医疗科普案例</div>
+        <div>💡 资源说明：问答平台经验更强</div>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:8px">
+        <button class="geo-btn-secondary geo-btn-sm">查看完整资料</button>
+        <button class="geo-btn-primary geo-btn-sm">确认并冻结</button>
+      </div>
+    </div>
+  </div>
+</div>`
+  },
+
+  // ========== 7. 执行详情 ==========
+  'exec-detail': {
+    title: '执行详情',
+    html: `
+<div class="geo-card" style="padding:24px;max-width:800px">
+  <h2 class="text-lg font-bold mb-16">执行详情：品牌权威内容铺设</h2>
+  <div class="stat-grid mb-24">
+    <div><span class="text-xs text-muted">接单方</span><p style="font-weight:600">晨光传媒</p></div>
+    <div><span class="text-xs text-muted">成交支付价</span><p style="font-weight:700;color:var(--color-accent);font-size:18px">¥1,428.58</p></div>
+    <div><span class="text-xs text-muted">当前状态</span><p><span class="geo-badge geo-badge-accent">执行中</span></p></div>
+  </div>
+
+  <h3 class="form-section-title">任务要求</h3>
+  <p class="text-sm text-muted mb-16">官方媒体 / 品牌介绍稿 / 3天上线 / 链接+截图</p>
+
+  <h3 class="form-section-title">执行进度</h3>
+  <div class="progress-steps mb-24">
+    <span class="progress-step done">✓ 报价已确认</span><span class="progress-arrow">→</span>
+    <span class="progress-step done">✓ 已冻结</span><span class="progress-arrow">→</span>
+    <span class="progress-step active">内容撰写中</span><span class="progress-arrow">→</span>
+    <span class="progress-step">待发布</span><span class="progress-arrow">→</span>
+    <span class="progress-step">已提交交付</span>
+  </div>
+
+  <h3 class="form-section-title">交付物</h3>
+  <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:24px">
+    <div class="geo-card" style="padding:12px 16px;display:flex;align-items:center;gap:12px">
+      <span class="geo-badge geo-badge-muted">待回传</span>
+      <span class="text-sm">发布链接：—</span>
+    </div>
+    <div class="geo-card" style="padding:12px 16px;display:flex;align-items:center;gap:12px">
+      <span class="geo-badge geo-badge-muted">待上传</span>
+      <span class="text-sm">截图证明：—</span>
+    </div>
+    <div class="geo-card" style="padding:12px 16px;display:flex;align-items:center;gap:12px">
+      <span class="geo-badge geo-badge-muted">非必填</span>
+      <span class="text-sm">收录证明：—</span>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:8px;justify-content:flex-end">
+    <button class="geo-btn-secondary">发起返修</button>
+    <button class="geo-btn-primary">确认验收</button>
+  </div>
+</div>`
+  },
+
+  // ========== 8. 任务大厅（接单端） ==========
+  'task-hall': {
+    title: '任务大厅',
+    html: `
+<div>
+  <h2 class="text-lg font-bold mb-16">任务大厅</h2>
+  <div class="nav-tabs">
+    <button class="nav-tab active">全部平台</button>
+    <button class="nav-tab">官方媒体</button>
+    <button class="nav-tab">垂类媒体</button>
+    <button class="nav-tab">知乎</button>
+    <button class="nav-tab">小红书</button>
+    <button class="nav-tab">网站</button>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <div class="geo-card" style="padding:16px">
+      <div class="flex-between mb-8">
+        <h3 style="font-size:14px;font-weight:600">品牌权威内容铺设</h3>
+        <span class="geo-badge geo-badge-info">剩余 3 名额</span>
+      </div>
+      <p class="text-xs text-muted mb-8">品牌：云杉口腔 · 官方媒体 · 3天上线 · 链接+截图</p>
+      <p class="text-xs text-muted mb-12">内容方向：品牌介绍稿 / 字数 1200-2000 / 行业：医疗健康 / 地区：南京苏州</p>
+      <div style="display:flex;gap:8px">
+        <button class="geo-btn-secondary geo-btn-sm" onclick="switchPage('provider-task-detail')">查看详情</button>
+        <button class="geo-btn-primary geo-btn-sm" onclick="switchPage('submit-quote')">提交报价</button>
+      </div>
+    </div>
+    <div class="geo-card" style="padding:16px">
+      <div class="flex-between mb-8">
+        <h3 style="font-size:14px;font-weight:600">种植牙科普测评</h3>
+        <span class="geo-badge geo-badge-info">剩余 2 名额</span>
+      </div>
+      <p class="text-xs text-muted mb-8">品牌：云杉口腔 · 垂类媒体 · 48小时 · 链接+截图</p>
+      <p class="text-xs text-muted mb-12">内容方向：科普测评 / 字数 800-1200 / 行业：医疗健康</p>
+      <div style="display:flex;gap:8px">
+        <button class="geo-btn-secondary geo-btn-sm">查看详情</button>
+        <button class="geo-btn-primary geo-btn-sm">提交报价</button>
+      </div>
+    </div>
+  </div>
+</div>`
+  },
+
+  // ========== 9. 接单任务详情 ==========
+  'provider-task-detail': {
+    title: '任务详情',
+    html: `
+<div class="geo-card" style="padding:24px;max-width:800px">
+  <div class="flex-between mb-24">
+    <h2 class="text-lg font-bold">任务详情：品牌权威内容铺设</h2>
+    <button class="geo-btn-primary geo-btn-sm" onclick="switchPage('submit-quote')">提交报价</button>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">一、任务摘要</h3>
+    <div style="font-size:13px;color:var(--neutral-text-02);display:flex;flex-wrap:wrap;gap:12px">
+      <span>品牌：<strong>云杉口腔</strong></span><span>类型：<strong>官方媒体</strong></span>
+      <span>内容方向：<strong>品牌介绍稿</strong></span><span>时效：<strong>3天内上线</strong></span>
+      <span>交付：<strong>链接 + 截图</strong></span><span>收录证明：<strong>否</strong></span>
+    </div>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">二、品牌背景</h3>
+    <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;color:var(--neutral-text-02)">
+      <div><strong>品牌介绍：</strong>云杉口腔主营种植牙、隐形矫正……</div>
+      <div><strong>产品卖点：</strong>医生团队 / 城市连锁 / 种植技术 / 术后服务</div>
+      <div><strong>官网链接：</strong><span style="color:var(--color-primary)">https://yunshan.dental</span></div>
+      <div><strong>资质附件：</strong><span class="geo-badge geo-badge-muted">营业执照</span> <span class="geo-badge geo-badge-muted">医疗资质</span> <span class="geo-badge geo-badge-muted">授权证明</span></div>
+    </div>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">三、内容要求</h3>
+    <div style="font-size:13px;color:var(--neutral-text-02);display:flex;flex-direction:column;gap:6px">
+      <div>字数要求：<strong>1200-2000</strong></div>
+      <div>核心关键词：<strong>种植牙、隐形矫正、口腔医院推荐</strong></div>
+      <div>禁用词：最权威 / 保证疗效 / 价格最低</div>
+      <div>参考文章：<span style="color:var(--color-primary);cursor:pointer">链接1</span> <span style="color:var(--color-primary);cursor:pointer">链接2</span></div>
+    </div>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">四、接单限制</h3>
+    <div style="font-size:13px;color:var(--neutral-text-02)">行业限制：<strong>医疗健康</strong> · 地区限制：<strong>南京 / 苏州</strong> · 平台要求：<strong>官方媒体优先</strong></div>
+  </div>
+
+  <div class="geo-card" style="padding:14px 16px;background:var(--color-accent-light);border-color:var(--color-accent);margin-bottom:24px">
+    <h3 class="form-section-title" style="border:none;padding:0;margin-bottom:8px;color:var(--color-accent)">五、接单判断</h3>
+    <div style="font-size:13px;color:var(--neutral-text-02)">你当前资源：官方媒体 2 个 / 医疗行业案例 5 个 / 南京地区可接</div>
+    <div style="font-size:13px;color:var(--color-accent);font-weight:600;margin-top:4px">✅ 你的案例与该任务匹配度较高</div>
+  </div>
+
+  <div style="display:flex;gap:8px;justify-content:flex-end">
+    <button class="geo-btn-secondary" onclick="switchPage('task-hall')">返回大厅</button>
+    <button class="geo-btn-primary" onclick="switchPage('submit-quote')">提交报价</button>
+  </div>
+</div>`
+  },
+
+  // ========== 10. 提交报价（接单端） ==========
+  'submit-quote': {
+    title: '提交报价',
+    html: `
+<div class="geo-card" style="padding:24px;max-width:700px">
+  <button class="btn-link mb-16" onclick="switchPage('provider-task-detail')">← 返回任务详情</button>
+  <h2 class="text-lg font-bold mb-8">提交报价：品牌权威内容铺设</h2>
+  <p class="text-xs text-muted mb-24">官方媒体 · 品牌介绍稿 · 3天上线 · 链接+截图</p>
+
+  <div class="mb-24">
+    <div class="form-grid">
+      <div><label class="form-label">期望到手金额 P0（元）</label><input type="number" class="geo-input" value="1000" style="font-size:18px;font-weight:700"></div>
+      <div>
+        <div style="display:flex;gap:12px">
+          <div class="stat-card" style="flex:1;text-align:center"><div class="stat-label">平台服务费 F (30%)</div><div class="stat-value" style="font-size:14px;color:var(--color-warning)">¥428.58</div></div>
+          <div class="stat-card" style="flex:1;text-align:center;background:var(--color-accent-light)"><div class="stat-label">成交支付价 G</div><div class="stat-value" style="font-size:14px;color:var(--color-accent)">¥1,428.58</div></div>
+        </div>
+      </div>
+      <div><label class="form-label">媒体名称</label><input class="geo-input" placeholder="例：某行业垂类媒体"></div>
+      <div><label class="form-label">预计上线（天）</label><select class="geo-input"><option>3</option><option>1</option><option>2</option><option>5</option><option>7</option></select></div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:12px">
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" checked>链接</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" checked>截图</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox">收录证明</label>
+    </div>
+    <div style="margin-top:12px"><label class="form-label">备注说明</label><textarea class="geo-input" style="min-height:60px" placeholder="补充你的优势、案例匹配说明等"></textarea></div>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end">
+    <button class="geo-btn-primary">提交报价</button>
+  </div>
+</div>`
+  },
+
+  // ========== 11. 入驻信息提交 ==========
+  'provider-onboarding': {
+    title: '接单方入驻',
+    html: `
+<div class="geo-card" style="padding:24px;max-width:800px">
+  <h2 class="text-lg font-bold mb-16">接单方入驻</h2>
+  <div class="progress-steps mb-24">
+    <span class="progress-step active">基础资料</span><span class="progress-arrow">→</span>
+    <span class="progress-step">平台与地区</span><span class="progress-arrow">→</span>
+    <span class="progress-step">案例与资源</span><span class="progress-arrow">→</span>
+    <span class="progress-step">报价规则</span><span class="progress-arrow">→</span>
+    <span class="progress-step">提交审核</span>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">一、基础资料</h3>
+    <div class="form-grid">
+      <div><label class="form-label">主体名称</label><input class="geo-input" value="晨光传媒"></div>
+      <div><label class="form-label">主体类型</label><select class="geo-input"><option>机构</option><option>达人</option><option>工作室</option><option>媒体资源方</option></select></div>
+      <div><label class="form-label">联系人</label><input class="geo-input" value="李明"></div>
+      <div><label class="form-label">联系方式</label><input class="geo-input" value="138****8888"></div>
+      <div style="grid-column:1/-1"><label class="form-label">团队介绍</label><textarea class="geo-input" style="min-height:60px">专注医疗健康行业内容创作，覆盖官方媒体、知乎等平台</textarea></div>
+    </div>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">二、平台与地区</h3>
+    <div class="chip-group mb-12"><div class="chip active">小红书</div><div class="chip active">知乎</div><div class="chip active">官方媒体</div><div class="chip">网站</div></div>
+    <div class="form-grid"><div><label class="form-label">服务地区</label><input class="geo-input" value="南京 / 苏州 / 全国"></div><div><label class="form-label">擅长内容类型</label><input class="geo-input" value="问答 / 科普 / 探店 / 测评"></div></div>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">三、案例与资源</h3>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+      <div class="geo-card" style="padding:10px 14px;font-size:13px;display:flex;justify-content:space-between"><span>📎 医疗行业稿件案例</span><button class="btn-link">查看</button></div>
+      <div class="geo-card" style="padding:10px 14px;font-size:13px;display:flex;justify-content:space-between"><span>📎 品牌口碑问答案例</span><button class="btn-link">查看</button></div>
+    </div>
+    <textarea class="geo-input" style="min-height:60px" placeholder="账号资源说明：可用账号、垂类资源、媒体关系说明">官方媒体账号 2 个 / 知乎医疗垂类号 3 个 / 南京本地内容资源</textarea>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">四、报价规则</h3>
+    <div class="geo-card" style="overflow:hidden">
+      <table class="data-table">
+        <thead><tr><th>任务类型</th><th>最低报价</th><th>最高报价</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>种草</td><td>¥1,000</td><td>¥3,000</td><td>医疗行业经验丰富</td></tr>
+          <tr><td>问答</td><td>¥800</td><td>¥2,000</td><td>知乎口碑类可接</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="mb-24">
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px"><input type="checkbox" checked> 同意用户协议</label>
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-top:6px"><input type="checkbox" checked> 同意隐私政策</label>
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-top:6px"><input type="checkbox" checked> 同意接单入驻与撮合服务协议</label>
+  </div>
+
+  <div style="display:flex;gap:8px;justify-content:flex-end">
+    <button class="geo-btn-secondary">保存草稿</button>
+    <button class="geo-btn-primary">提交审核</button>
+  </div>
+</div>`
+  },
+
+  // ========== 12. 案例资源维护 ==========
+  'provider-case-mgmt': {
+    title: '账号资源 / 案例维护',
+    html: `
+<div class="geo-card" style="padding:24px;max-width:700px">
+  <h2 class="text-lg font-bold mb-16">账号资源 / 案例维护</h2>
+
+  <div class="stat-grid mb-24">
+    <div class="stat-card"><div class="stat-label">平台能力</div><div class="stat-value" style="font-size:13px;font-weight:600">小红书 / 知乎 / 官方媒体 / 网站</div></div>
+    <div class="stat-card"><div class="stat-label">行业标签</div><div class="stat-value" style="font-size:13px;font-weight:600">医疗健康 / 本地生活</div></div>
+    <div class="stat-card"><div class="stat-label">报价区间</div><div class="stat-value" style="font-size:13px;font-weight:600">¥1,000 - ¥50,000</div></div>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">案例列表</h3>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="geo-card" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;font-size:13px"><span>1. 小红书口腔种草案例</span><div><button class="btn-link" style="margin-right:12px">查看链接</button><button class="btn-link" style="color:var(--color-danger)">删除</button></div></div>
+      <div class="geo-card" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;font-size:13px"><span>2. 知乎医生口碑问答案例</span><div><button class="btn-link" style="margin-right:12px">查看链接</button><button class="btn-link" style="color:var(--color-danger)">删除</button></div></div>
+      <div class="geo-card" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;font-size:13px"><span>3. 官方媒体品牌稿案例</span><div><button class="btn-link" style="margin-right:12px">查看链接</button><button class="btn-link" style="color:var(--color-danger)">删除</button></div></div>
+    </div>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">资源说明</h3>
+    <textarea class="geo-input" style="min-height:80px" placeholder="说明可接的媒体资源、账号类型、行业经验、擅长题材">官方媒体账号 2 个，知乎医疗垂类号 3 个，南京本地内容资源。擅长医疗健康行业品牌稿、问答口碑、科普测评。</textarea>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">报价规则</h3>
+    <div style="font-size:13px;color:var(--neutral-text-02);display:flex;gap:16px">
+      <span class="geo-badge geo-badge-muted">种草：¥1,000-3,000</span>
+      <span class="geo-badge geo-badge-muted">问答：¥800-2,000</span>
+      <span class="geo-badge geo-badge-muted">官网优化：按单评估</span>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end">
+    <button class="geo-btn-primary">保存资源信息</button>
+  </div>
+</div>`
+  },
+
+  // ========== 13. 自有网站优化 ==========
+  'site-optimize': {
+    title: '自有网站优化',
+    html: `
+<div class="geo-card" style="padding:24px;max-width:700px">
+  <h2 class="text-lg font-bold mb-16">自有网站优化：官网口腔种植页优化</h2>
+  <div class="flex-between mb-16">
+    <div><span class="geo-badge geo-badge-info">自有网站优化</span></div>
+    <span class="geo-badge geo-badge-warning">待工程排期</span>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">AI 优化建议</h3>
+    <ol style="font-size:13px;color:var(--neutral-text-02);padding-left:20px;display:flex;flex-direction:column;gap:6px">
+      <li>增加 FAQ 结构区块</li>
+      <li>增强种植页 GEO 问答文案</li>
+      <li>调整页面 schema 与标题结构</li>
+    </ol>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">处理流转</h3>
+    <div class="progress-steps">
+      <span class="progress-step done">✓ 建议已出</span><span class="progress-arrow">→</span>
+      <span class="progress-step done">✓ 品牌确认</span><span class="progress-arrow">→</span>
+      <span class="progress-step active">工程处理中</span><span class="progress-arrow">→</span>
+      <span class="progress-step">已上线</span><span class="progress-arrow">→</span>
+      <span class="progress-step">待验收</span>
+    </div>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">工程交付信息</h3>
+    <div style="font-size:13px;color:var(--neutral-text-02);display:flex;flex-direction:column;gap:4px">
+      <div>负责人：<strong>工程师A</strong></div>
+      <div>预计上线：<strong>2026-06-30</strong></div>
+      <div>服务费：<strong style="color:var(--color-accent);font-size:16px">¥6,000</strong></div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:8px;justify-content:flex-end">
+    <button class="geo-btn-secondary">确认建议</button>
+    <button class="geo-btn-primary">查看工程进度</button>
+  </div>
+</div>`
+  },
+
+  // ========== 14. 新建网站 ==========
+  'new-site': {
+    title: '新建网站',
+    html: `
+<div class="geo-card" style="padding:24px;max-width:700px">
+  <h2 class="text-lg font-bold mb-16">新建网站：城市专题新站搭建</h2>
+  <div class="flex-between mb-16">
+    <div><span class="geo-badge geo-badge-info">新建网站</span></div>
+    <span class="geo-badge geo-badge-warning">方案确认中</span>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">建站方案摘要</h3>
+    <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;color:var(--neutral-text-02)">
+      <div><strong>站点目标：</strong>承接"南京种植牙"相关品牌搜索与问答流量</div>
+      <div><strong>页面结构：</strong>首页 / 项目页 / FAQ页 / 案例页 / 联系入口</div>
+      <div><strong>内容方向：</strong>品牌介绍、医生介绍、种植问答、案例内容</div>
+    </div>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">工程流转</h3>
+    <div class="progress-steps">
+      <span class="progress-step done">✓ 方案已出</span><span class="progress-arrow">→</span>
+      <span class="progress-step active">待品牌确认</span><span class="progress-arrow">→</span>
+      <span class="progress-step">开发中</span><span class="progress-arrow">→</span>
+      <span class="progress-step">已上线</span><span class="progress-arrow">→</span>
+      <span class="progress-step">待验收</span>
+    </div>
+  </div>
+
+  <div class="mb-24">
+    <h3 class="form-section-title">交付信息</h3>
+    <div style="font-size:13px;color:var(--neutral-text-02);display:flex;flex-direction:column;gap:4px">
+      <div>负责人：<strong>工程师B</strong></div>
+      <div>预计上线：<strong>2026-07-05</strong></div>
+      <div>服务费：<strong style="color:var(--color-accent);font-size:16px">¥12,000</strong></div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:8px;justify-content:flex-end">
+    <button class="geo-btn-secondary">确认方案</button>
+    <button class="geo-btn-primary">查看工程进度</button>
+  </div>
+</div>`
+  }
+};
+
+// ===== 页面切换逻辑 =====
+function switchPage(name) {
+  if (!PAGES[name]) return;
+  const p = PAGES[name];
+  document.getElementById('pageTitle').textContent = p.title;
+  document.getElementById('pageContainer').innerHTML = p.html;
+  // 更新导航高亮
+  document.querySelectorAll('.page-nav button').forEach(b => b.classList.toggle('active', b.dataset.page === name));
+  // 更新 sidebar 高亮（简化：仅工作台高亮）
+  document.querySelectorAll('.sidebar-nav button').forEach(b => {
+    const isActive = (name === 'workbench' && b.textContent.includes('工作台')) ||
+                     (name.startsWith('publish') && b.textContent.includes('付费信源')) ||
+                     (name === 'task-list' && b.textContent.includes('付费信源')) ||
+                     (name.startsWith('bid') && b.textContent.includes('付费信源')) ||
+                     (name === 'exec-detail' && b.textContent.includes('付费信源')) ||
+                     (name === 'site-optimize' && b.textContent.includes('网站优化')) ||
+                     (name === 'new-site' && b.textContent.includes('新建网站'));
+    b.className = isActive ? 'geo-nav-active' : 'geo-nav-item';
+  });
+  window.scrollTo(0, 0);
+}
+
+// ===== 初始化导航 =====
+function init() {
+  const nav = document.getElementById('pageNav');
+  const entries = [
+    ['workbench','01 工作台'],['publish-form','02 任务发布表单'],['plan-split','03 方案拆单页'],
+    ['bid-compare','04 比价页'],['task-list','05 任务管理列表'],['bid-detail','06 报价详情对比'],
+    ['exec-detail','07 执行详情'],['task-hall','08 任务大厅(接单)'],['provider-task-detail','09 接单任务详情'],
+    ['submit-quote','10 提交报价(接单)'],['provider-onboarding','11 入驻信息提交'],['provider-case-mgmt','12 案例资源维护'],
+    ['site-optimize','13 自有网站优化'],['new-site','14 新建网站']
+  ];
+  entries.forEach(([key,label]) => {
+    const btn = document.createElement('button');
+    btn.textContent = label; btn.dataset.page = key;
+    btn.onclick = () => switchPage(key);
+    nav.appendChild(btn);
+  });
+  switchPage('workbench');
+}
+init();
+</script>
+
+</body>
+</html>

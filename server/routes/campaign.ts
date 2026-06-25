@@ -11,6 +11,9 @@ import {
   buildCampaignInputFromBrandProfile,
   buildCampaignInputFromIndexingGap,
   updateCampaignPlanPackages,
+  updateCampaignPlanSettings,
+  addCampaignPlanPackage,
+  deleteCampaignPlanPackage,
 } from '../services/campaign.service.js';
 import { createAgentTask } from '../services/agent-task.service.js';
 import { enqueueAgentTask } from '../agent/worker.js';
@@ -25,6 +28,8 @@ import { validateSupplementNotes } from '../../lib/campaign-form-limits.js';
 import { confirmGeoAuditAction } from '../services/geo-audit.service.js';
 import { hasGeoReportConfirmation } from '../services/asset-task.service.js';
 import { getTaskQueueHint } from '../services/hermes-concurrency.service.js';
+import { appendAuditLog } from '../services/audit.service.js';
+import { BRAND_AGREEMENT_VERSION } from '../../lib/marketplace-agreements.js';
 
 export function registerCampaignRoutes(app: Express) {
   app.get('/api/geo-reports', async (req, res) => {
@@ -163,6 +168,7 @@ export function registerCampaignRoutes(app: Express) {
       sourceIndexResultIds,
       budgetMin,
       budgetMax,
+      platforms,
       ...rest
     } = req.body ?? {};
     const gate = await validateAgentTaskSubmission(name, 'campaign_plan', 15);
@@ -171,6 +177,10 @@ export function registerCampaignRoutes(app: Express) {
     const notesText = supplementNotes != null ? String(supplementNotes) : undefined;
     const notesError = validateSupplementNotes(notesText);
     if (notesError) return res.status(400).json({ error: notesError });
+
+    const extraPlatforms = Array.isArray(platforms)
+      ? platforms.map(String).filter(Boolean)
+      : undefined;
 
     const src = String(source ?? 'brand_profile');
     let planInput: Record<string, unknown>;
@@ -193,12 +203,14 @@ export function registerCampaignRoutes(app: Express) {
         budgetMin: budgetMin != null ? Number(budgetMin) : undefined,
         budgetMax: budgetMax != null ? Number(budgetMax) : undefined,
         supplementNotes: notesText?.trim() || undefined,
+        platforms: extraPlatforms,
       });
     } else {
       planInput = buildCampaignInputFromBrandProfile(name, {
         budgetMin: budgetMin != null ? Number(budgetMin) : undefined,
         budgetMax: budgetMax != null ? Number(budgetMax) : undefined,
         supplementNotes: notesText?.trim() || undefined,
+        platforms: extraPlatforms,
       });
     }
 
@@ -224,22 +236,77 @@ export function registerCampaignRoutes(app: Express) {
     res.json({ plan: updated });
   });
 
+  app.post('/api/campaign-plans/:id/packages', async (req, res) => {
+    const plan = await getCampaignPlan(req.params.id);
+    if (!plan) return res.status(404).json({ error: '计划不存在' });
+    if (!(await requireBrandAccess(req, res, plan.brandName))) return;
+    try {
+      const updated = await addCampaignPlanPackage(plan.id, req.body ?? {});
+      res.status(201).json({ plan: updated });
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : '添加失败' });
+    }
+  });
+
+  app.delete('/api/campaign-plans/:id/packages/:packageId', async (req, res) => {
+    const plan = await getCampaignPlan(req.params.id);
+    if (!plan) return res.status(404).json({ error: '计划不存在' });
+    if (!(await requireBrandAccess(req, res, plan.brandName))) return;
+    try {
+      const updated = await deleteCampaignPlanPackage(plan.id, req.params.packageId);
+      res.json({ plan: updated });
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : '删除失败' });
+    }
+  });
+
+  app.patch('/api/campaign-plans/:id/settings', async (req, res) => {
+    const plan = await getCampaignPlan(req.params.id);
+    if (!plan) return res.status(404).json({ error: '计划不存在' });
+    if (!(await requireBrandAccess(req, res, plan.brandName))) return;
+    const { hiddenBudgetMaxCents, perTaskBudgetCapCents, pricingMode } = req.body ?? {};
+    const updated = await updateCampaignPlanSettings(plan.id, {
+      hiddenBudgetMaxCents:
+        hiddenBudgetMaxCents != null ? Math.round(Number(hiddenBudgetMaxCents)) : undefined,
+      perTaskBudgetCapCents:
+        perTaskBudgetCapCents != null ? Math.round(Number(perTaskBudgetCapCents)) : undefined,
+      pricingMode: typeof pricingMode === 'string' ? pricingMode : undefined,
+    });
+    res.json({ plan: updated });
+  });
+
   app.post('/api/campaign-plans/:id/publish', async (req, res) => {
     const plan = await getCampaignPlan(req.params.id);
     if (!plan) return res.status(404).json({ error: '计划不存在' });
     const name = (await requireBrandAccess(req, res, plan.brandName)) ?? plan.brandName;
     if (!name) return;
+
+    const isQuoteMode = plan.pricingMode === 'provider_quote';
     const totalBudget = plan.packages.reduce((s, p) => s + p.budget, 0);
-    const lobbyGate = await validateTaskLobbyPublish(name, totalBudget);
-    if (!lobbyGate.ok) return res.status(400).json({ error: lobbyGate.error });
 
-    const budgetCheck = await checkBudget(name, totalBudget);
-    if (!budgetCheck.ok) return res.status(400).json({ error: budgetCheck.error });
+    if (!isQuoteMode) {
+      const lobbyGate = await validateTaskLobbyPublish(name, totalBudget);
+      if (!lobbyGate.ok) return res.status(400).json({ error: lobbyGate.error });
 
-    const freeze = await freezeBudget(name, totalBudget, plan.id);
-    if (!freeze.ok) return res.status(400).json({ error: freeze.error });
+      const budgetCheck = await checkBudget(name, totalBudget);
+      if (!budgetCheck.ok) return res.status(400).json({ error: budgetCheck.error });
 
-    const result = await publishCampaignPlan(plan.id, name);
+      const freeze = await freezeBudget(name, totalBudget, plan.id);
+      if (!freeze.ok) return res.status(400).json({ error: freeze.error });
+    }
+
+    const result = await publishCampaignPlan(plan.id, name, {
+      taskBriefJson: req.body?.taskBriefJson,
+    });
+    if (req.body?.agreementVersion === BRAND_AGREEMENT_VERSION) {
+      await appendAuditLog({
+        action: 'brand_transaction_agreement_accept',
+        entity: 'CampaignPlan',
+        entityId: plan.id,
+        detail: `agreement:${BRAND_AGREEMENT_VERSION}`,
+        source: 'publisher',
+      });
+    }
     res.json(result);
   });
 }

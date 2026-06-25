@@ -15,6 +15,9 @@ interface Props {
   brandName: string;
   initialValues?: Partial<WebsiteLeadIntakeValues>;
   submitLabel?: string;
+  pageTypes?: readonly string[];
+  introNote?: string;
+  requireReferenceUrl?: boolean;
   onSuccess?: () => void;
 }
 
@@ -22,11 +25,14 @@ export default function WebsiteLeadIntakeForm({
   brandName,
   initialValues,
   submitLabel = '提交需求',
+  pageTypes = WEBSITE_PAGE_TYPES,
+  introNote = WEBSITE_PHASE1_NOTE,
+  requireReferenceUrl = false,
   onSuccess,
 }: Props) {
   const { toast } = useToast();
   const [referenceUrl, setReferenceUrl] = useState(initialValues?.referenceUrl ?? '');
-  const [pageType, setPageType] = useState(initialValues?.pageType ?? WEBSITE_PAGE_TYPES[0]);
+  const [pageType, setPageType] = useState(initialValues?.pageType ?? pageTypes[0]);
   const [keywords, setKeywords] = useState(initialValues?.keywords ?? '');
   const [notes, setNotes] = useState(initialValues?.notes ?? '');
   const [contact, setContact] = useState(initialValues?.contact ?? '');
@@ -39,6 +45,10 @@ export default function WebsiteLeadIntakeForm({
     }
     if (!keywords.trim()) {
       toast('请填写目标关键词', 'error');
+      return;
+    }
+    if (requireReferenceUrl && !referenceUrl.trim()) {
+      toast('请填写待优化页面链接', 'error');
       return;
     }
     if (!contact.trim()) {
@@ -87,17 +97,24 @@ export default function WebsiteLeadIntakeForm({
   return (
     <div className="space-y-4">
       <p className="text-xs leading-relaxed" style={{ color: 'var(--neutral-text-03)' }}>
-        {WEBSITE_PHASE1_NOTE}
+        {introNote}
       </p>
 
       <div>
-        <label className="geo-label">官网 / 落地页链接</label>
+        <label className="geo-label">
+          {requireReferenceUrl ? '待优化页面链接 *' : '官网 / 落地页链接'}
+        </label>
         <input
           className="geo-input w-full mt-1 text-sm"
-          placeholder="https://"
+          placeholder="https://www.example.com/implant"
           value={referenceUrl}
           onChange={(e) => setReferenceUrl(e.target.value)}
         />
+        {requireReferenceUrl && (
+          <p className="text-[10px] text-[var(--neutral-text-03)] mt-1">
+            填写官网或具体落地页 URL，便于工程师定位优化范围
+          </p>
+        )}
       </div>
 
       <div>
@@ -107,7 +124,7 @@ export default function WebsiteLeadIntakeForm({
           value={pageType}
           onChange={(e) => setPageType(e.target.value)}
         >
-          {WEBSITE_PAGE_TYPES.map((t) => (
+          {pageTypes.map((t) => (
             <option key={t} value={t}>
               {t}
             </option>

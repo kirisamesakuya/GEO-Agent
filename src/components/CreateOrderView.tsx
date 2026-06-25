@@ -6,7 +6,6 @@ import {
   type CreateOrderMode,
   CUSTOM_PUBLISH_ENABLED,
   VISIBLE_CREATE_ORDER_MODES,
-  createOrderModeFromHint,
   parseCreateOrderModeFromUrl,
   parseGeoReportIdFromUrl,
   parseGeoReportIdFromHint,
@@ -43,6 +42,7 @@ export default function CreateOrderView({
   );
   const websiteFlow =
     CUSTOM_PUBLISH_ENABLED && (resolveCustomTaskKind(viewHint) === 'website' || isWebsiteOrderContext(viewHint));
+  const paidQuoteMode = !websiteFlow;
   const [taskKind, setTaskKind] = useState(() => resolveCustomTaskKind(viewHint));
 
   useEffect(() => {
@@ -83,13 +83,13 @@ export default function CreateOrderView({
         <div className="mb-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <h2 className="text-sm font-bold text-[var(--color-title)]">
-              {websiteFlow ? '发布网页改装' : '服务商发单'}
+              {websiteFlow ? '发布网页改装' : '付费信源发单'}
             </h2>
             <BrandSwitcher variant="scope" brandName={brandName} onBrandChange={onBrandChange} />
           </div>
           {!websiteFlow && (
             <p className="text-[10px] text-[var(--neutral-text-03)] mb-2">
-              向资源平台发任务 · 需预算 · 由接单方写作/发布
+              基于品牌资料 / GEO 报告 / 排名缺口生成投放计划 · 按媒体拆分篇数 · 确认报价后冻结
             </p>
           )}
         </div>
@@ -129,6 +129,7 @@ export default function CreateOrderView({
             onNavigate={onNavigate}
             lockedMode="ai"
             embedded
+            paidQuoteMode={paidQuoteMode}
             initialGeoReportId={campaignPlanId ? undefined : geoReportId}
             initialCampaignPlanId={campaignPlanId}
             autoGenerateFromGeo={Boolean(geoReportId) && !campaignPlanId}

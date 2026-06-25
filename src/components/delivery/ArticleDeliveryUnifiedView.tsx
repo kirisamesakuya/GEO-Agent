@@ -14,6 +14,17 @@ import HermesWorkingOverlay from '../common/HermesWorkingOverlay';
 
 import HermesPublishConfirmDialog from '../agent/HermesPublishConfirmDialog';
 
+import PublishPlatformUnavailableDialog from '../agent/PublishPlatformUnavailableDialog';
+
+import {
+  isHermesAutoPublishSupported,
+  partitionPublishPlatforms,
+} from '../../lib/hermes-auto-publish-gate';
+
+import { buildManualPublishCopyText } from '../../lib/manual-publish-copy';
+
+import type { PublishUnavailableDialogState } from '../../lib/publish-unavailable-dialog-state';
+
 import {
 
   ARTICLE_DELIVERY_ACTION_LABEL,
@@ -26,7 +37,7 @@ import {
 
   ARTICLE_DELIVERY_SOURCE_OPTIONS,
 
-  ARTICLE_DELIVERY_QUICK_SOURCE_FILTERS,
+  ARTICLE_DELIVERY_QUICK_SOURCE_TABS,
 
   ARTICLE_DELIVERY_STAGE_LABEL,
 
@@ -189,6 +200,14 @@ export default function ArticleDeliveryUnifiedView({
 
   const [hermesPayload, setHermesPayload] = useState<ReturnType<typeof buildHermesConfirmPayload>>(null);
 
+  const [publishUnavailableDialog, setPublishUnavailableDialog] =
+    useState<PublishUnavailableDialogState | null>(null);
+
+  const [pendingManualDialog, setPendingManualDialog] =
+    useState<PublishUnavailableDialogState | null>(null);
+
+  const [loadedBatches, setLoadedBatches] = useState<Record<string, ContentBatch>>({});
+
   const [publishing, setPublishing] = useState(false);
 
   const [hermesWork, setHermesWork] = useState({
@@ -256,6 +275,12 @@ export default function ArticleDeliveryUnifiedView({
 
 
       const batches = batchData.batches ?? [];
+
+      const batchMap: Record<string, ContentBatch> = {};
+      for (const batch of batches) {
+        batchMap[batch.id] = batch;
+      }
+      setLoadedBatches(batchMap);
 
       const publishRecords = (recordsData.records ?? []).map((r) => ({
 
@@ -538,9 +563,46 @@ export default function ArticleDeliveryUnifiedView({
 
     }
 
+    const platformLabels = [...new Set(publishGroups.map((g) => g.platform))] as string[];
+
+    const { supported, unsupported } = partitionPublishPlatforms(platformLabels);
+
+    if (unsupported.length > 0 && supported.length === 0) {
+      setPublishDialogOpen(false);
+      setPublishUnavailableDialog({
+        unsupported,
+        copyText: buildManualPublishCopyText({
+          groups: publishGroups,
+          loadedBatches,
+          platforms: unsupported,
+        }),
+      });
+      return;
+    }
+
+    const effectiveGroups =
+      unsupported.length > 0
+        ? publishGroups.filter((group) => isHermesAutoPublishSupported(group.platform))
+        : publishGroups;
+
+    if (unsupported.length > 0) {
+      setPendingManualDialog({
+        unsupported,
+        autoPublished: supported,
+        copyText: buildManualPublishCopyText({
+          groups: publishGroups,
+          loadedBatches,
+          platforms: unsupported,
+        }),
+      });
+      setPublishGroups(effectiveGroups);
+    } else {
+      setPendingManualDialog(null);
+    }
+
     setAccountByPlatform(selectedAccounts);
 
-    const payload = buildHermesConfirmPayload(publishGroups, accounts, selectedAccounts);
+    const payload = buildHermesConfirmPayload(effectiveGroups, accounts, selectedAccounts);
 
     if (!payload) {
 
@@ -591,6 +653,11 @@ export default function ArticleDeliveryUnifiedView({
           result.errors.length ? 'info' : 'success'
 
         );
+
+        if (pendingManualDialog) {
+          setPublishUnavailableDialog(pendingManualDialog);
+          setPendingManualDialog(null);
+        }
 
         setCheckedIds(new Set());
 
@@ -690,6 +757,18 @@ export default function ArticleDeliveryUnifiedView({
 
       />
 
+      <PublishPlatformUnavailableDialog
+
+        open={Boolean(publishUnavailableDialog?.unsupported.length)}
+
+        state={publishUnavailableDialog}
+
+        brandName={effectiveBrand}
+
+        onClose={() => setPublishUnavailableDialog(null)}
+
+      />
+
       <GeoListPageShell
 
         brandLabel="查看哪个品牌"
@@ -706,10 +785,10 @@ export default function ArticleDeliveryUnifiedView({
 
         description={
           channelFilter === 'self'
-            ? '自有内容 · Hermes 发布'
+            ? '免费信源 · Hermes 发布'
             : channelFilter === 'provider'
-              ? '服务商交付 · 审稿验收'
-              : '自有 Hermes 发布与服务商交付'
+              ? '付费信源 · 审稿验收'
+              : '免费信源与付费信源统一交付台'
         }
 
         sectionTabs={ARTICLE_DELIVERY_CHANNEL_TABS.map((t) => ({ id: t.id, label: t.label }))}
@@ -898,25 +977,25 @@ export default function ArticleDeliveryUnifiedView({
 
             <span className="text-[var(--neutral-text-03)]">来源：</span>
 
-            {ARTICLE_DELIVERY_QUICK_SOURCE_FILTERS.map((s) => (
+            {ARTICLE_DELIVERY_QUICK_SOURCE_TABS.map(({ id, label }) => (
 
               <button
 
-                key={s}
+                key={id}
 
                 type="button"
 
-                onClick={() => setSourceFilter(sourceFilter === s ? 'all' : s)}
+                onClick={() => setSourceFilter(sourceFilter === id ? 'all' : id)}
 
-                className={`rounded-md px-2 py-0.5 font-medium ${articleDeliverySourceClass(s)} ${
+                className={`rounded-md px-2 py-0.5 font-medium ${articleDeliverySourceClass(id)} ${
 
-                  sourceFilter === s ? 'ring-1 ring-[var(--color-accent)]' : 'opacity-80'
+                  sourceFilter === id ? 'ring-1 ring-[var(--color-accent)]' : 'opacity-80'
 
                 }`}
 
               >
 
-                {ARTICLE_DELIVERY_SOURCE_LABEL[s]}
+                {label}
 
               </button>
 

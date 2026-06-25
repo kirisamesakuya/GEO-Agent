@@ -447,6 +447,7 @@ export async function ensureDemoTaskOrders(brandName: string) {
         deliverable: spec.deliverable,
         acceptance: spec.acceptance,
         description: spec.description,
+        pricingMode: 'fixed',
         status: spec.status,
         providerId: providerId ?? null,
         providerName: providerName ?? null,

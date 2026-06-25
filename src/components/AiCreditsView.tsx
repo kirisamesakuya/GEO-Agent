@@ -3,6 +3,8 @@ import AgentInputCard from './common/AgentInputCard';
 import { ExternalLink, RefreshCw } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 
+import { DUAL_ACCOUNT_HINT, TOKEN_ACCOUNT_HINT } from '../../lib/platform-legal-copy';
+
 const AGENT_CLOUD_RECHARGE_URL = 'https://www.agentsyun.com/hub/keys';
 
 interface Props {
@@ -62,10 +64,10 @@ export default function AiCreditsView({ brandName }: Props) {
   return (
     <div className="geo-page-content max-w-2xl space-y-4">
       <div className="geo-card p-4 text-xs" style={{ color: 'var(--neutral-text-02)' }}>
-        <strong>AI 算力</strong>与<strong>投放余额</strong>为两个独立资金池。算力在 Agent 云 Token 工场充值，用于文章生成、GEO 分析、Hermes Skill；<strong>不能</strong>用于支付资源平台任务。
+        {DUAL_ACCOUNT_HINT}
       </div>
 
-      <AgentInputCard title="AI 算力（Agent 云）" description="余额同步自统一账户，充值请前往 Agent 云">
+      <AgentInputCard title="AI 算力（Agent 云）" description={TOKEN_ACCOUNT_HINT}>
         <div className="space-y-4">
           <div className="geo-card p-6 text-center">
             <p className="text-xs" style={{ color: 'var(--neutral-text-03)' }}>当前品牌可用算力</p>

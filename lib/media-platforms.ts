@@ -7,6 +7,7 @@ export type MediaPlatformCategory =
   | 'content_publish'
   | 'website'
   | 'official_media'
+  | 'industry_media'
   | 'ai_search';
 
 export interface MediaPlatform {
@@ -34,8 +35,11 @@ export const MEDIA_PLATFORMS: readonly MediaPlatform[] = [
   { id: 'weibo', label: '微博', category: 'content_publish', sortOrder: 60 },
   { id: 'dafeng', label: '大风网', category: 'content_publish', sortOrder: 70 },
   { id: 'yidian', label: '一点号', category: 'content_publish', sortOrder: 80 },
+  { id: 'toutiao', label: '今日头条', category: 'content_publish', sortOrder: 85 },
+  { id: 'baijiahao', label: '百家号', category: 'content_publish', sortOrder: 90 },
   { id: 'website', label: '网站', category: 'website', sortOrder: 100 },
   { id: 'official_media', label: '官媒', category: 'official_media', sortOrder: 110 },
+  { id: 'industry_media', label: '行业媒体', category: 'industry_media', sortOrder: 115 },
   { id: 'doubao', label: '豆包', category: 'ai_search', sortOrder: 200 },
   { id: 'deepseek', label: 'DeepSeek', category: 'ai_search', sortOrder: 210 },
   { id: 'yuanbao', label: '腾讯元宝', category: 'ai_search', sortOrder: 220 },
@@ -45,6 +49,48 @@ export const MEDIA_PLATFORMS: readonly MediaPlatform[] = [
   { id: 'zhipu', label: '智谱', category: 'ai_search', sortOrder: 260 },
   { id: 'minimax', label: 'MiniMax', category: 'ai_search', sortOrder: 270 },
 ] as const;
+
+/** 行业媒体推荐子项（Skill 参考，非硬枚举；发单时允许自由填写） */
+export const INDUSTRY_MEDIA_SUGGESTIONS = [
+  // 科技 / 创投
+  '36氪', '虎嗅', '创业邦', '钛媒体', '极客公园', '投资界',
+  // 商业 / 分析
+  '亿欧', '艾瑞', '界面新闻', '品玩',
+  // — 以下为示例，实际可按需扩展 —
+  // 医疗健康
+  '健康界', '丁香园', '动脉网',
+  // 教育
+  '芥末堆', '多知网', '鲸媒体',
+  // 法律
+  '无讼', '智合',
+  // 金融 / 财经
+  '华尔街见闻', '财联社', '雪球',
+] as const;
+
+export type IndustryMediaOutlet = string;  // 开放编辑，不硬枚举
+
+/** 宽松判断：是否属于行业媒体大类（含推荐子项或自定义名） */
+export function isIndustryMediaOutlet(raw: string): boolean {
+  const trimmed = String(raw ?? '').trim();
+  if (!trimmed) return false;
+  // 推荐子项：精确命中
+  if ((INDUSTRY_MEDIA_SUGGESTIONS as readonly string[]).includes(trimmed)) return true;
+  // 排除已知非行业媒体的 label（内容发布 / 网站 / 官媒 / AI）
+  const nonIndustry = new Set([
+    ...sortedLabels(['content_publish']),
+    ...sortedLabels(['website']),
+    ...sortedLabels(['official_media']),
+    ...sortedLabels(['ai_search']),
+  ]);
+  if (nonIndustry.has(trimmed)) return false;
+  // 其余未知平台名，保守视为行业媒体（如"健康界"、"丁香园"等自定义值）
+  return true;
+}
+
+/** 行业媒体 label → category 映射（供 build 使用） */
+export function outletCategoryLabel(_outlet: string): string {
+  return '行业媒体';
+}
 
 function sortedLabels(categories: MediaPlatformCategory[]): string[] {
   return MEDIA_PLATFORMS.filter((p) => categories.includes(p.category))
@@ -67,18 +113,26 @@ export const CONTENT_LIBRARY_PLATFORM_ORDER = [
 /** 文章生成、内容发布目标平台 */
 export const ARTICLE_PUBLISH_PLATFORM_LABELS = CONTENT_LIBRARY_PLATFORM_ORDER;
 
-/** 发起订单 / 投放计划多选平台 */
-export const CAMPAIGN_PLAN_PLATFORM_LABELS = sortedLabels(['content_publish', 'website']);
+/** 发起订单 / 投放计划多选平台（不含网站，网站需求单独提） */
+export const CAMPAIGN_PLAN_PLATFORM_LABELS = sortedLabels(['content_publish', 'industry_media', 'official_media']);
 
 /** 接单大厅 / 自定义发单可选平台 */
 export const LOBBY_PLATFORM_LABELS = sortedLabels([
   'content_publish',
   'website',
+  'industry_media',
   'official_media',
 ]);
 
+/** 接单大厅筛选——大类 + 行业媒体推荐子项展开 */
+export const LOBBY_OUTLET_FILTER_LABELS = [
+  ...sortedLabels(['content_publish', 'official_media']),
+  ...INDUSTRY_MEDIA_SUGGESTIONS,
+] as const;
+
 export const WEBSITE_PUBLISH_PLATFORM = '网站' as const;
 export const OFFICIAL_MEDIA_PLATFORM = '官媒' as const;
+export const INDUSTRY_MEDIA_PLATFORM = '行业媒体' as const;
 
 /** 接单端任务大厅筛选 */
 export const PROVIDER_TASK_HALL_FILTER_PLATFORMS = LOBBY_PLATFORM_LABELS;

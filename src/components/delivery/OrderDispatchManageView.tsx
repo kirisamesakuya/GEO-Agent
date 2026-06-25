@@ -2,39 +2,41 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ViewType } from '../../types';
 import GeoListPageShell from '../common/GeoListPageShell';
 import OrderDeliveryEmptyState from '../common/OrderDeliveryEmptyState';
+import { formatTaskOrderListTime } from '../../lib/task-order-flow';
 import {
-  formatTaskOrderListTime,
-  isArticleContentOrder,
-  taskOrderStatusClass,
-  taskOrderStatusLabel,
-} from '../../lib/task-order-flow';
-import {
-  ORDER_DISPATCH_STATUS_TABS,
-  countOrdersByDispatchFilter,
-  orderMatchesDispatchFilter,
-  parseOrderDispatchStageFromUrl,
-  type OrderDispatchStatusFilter,
-} from '../../lib/order-delivery-filters';
-import { taskOrderDetailHint } from '../../lib/website-requirement-nav';
+  PAID_SOURCE_DISPATCH_STATUS_TABS,
+  countPaidSourceDispatchOrders,
+  isPaidSourceDispatchOrder,
+  orderMatchesPaidSourceDispatchFilter,
+  paidSourceDispatchRowStatusClass,
+  paidSourceDispatchRowStatusLabel,
+  paidSourceQuoteProgressLabel,
+  parsePaidSourceDispatchStageFromUrl,
+  type PaidSourceDispatchFilter,
+} from '../../lib/paid-source-dispatch-filters';
+
+interface TaskOrderQuote {
+  id: string;
+  status?: string;
+}
 
 interface TaskOrder {
   id: string;
   brandName?: string;
   title: string;
   platform: string;
-  budget: number;
   status: string;
+  pricingMode?: string;
   providerName?: string;
-  type?: string;
   createdAt?: string;
-  updatedAt?: string;
+  quotes?: TaskOrderQuote[];
 }
 
 interface Props {
   brandName: string;
   onBrandChange: (name: string) => void;
   onNavigate?: (view: ViewType, hint?: string) => void;
-  initialStatusFilter?: OrderDispatchStatusFilter;
+  initialStatusFilter?: PaidSourceDispatchFilter;
 }
 
 export default function OrderDispatchManageView({
@@ -44,8 +46,8 @@ export default function OrderDispatchManageView({
   initialStatusFilter,
 }: Props) {
   const [orders, setOrders] = useState<TaskOrder[]>([]);
-  const [statusFilter, setStatusFilter] = useState<OrderDispatchStatusFilter>(
-    initialStatusFilter ?? parseOrderDispatchStageFromUrl()
+  const [statusFilter, setStatusFilter] = useState<PaidSourceDispatchFilter>(
+    initialStatusFilter ?? parsePaidSourceDispatchStageFromUrl()
   );
 
   useEffect(() => {
@@ -67,27 +69,29 @@ export default function OrderDispatchManageView({
     loadOrders();
   }, [loadOrders]);
 
-  const articleOrders = useMemo(
-    () => orders.filter((o) => isArticleContentOrder(o)),
-    [orders]
-  );
+  const quoteOrders = useMemo(() => orders.filter(isPaidSourceDispatchOrder), [orders]);
 
-  const statusCounts = useMemo(
-    () => countOrdersByDispatchFilter(articleOrders),
-    [articleOrders]
-  );
+  const statusCounts = useMemo(() => countPaidSourceDispatchOrders(orders), [orders]);
 
   const filteredOrders = useMemo(
-    () => articleOrders.filter((o) => orderMatchesDispatchFilter(o.status, statusFilter)),
-    [articleOrders, statusFilter]
+    () => quoteOrders.filter((o) => orderMatchesPaidSourceDispatchFilter(o, statusFilter)),
+    [quoteOrders, statusFilter]
   );
 
-  const switchStatus = (next: OrderDispatchStatusFilter) => {
+  const switchStatus = (next: PaidSourceDispatchFilter) => {
     setStatusFilter(next);
     const url = new URL(window.location.href);
     if (next === 'all') url.searchParams.delete('orderDispatchStage');
     else url.searchParams.set('orderDispatchStage', next);
     window.history.replaceState({}, '', url);
+  };
+
+  const openOrder = (order: TaskOrder) => {
+    if (['quote_open', 'quote_review'].includes(order.status)) {
+      onNavigate?.('content_delivery', `order:${order.id}`);
+      return;
+    }
+    onNavigate?.('content_delivery', `delivery:order:${order.id}`);
   };
 
   return (
@@ -98,14 +102,14 @@ export default function OrderDispatchManageView({
       allowAllBrands
       hidePageHeader
       title="发单管理"
-      description="发单后在此跟踪待接单与撤回；服务商接单后任务进入「文章交付」"
-      statusTabs={ORDER_DISPATCH_STATUS_TABS.map((t) => ({
+      description="付费信源报价任务：跟踪报价进度、比价确认与撤回"
+      statusTabs={PAID_SOURCE_DISPATCH_STATUS_TABS.map((t) => ({
         id: t.id,
         label: t.label,
         count: statusCounts[t.id],
       }))}
       activeStatus={statusFilter}
-      onStatusChange={(id) => switchStatus(id as OrderDispatchStatusFilter)}
+      onStatusChange={(id) => switchStatus(id as PaidSourceDispatchFilter)}
     >
       <div className="geo-list-table-panel">
         {filteredOrders.length === 0 ? (
@@ -117,8 +121,8 @@ export default function OrderDispatchManageView({
                 <tr>
                   <th>任务名称</th>
                   <th>平台</th>
-                  <th>预算</th>
-                  <th>发单时间</th>
+                  <th>报价进度</th>
+                  <th>发布时间</th>
                   <th>接单方</th>
                   <th>状态</th>
                   <th className="geo-table__actions">操作</th>
@@ -134,25 +138,25 @@ export default function OrderDispatchManageView({
                       )}
                     </td>
                     <td className="text-xs">{o.platform}</td>
-                    <td className="text-xs tabular-nums">¥{o.budget}</td>
+                    <td className="text-xs text-[var(--neutral-text-02)]">
+                      {paidSourceQuoteProgressLabel(o)}
+                    </td>
                     <td className="text-xs tabular-nums text-[var(--neutral-text-03)] whitespace-nowrap">
                       {formatTaskOrderListTime(o.createdAt)}
                     </td>
                     <td className="text-xs">{o.providerName ?? '—'}</td>
                     <td>
                       <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${taskOrderStatusClass(o.status)}`}
+                        className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${paidSourceDispatchRowStatusClass(o.status, o)}`}
                       >
-                        {taskOrderStatusLabel(o.status)}
+                        {paidSourceDispatchRowStatusLabel(o)}
                       </span>
                     </td>
                     <td className="geo-table__actions">
                       <button
                         type="button"
                         className="geo-link text-xs"
-                        onClick={() =>
-                          onNavigate?.('content_delivery', taskOrderDetailHint(o.id))
-                        }
+                        onClick={() => openOrder(o)}
                       >
                         查看
                       </button>

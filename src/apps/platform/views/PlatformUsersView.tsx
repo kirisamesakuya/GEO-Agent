@@ -64,7 +64,7 @@ const SCOPE_META = {
   },
   provider: {
     title: '接单端注册用户',
-    subtitle: '手机号注册的接单方用户，绑定接单主体后可申请入驻与提现。',
+    subtitle: '手机号注册用户；注册时同意用户服务协议与隐私政策，提交入驻时另行确认撮合服务协议。',
     userType: 'provider' as const,
   },
 };

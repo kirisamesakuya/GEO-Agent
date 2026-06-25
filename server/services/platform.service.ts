@@ -8,6 +8,7 @@ import { checkBrandCompleteness, mapBrand } from './brand.service.js';
 import { createProviderNotification } from './notification.service.js';
 import { refreshSkillRoutesFromDb } from '../lib/agent-skill.js';
 import { ROLE_PERMISSIONS, PLATFORM_ROLE_LABELS, type PlatformRole } from '../lib/platform-auth.js';
+import { assertQuoteBypassAllowed } from '../../lib/quote-order.js';
 
 function startOfDay(d: Date) {
   const x = new Date(d);
@@ -419,6 +420,10 @@ export async function assignTaskOrder(
   providerName: string,
   reason?: string
 ) {
+  const existing = await prisma.taskOrder.findUnique({ where: { id: orderId } });
+  if (!existing) throw new Error('订单不存在');
+  assertQuoteBypassAllowed(existing, 'assignTaskOrder');
+
   await prisma.providerOrderAssignment.updateMany({
     where: { orderId, active: true },
     data: { active: false },
@@ -461,6 +466,7 @@ export async function reassignTaskOrder(
 
   const existing = await prisma.taskOrder.findUnique({ where: { id: orderId } });
   if (!existing) throw new Error('订单不存在');
+  assertQuoteBypassAllowed(existing, 'reassignTaskOrder');
   if (!existing.providerId) throw new Error('订单尚未派单，请使用人工派单');
   if (existing.providerId === providerId) throw new Error('新接单方与当前相同');
   const previousProviderId = existing.providerId;

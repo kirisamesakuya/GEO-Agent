@@ -23,6 +23,9 @@ import {
 import { ARTICLE_PUBLISH_PLATFORM_LABELS } from '../../lib/media-platforms';
 import { platformMatches } from '../lib/content-library-platforms';
 import ArticlePlatformPicker from './article/ArticlePlatformPicker';
+import PublishPlatformUnavailableDialog from './agent/PublishPlatformUnavailableDialog';
+import { getHermesAutoPublishBlockedPlatforms } from '../lib/hermes-auto-publish-gate';
+import type { PublishUnavailableDialogState } from '../lib/publish-unavailable-dialog-state';
 
 interface Props {
   brandName: string;
@@ -231,6 +234,8 @@ export default function GenerateArticleView({
   const [contentBatchId, setContentBatchId] = useState<string | null>(null);
   const [awaitingPublish, setAwaitingPublish] = useState(false);
   const [publishLoading, setPublishLoading] = useState(false);
+  const [publishUnavailableDialog, setPublishUnavailableDialog] =
+    useState<PublishUnavailableDialogState | null>(null);
   const [accounts, setAccounts] = useState<AccountBinding[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const { toast } = useToast();
@@ -519,6 +524,17 @@ export default function GenerateArticleView({
     }
     if (qualityChecks?.forbiddenWords?.passed === false) {
       toast('禁用词未通过，请先修改文章结果中的内容后再发布', 'error');
+      return;
+    }
+    const blocked = getHermesAutoPublishBlockedPlatforms([targetPlatform]);
+    if (blocked.length > 0) {
+      const copyText = articles
+        .map((article) => {
+          const body = article.fullContent?.trim() || article.previewText?.trim() || '';
+          return body ? `# ${article.title}\n\n${body}` : `# ${article.title}`;
+        })
+        .join('\n\n---\n\n');
+      setPublishUnavailableDialog({ unsupported: blocked, copyText });
       return;
     }
     setPublishLoading(true);
@@ -913,7 +929,7 @@ export default function GenerateArticleView({
                 onNavigate ? () => onNavigate('content_delivery', 'self') : undefined
               }
               onOpenProviderOrder={
-                onNavigate ? () => onNavigate('create_order', 'ai') : undefined
+                onNavigate ? () => onNavigate('create_order', 'paid_quote') : undefined
               }
             />
           </div>
@@ -960,6 +976,12 @@ export default function GenerateArticleView({
           </div>
         </div>
       )}
+      <PublishPlatformUnavailableDialog
+        open={Boolean(publishUnavailableDialog?.unsupported.length)}
+        state={publishUnavailableDialog}
+        brandName={brandName}
+        onClose={() => setPublishUnavailableDialog(null)}
+      />
     </div>
   );
 }

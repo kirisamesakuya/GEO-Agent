@@ -10,6 +10,7 @@ import ProviderAccountView from './views/ProviderAccountView';
 import ProviderEarningView from './views/ProviderEarningView';
 import ProviderProfileView from './views/ProviderProfileView';
 import ProviderMessages from './ProviderMessages';
+import ProviderQuotesView from './views/ProviderQuotesView';
 import ProviderOnboarding from './ProviderOnboarding';
 import {
   resolveProviderNotifications,
@@ -152,6 +153,16 @@ export default function ProviderApp() {
             onSelectTask={setActiveTaskId}
             onNeedOnboarding={() => setCurrentTab('profile')}
             onClaimed={() => setCurrentTab('orders')}
+          />
+        );
+      case 'quotes':
+        return (
+          <ProviderQuotesView
+            providerId={provider.id}
+            onSelectOrder={(id) => {
+              setActiveOrderId(id);
+              setCurrentTab('orders');
+            }}
           />
         );
       case 'orders':

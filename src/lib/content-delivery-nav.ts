@@ -10,7 +10,7 @@ export const CONTENT_DELIVERY_TABS: { id: ContentDeliveryTab; label: string; des
   {
     id: 'order_manage',
     label: '发单管理',
-    desc: '服务商写作任务发单、待接单与撤回',
+    desc: '付费信源报价任务：报价进度、比价确认与撤回',
   },
   {
     id: 'article',
@@ -52,6 +52,9 @@ export function parseContentDeliveryTabFromUrl(): ContentDeliveryTab {
 
 export function contentDeliveryTabFromHint(hint?: string): ContentDeliveryTab {
   if (!hint) return 'order_manage';
+  if (hint === 'article' || hint === 'publish_records' || hint === 'manual' || hint === 'task' || hint === 'list') {
+    return 'article';
+  }
   if (hint === 'website' || hint.startsWith('website_req:')) return 'website';
   if (
     hint === 'order_manage' ||
@@ -63,11 +66,20 @@ export function contentDeliveryTabFromHint(hint?: string): ContentDeliveryTab {
   ) {
     return 'order_manage';
   }
-  if (hint === 'publish_records' || hint === 'manual' || hint === 'task' || hint === 'list') {
+  if (hint.startsWith('order:')) return 'order_manage';
+  if (hint.startsWith('delivery:order:')) {
+    if (typeof window !== 'undefined') {
+      const urlTab = new URLSearchParams(window.location.search).get('deliveryTab');
+      if (urlTab === 'article' || urlTab === 'website' || urlTab === 'order_manage') {
+        return urlTab;
+      }
+    }
+    return 'order_manage';
+  }
+  if (hint.startsWith('delivery:content:') || hint.startsWith('delivery:import:')) {
     return 'article';
   }
-  if (hint.startsWith('order:')) return 'order_manage';
-  if (hint.startsWith('content:') || hint.startsWith('publish:') || hint.startsWith('delivery:')) {
+  if (hint.startsWith('content:') || hint.startsWith('publish:')) {
     return 'article';
   }
   if (hint.startsWith('project:')) return 'article';
@@ -96,6 +108,28 @@ export function normalizeToContentDelivery(
     return { view: 'content_delivery', hint, tab };
   }
   return null;
+}
+
+export function isContentDeliveryNavActive(
+  activeView: import('../types').ViewType,
+  tab: ContentDeliveryTab,
+  viewHint?: string
+): boolean {
+  const inScope =
+    activeView === 'content_delivery' ||
+    activeView === 'order_delivery' ||
+    activeView === 'content_library' ||
+    activeView === 'quote_compare' ||
+    activeView === 'quote_detail';
+
+  if (!inScope) return false;
+  if (activeView === 'quote_compare' || activeView === 'quote_detail') {
+    return tab === 'order_manage';
+  }
+
+  const fromUrl = typeof window !== 'undefined' ? parseContentDeliveryTabFromUrl() : null;
+  const fromHint = contentDeliveryTabFromHint(viewHint);
+  return (fromUrl ?? fromHint) === tab;
 }
 
 export function syncContentDeliveryUrl(tab: ContentDeliveryTab, hint?: string) {

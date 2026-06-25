@@ -193,6 +193,16 @@ export default function IndexingPlanResultView({ planId, onNavigate, onBack }: P
         <p className="text-sm text-[var(--neutral-text-03)]">加载中…</p>
       ) : (
         <>
+          {plan?.status === 'failed' && results.length > 0 && (
+            <div className="geo-callout-warning p-3 text-xs rounded-lg">
+              最近一次执行失败，以下为上次成功采样留存的历史数据。可返回列表重试，或编辑计划后再次执行。
+            </div>
+          )}
+          {plan?.status === 'failed' && results.length === 0 && (
+            <div className="geo-callout-warning p-3 text-xs rounded-lg">
+              该计划执行失败，暂无历史采样数据。请检查监测平台登录状态后重试。
+            </div>
+          )}
           {gapAnalysis && (
             <div
               className="geo-card p-4 text-xs space-y-1.5"

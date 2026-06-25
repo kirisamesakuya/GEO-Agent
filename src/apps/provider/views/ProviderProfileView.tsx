@@ -26,7 +26,7 @@ import {
   loadMockProviderIdentity,
   loadMockProviderPayoutAccount,
 } from '../lib/provider-mock-payout';
-import type { ProviderRecord } from '../types';
+import { PROVIDER_PAYOUT_COMPLIANCE_HINT } from '../../../../lib/platform-legal-copy';
 
 interface Props {
   provider: ProviderRecord;
@@ -341,8 +341,8 @@ export default function ProviderProfileView({
           </h1>
           <p className="text-xs text-provider-muted mt-1">
             {payoutPanelStep === 'identity'
-              ? '绑定提现账户前需完成基础身份证实名认证。'
-              : '当前仅支持支付宝收款；平台审核通过后将线下打款至以下账户，账户实名须与身份证一致。'}
+              ? '绑定提现账户前需完成身份证实名认证；信息须真实准确，虚假资料可能导致结算或提现失败。'
+              : `当前仅支持支付宝收款；${PROVIDER_PAYOUT_COMPLIANCE_HINT}`}
           </p>
         </div>
 
@@ -491,7 +491,7 @@ export default function ProviderProfileView({
       <div>
         <h1 className="text-xl font-bold text-provider-title">个人中心</h1>
         <p className="text-xs text-provider-muted">
-          {approved ? '管理账号资料、提现账户与接单偏好' : '选择媒体与接单地区，完成入驻审核后可接单'}
+          {approved ? '管理账号资料、提现账户与接单偏好' : '注册并提交入驻申请，审核通过后可领取任务'}
         </p>
       </div>
 
@@ -543,7 +543,9 @@ export default function ProviderProfileView({
         <section className="space-y-4">
           <div>
             <h2 className="text-sm font-bold text-provider-title">入驻审核进度</h2>
-            <p className="text-xs text-provider-muted mt-0.5">填写资料、提交审核并等待平台确认</p>
+            <p className="text-xs text-provider-muted mt-0.5">
+              填写资料并同意入驻与撮合服务协议后提交；注册账号时已适用用户服务协议与隐私政策
+            </p>
           </div>
           <ProviderOnboarding
             providerId={providerId}

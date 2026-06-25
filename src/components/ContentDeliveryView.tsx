@@ -7,11 +7,13 @@ import OrderDeliveryView from './OrderDeliveryView';
 import {
   CONTENT_DELIVERY_TABS,
   parseContentDeliveryTabFromUrl,
-  syncContentDeliveryUrl,
   type ContentDeliveryTab,
 } from '../lib/content-delivery-nav';
-import { parseArticleDeliveryStatusFromUrl } from '../lib/article-delivery-unified';
-import { parseOrderDispatchStageFromUrl } from '../lib/order-delivery-filters';
+import { parseArticleDeliveryStatusFromUrl, parseArticleDeliveryOrderHint } from '../lib/article-delivery-unified';
+import { parsePaidSourceDispatchStageFromUrl } from '../lib/paid-source-dispatch-filters';
+import { parseTaskOrderIdFromHint } from '../lib/website-requirement-nav';
+import QuoteCompareView from './paid-source/QuoteCompareView';
+import ArticleDeliveryOrderDetailView from './delivery/ArticleDeliveryOrderDetailView';
 
 interface Props {
   brandName: string;
@@ -19,33 +21,7 @@ interface Props {
   onNavigate?: (view: ViewType, hint?: string) => void;
   initialTab?: ContentDeliveryTab;
   initialProjectId?: string;
-}
-
-function ContentDeliveryTabs({
-  tab,
-  onTabChange,
-}: {
-  tab: ContentDeliveryTab;
-  onTabChange: (t: ContentDeliveryTab) => void;
-}) {
-  return (
-    <div className="flex gap-1 flex-wrap border-b -mb-px" style={{ borderColor: 'var(--neutral-divider-02)' }}>
-      {CONTENT_DELIVERY_TABS.map((t) => (
-        <button
-          key={t.id}
-          type="button"
-          onClick={() => onTabChange(t.id)}
-          className={`px-4 py-2 text-xs border-b-2 -mb-px transition-colors ${
-            tab === t.id
-              ? 'border-[var(--color-primary)] text-[var(--color-primary)] font-semibold'
-              : 'border-transparent text-[var(--color-text-secondary)] font-medium hover:text-[var(--color-title)]'
-          }`}
-        >
-          {t.label}
-        </button>
-      ))}
-    </div>
-  );
+  viewHint?: string;
 }
 
 export default function ContentDeliveryView({
@@ -53,44 +29,51 @@ export default function ContentDeliveryView({
   onBrandChange,
   onNavigate,
   initialTab,
+  viewHint,
 }: Props) {
-  const [pageTab, setPageTab] = useState<ContentDeliveryTab>(
-    initialTab ?? parseContentDeliveryTabFromUrl()
-  );
-
-  useEffect(() => {
-    if (initialTab) setPageTab(initialTab);
-  }, [initialTab]);
-
-  const switchTab = (tab: ContentDeliveryTab) => {
-    setPageTab(tab);
-    syncContentDeliveryUrl(tab);
-  };
-
+  const pageTab = initialTab ?? parseContentDeliveryTabFromUrl();
   const activeMeta = CONTENT_DELIVERY_TABS.find((t) => t.id === pageTab);
   const articleStage = parseArticleDeliveryStatusFromUrl();
-  const orderDispatchStage = parseOrderDispatchStageFromUrl();
+  const orderDispatchStage = parsePaidSourceDispatchStageFromUrl();
+  const quoteOrderId = parseTaskOrderIdFromHint(viewHint);
+  const execOrderId = parseArticleDeliveryOrderHint(viewHint);
+  const showQuoteCompare = pageTab === 'order_manage' && Boolean(quoteOrderId);
+  const showOrderExecDetail = pageTab === 'order_manage' && Boolean(execOrderId) && !showQuoteCompare;
 
   return (
     <div className="flex flex-col min-h-0">
       <div
-        className="geo-page-tab-sticky shrink-0 px-6 pt-4 pb-0 border-b"
+        className="geo-page-tab-sticky shrink-0 px-6 pt-4 pb-3 border-b"
         style={{ borderColor: 'var(--neutral-divider-02)' }}
       >
-        <div className="mb-3">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <h2 className="text-sm font-bold text-[var(--color-title)]">内容交付</h2>
-            <BrandSwitcher variant="scope" brandName={brandName} onBrandChange={onBrandChange} allowAll />
-          </div>
-          {activeMeta && (
-            <p className="text-[11px] mt-1 text-[var(--neutral-text-03)]">{activeMeta.desc}</p>
-          )}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h2 className="text-sm font-bold text-[var(--color-title)]">
+            {activeMeta?.label ?? '内容交付'}
+          </h2>
+          <BrandSwitcher variant="scope" brandName={brandName} onBrandChange={onBrandChange} allowAll />
         </div>
-        <ContentDeliveryTabs tab={pageTab} onTabChange={switchTab} />
+        {activeMeta && (
+          <p className="text-[11px] mt-1 text-[var(--neutral-text-03)]">{activeMeta.desc}</p>
+        )}
       </div>
 
       <div className="flex flex-col min-w-0">
-        {pageTab === 'order_manage' && (
+        {pageTab === 'order_manage' && showQuoteCompare && quoteOrderId && onNavigate && (
+          <QuoteCompareView
+            brandName={brandName}
+            orderHint={`order:${quoteOrderId}`}
+            onNavigate={onNavigate}
+            embedded
+          />
+        )}
+        {pageTab === 'order_manage' && showOrderExecDetail && execOrderId && onNavigate && (
+          <ArticleDeliveryOrderDetailView
+            orderId={execOrderId}
+            onNavigate={onNavigate}
+            detailContext="order_manage"
+          />
+        )}
+        {pageTab === 'order_manage' && !showQuoteCompare && !showOrderExecDetail && (
           <OrderDispatchManageView
             brandName={brandName}
             onBrandChange={onBrandChange}

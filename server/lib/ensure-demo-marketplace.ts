@@ -24,6 +24,8 @@ export async function ensureDemoMarketplaceReady(): Promise<void> {
 
   const { ensureDemoTaskOrders } = await import('../db/demo-orders.js');
   await ensureDemoTaskOrders(brand.name);
+  const { ensureDemoPaidSourceDispatch } = await import('../db/demo-paid-source-dispatch.js');
+  await ensureDemoPaidSourceDispatch(brand.name);
   await dedupeOrphanPublishedTasks(brand.name);
 }
 

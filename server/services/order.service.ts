@@ -4,6 +4,7 @@ import { createProviderNotification } from './notification.service.js';
 import {
   notifyPublisherOrderAccepted,
   notifyPublisherOrderPendingReview,
+  notifyPublisherOrderWithdrawn,
 } from '../lib/publisher-notification-events.js';
 import { isAllBrandsScope } from './organization.service.js';
 import { paginatedResult, parsePagination } from '../lib/pagination.js';
@@ -13,7 +14,8 @@ import {
   taskOrderStatusesForStageFilter,
   type ArticleDeliveryStageFilter,
 } from '../lib/article-delivery-stage.js';
-import { notifyPublisherOrderWithdrawn } from '../lib/publisher-notification-events.js';
+import { isQuoteOrder, assertQuoteBypassAllowed } from '../../lib/quote-order.js';
+import { QUOTE_SETTLEMENT_SNAPSHOT } from '../../lib/feature-flags.js';
 
 export interface ListOrdersByBrandOptions {
   /** 仅返回文章类任务（与内容交付统一列表一致） */
@@ -57,7 +59,12 @@ export async function listOrdersByBrand(brandName: string, options?: ListOrdersB
       ...(options?.platform ? { platform: options.platform } : {}),
       ...statusFilter,
     },
-    include: { deliveries: true, revisions: true, settlement: true },
+    include: {
+      deliveries: true,
+      revisions: true,
+      settlement: true,
+      quotes: { select: { id: true, status: true } },
+    },
     orderBy: { updatedAt: 'desc' },
   });
 
@@ -87,6 +94,7 @@ export async function getOrder(id: string) {
       revisions: true,
       assignments: { orderBy: { createdAt: 'desc' } },
       settlement: true,
+      quotes: { orderBy: { createdAt: 'asc' } },
     },
   });
 }
@@ -109,15 +117,23 @@ function acceptanceRequiresScreenshot(acceptance: string): boolean {
 export async function withdrawPublisherTaskOrder(orderId: string, reason?: string) {
   const existing = await prisma.taskOrder.findUnique({ where: { id: orderId } });
   if (!existing) throw new Error('任务不存在');
-  if (existing.status !== 'published') {
-    throw new Error('仅待接单任务可撤回发单');
+
+  const quoteWithdrawable = isQuoteOrder(existing) && ['quote_open', 'quote_review'].includes(existing.status);
+  const fixedWithdrawable = !isQuoteOrder(existing) && existing.status === 'published';
+
+  if (!quoteWithdrawable && !fixedWithdrawable) {
+    throw new Error('当前状态不可撤回');
   }
-  if (existing.providerId) {
+  if (existing.providerId && !quoteWithdrawable) {
     throw new Error('已有接单方认领，无法撤回');
   }
 
   await prisma.taskOrderApplication.updateMany({
     where: { orderId, status: { in: ['pending', 'accepted'] } },
+    data: { status: 'rejected' },
+  });
+  await prisma.taskOrderQuote.updateMany({
+    where: { orderId, status: 'pending' },
     data: { status: 'rejected' },
   });
 
@@ -126,8 +142,10 @@ export async function withdrawPublisherTaskOrder(orderId: string, reason?: strin
     data: { status: 'cancelled' },
   });
 
-  const { releaseBudget } = await import('./budget.service.js');
-  await releaseBudget(order.brandName, order.budget, orderId);
+  if (!isQuoteOrder(order) && order.budget > 0) {
+    const { releaseBudget } = await import('./budget.service.js');
+    await releaseBudget(order.brandName, order.budget, orderId);
+  }
 
   await appendAuditLog({
     action: 'order_withdraw',
@@ -157,12 +175,20 @@ export async function createTaskOrder(input: {
   industry?: string;
   city?: string;
   deadline?: string;
+  pricingMode?: string;
+  planId?: string;
+  hiddenBudgetMaxCents?: number;
+  perTaskBudgetCapCents?: number;
+  taskBriefJson?: string;
 }) {
+  const isQuote = input.pricingMode === 'provider_quote';
   return prisma.taskOrder.create({
     data: {
       ...input,
+      pricingMode: input.pricingMode ?? 'provider_quote',
       deadline: input.deadline ? new Date(input.deadline) : undefined,
-      status: 'published',
+      status: isQuote ? 'quote_open' : 'published',
+      budget: isQuote ? 0 : input.budget,
     },
   });
 }
@@ -185,6 +211,10 @@ export async function openDispute(orderId: string, reason: string, actor: string
 }
 
 export async function acceptOrder(orderId: string, providerId: string, providerName: string) {
+  const existing = await prisma.taskOrder.findUnique({ where: { id: orderId } });
+  if (!existing) throw new Error('订单不存在');
+  assertQuoteBypassAllowed(existing, 'acceptOrder');
+
   const order = await prisma.taskOrder.update({
     where: { id: orderId },
     data: { status: 'in_progress', providerId, providerName },
@@ -267,11 +297,28 @@ export async function confirmAcceptance(orderId: string) {
     data: { status: 'completed' },
   });
 
+  const releaseAmount =
+    isQuoteOrder(existing) && existing.publisherPayAmountCents
+      ? existing.publisherPayAmountCents / 100
+      : order.budget;
+
   const { releaseBudget } = await import('./budget.service.js');
-  await releaseBudget(order.brandName, order.budget, orderId);
+  await releaseBudget(order.brandName, releaseAmount, orderId);
+
+  const settlementAmount =
+    isQuoteOrder(existing) && existing.publisherPayAmountCents
+      ? existing.publisherPayAmountCents / 100
+      : order.budget;
 
   const { ensureSettlementOnAcceptance } = await import('./settlement.service.js');
-  await ensureSettlementOnAcceptance(orderId, order.budget);
+  await ensureSettlementOnAcceptance(orderId, settlementAmount, {
+    publisherPayAmountCents: existing.publisherPayAmountCents ?? undefined,
+    platformServiceFeeCents: existing.platformServiceFeeCents ?? undefined,
+    providerIncomeCents: existing.providerIncomeCents ?? undefined,
+    serviceFeeRateBps: existing.serviceFeeRateBps ?? undefined,
+    feeChargeSide: existing.feeChargeSide ?? undefined,
+    isDemoSettlement: !isQuoteOrder(existing) || !QUOTE_SETTLEMENT_SNAPSHOT,
+  });
 
   await appendAuditLog({
     action: 'order_acceptance_confirm',

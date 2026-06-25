@@ -11,6 +11,9 @@ import HermesWorkingOverlay from '../common/HermesWorkingOverlay';
 import HermesPublishConfirmDialog, {
   type HermesPublishConfirmPayload,
 } from '../agent/HermesPublishConfirmDialog';
+import PublishPlatformUnavailableDialog from '../agent/PublishPlatformUnavailableDialog';
+import { getHermesAutoPublishBlockedPlatforms } from '../../lib/hermes-auto-publish-gate';
+import type { PublishUnavailableDialogState } from '../../lib/publish-unavailable-dialog-state';
 import {
   ARTICLE_DELIVERY_SOURCE_LABEL,
   ARTICLE_DELIVERY_STAGE_LABEL,
@@ -78,6 +81,8 @@ export default function ArticleDeliveryDetailView({
     open: boolean;
     payload: HermesPublishConfirmPayload | null;
   }>({ open: false, payload: null });
+  const [publishUnavailableDialog, setPublishUnavailableDialog] =
+    useState<PublishUnavailableDialogState | null>(null);
   const [hermesWork, setHermesWork] = useState({
     open: false,
     progress: 0,
@@ -216,6 +221,15 @@ export default function ArticleDeliveryDetailView({
   const openPublishConfirm = () => {
     if (!batch || !selectedAccountId) {
       toast('请选择发布账号', 'error');
+      return;
+    }
+    const blocked = getHermesAutoPublishBlockedPlatforms([batch.platform]);
+    if (blocked.length > 0) {
+      const body = editContent || item?.fullContent || item?.previewText || '';
+      setPublishUnavailableDialog({
+        unsupported: blocked,
+        copyText: item && body ? `# ${item.title}\n\n${body}` : item ? `# ${item.title}` : '',
+      });
       return;
     }
     const account = publishAccounts.find((a) => a.id === selectedAccountId);
@@ -601,8 +615,14 @@ export default function ArticleDeliveryDetailView({
         onCancel={() => setPublishConfirm({ open: false, payload: null })}
         onConfirm={() => void runPublish()}
       />
+      <PublishPlatformUnavailableDialog
+        open={Boolean(publishUnavailableDialog?.unsupported.length)}
+        state={publishUnavailableDialog}
+        brandName={effectiveBrand}
+        onClose={() => setPublishUnavailableDialog(null)}
+      />
       <ArticleDeliveryDetailShell
-        onBack={() => onNavigate?.('content_delivery')}
+        onBack={() => onNavigate?.('content_delivery', 'article')}
         actions={renderHeaderActions()}
         title={item.title}
         badges={badges}

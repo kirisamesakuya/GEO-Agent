@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
-import type { AgentTask, AgentTaskStatus } from '../types';
+import { Plus, Trash2 } from 'lucide-react';
+import type { AgentTask, AgentTaskStatus, BrandProfile } from '../types';
 import AgentInputCard from './common/AgentInputCard';
 import AgentTaskBackgroundCard, {
   isAgentTaskBlocking,
@@ -28,6 +29,24 @@ import {
   CAMPAIGN_SUPPLEMENT_NOTES_MAX,
   validateSupplementNotes,
 } from '../lib/campaign-form-limits';
+import { reconcileCampaignPackageQuantity } from '../../lib/campaign-package-output';
+import {
+  BRAND_PUBLISH_AGREEMENT_LABEL,
+  BRAND_USER_AGREEMENT_TITLE,
+  PUBLISH_BUDGET_FREEZE_HINT,
+  PUBLISH_CONTENT_COMPLIANCE_HINT,
+} from '../../lib/platform-legal-copy';
+import {
+  BRAND_TRANSACTION_AGREEMENT,
+  BRAND_AGREEMENT_VERSION,
+} from '../../lib/marketplace-agreements';
+import MarketplaceAgreementModal from './common/MarketplaceAgreementModal';
+import {
+  PAID_SOURCE_DEFAULT_PLATFORMS,
+  PAID_SOURCE_PLATFORM_OPTIONS,
+  buildPaidSourceTaskBrief,
+} from '../../lib/paid-source-plan';
+import { serializeTaskBrief } from '../../lib/paid-source-brief';
 
 type CreateMode = 'ai' | 'manual';
 type PlanSourceType = 'brand_profile' | 'geo_report' | 'indexing_result';
@@ -84,6 +103,8 @@ interface Props {
   initialCampaignPlanId?: string;
   autoGenerateFromGeo?: boolean;
   indexingGapHint?: string;
+  paidQuoteMode?: boolean;
+  taskBriefJson?: string;
 }
 
 const ACCEPTANCE_OPTIONS = ['截图证明', '链接回传', '数据复盘', '人工确认'];
@@ -179,6 +200,8 @@ export default function DeliveryPlanView({
   initialCampaignPlanId,
   autoGenerateFromGeo = false,
   indexingGapHint,
+  paidQuoteMode = false,
+  taskBriefJson,
 }: Props) {
   const { toast } = useToast();
   const [mode, setMode] = useState<CreateMode>(lockedMode ?? 'ai');
@@ -222,6 +245,55 @@ export default function DeliveryPlanView({
   const geoAutoTriggered = useRef(false);
   const [taskPackConfirmOpen, setTaskPackConfirmOpen] = useState(false);
   const [pendingGeoGenerateId, setPendingGeoGenerateId] = useState<string | null>(null);
+  const [brandAgreementAccepted, setBrandAgreementAccepted] = useState(false);
+  const [brandAgreementOpen, setBrandAgreementOpen] = useState(false);
+  const [brandProfile, setBrandProfile] = useState<BrandProfile | null>(null);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(PAID_SOURCE_DEFAULT_PLATFORMS);
+  const [hiddenBudgetMaxCents, setHiddenBudgetMaxCents] = useState(2_000_000);
+  const [perTaskBudgetCapCents, setPerTaskBudgetCapCents] = useState(300_000);
+  const [newPackagePlatform, setNewPackagePlatform] = useState(PAID_SOURCE_PLATFORM_OPTIONS[0] ?? '小红书');
+  const [newPackageQuantity, setNewPackageQuantity] = useState(1);
+  const [newPackageUnitPrice, setNewPackageUnitPrice] = useState(3000);
+  const [newPackageDeliverable, setNewPackageDeliverable] = useState('');
+  const [addingPackage, setAddingPackage] = useState(false);
+  const [deletingPackageId, setDeletingPackageId] = useState<string | null>(null);
+
+  const resolvePlanPlatforms = useCallback(
+    () => (selectedPlatforms.length > 0 ? selectedPlatforms : PAID_SOURCE_DEFAULT_PLATFORMS),
+    [selectedPlatforms]
+  );
+
+  const buildTaskBriefForPublish = useCallback(() => {
+    if (taskBriefJson) return taskBriefJson;
+    if (!paidQuoteMode) return undefined;
+    return serializeTaskBrief(
+      buildPaidSourceTaskBrief({
+        sourceType,
+        brandName,
+        brandProfile,
+        supplementNotes,
+        targetPlatforms: resolvePlanPlatforms(),
+        hiddenBudgetMaxCents,
+        perTaskBudgetCapCents,
+      })
+    );
+  }, [
+    taskBriefJson,
+    paidQuoteMode,
+    sourceType,
+    brandName,
+    brandProfile,
+    supplementNotes,
+    resolvePlanPlatforms,
+    hiddenBudgetMaxCents,
+    perTaskBudgetCapCents,
+  ]);
+
+  const ensureBrandAgreement = () => {
+    if (brandAgreementAccepted) return true;
+    toast(`请先阅读并同意${BRAND_USER_AGREEMENT_TITLE}`, 'error');
+    return false;
+  };
 
   const loadPlans = () => {
     fetch(`/api/campaign-plans?brandName=${encodeURIComponent(brandName)}`)
@@ -231,6 +303,17 @@ export default function DeliveryPlanView({
 
   useEffect(() => {
     loadPlans();
+  }, [brandName]);
+
+  useEffect(() => {
+    if (!brandName || brandName === '__all__') {
+      setBrandProfile(null);
+      return;
+    }
+    fetch(`/api/brand-profile?brandName=${encodeURIComponent(brandName)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((p) => setBrandProfile(p))
+      .catch(() => setBrandProfile(null));
   }, [brandName]);
 
   useEffect(() => {
@@ -301,8 +384,10 @@ export default function DeliveryPlanView({
 
   useEffect(() => {
     if (plan?.packages) {
-      setDraftPackages(plan.packages);
-      setPlanDirty(false);
+      const reconciled = plan.packages.map((pkg) => reconcileCampaignPackageQuantity(pkg));
+      const changed = reconciled.some((p, i) => p.quantity !== plan.packages[i]?.quantity);
+      setDraftPackages(reconciled);
+      setPlanDirty(changed);
     }
   }, [plan]);
 
@@ -351,6 +436,7 @@ export default function DeliveryPlanView({
       const { task, error, requiresConfirmation, queueHint: hint } = await requestCampaignPlanFromGeo({
         brandName,
         geoReportId: id,
+        platforms: paidQuoteMode ? resolvePlanPlatforms() : undefined,
         budgetMin,
         budgetMax,
         userConfirmedExecution,
@@ -376,7 +462,7 @@ export default function DeliveryPlanView({
       setTaskPackConfirmOpen(false);
       setPendingGeoGenerateId(null);
     },
-    [brandName, selectedGeoReportId, budgetMin, budgetMax, toast]
+    [brandName, selectedGeoReportId, budgetMin, budgetMax, toast, resolvePlanPlatforms]
   );
 
   const generatePlan = async () => {
@@ -417,6 +503,7 @@ export default function DeliveryPlanView({
         source: sourceType,
         budgetMin,
         budgetMax,
+        platforms: paidQuoteMode ? resolvePlanPlatforms() : undefined,
         supplementNotes: supplementNotes.trim() || undefined,
         ...(sourceType === 'indexing_result'
           ? { sourceIndexPlanId, sourceIndexResultIds }
@@ -497,16 +584,106 @@ export default function DeliveryPlanView({
     }
   };
 
+  const applyPlanFromServer = (nextPlan: CampaignPlan) => {
+    setPlan(nextPlan);
+    setDraftPackages(nextPlan.packages.map((pkg) => reconcileCampaignPackageQuantity(pkg)));
+    setPlanDirty(false);
+  };
+
+  const addPlanPackage = async () => {
+    if (!plan) {
+      toast('请先生成投放计划', 'error');
+      return;
+    }
+    setAddingPackage(true);
+    try {
+      const res = await fetch(`/api/campaign-plans/${plan.id}/packages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform: newPackagePlatform,
+          quantity: newPackageQuantity,
+          unitPrice: newPackageUnitPrice,
+          deliverable:
+            newPackageDeliverable.trim() ||
+            `GEO 优化文章 ${newPackageQuantity} 篇 · ${newPackagePlatform}`,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        toast(data.error, 'error');
+        return;
+      }
+      if (data.plan) {
+        applyPlanFromServer(data.plan);
+        setNewPackageDeliverable('');
+        toast('已添加发布需求', 'success');
+      }
+    } catch {
+      toast('添加失败', 'error');
+    } finally {
+      setAddingPackage(false);
+    }
+  };
+
+  const removePlanPackage = async (packageId: string) => {
+    if (!plan) return;
+    setDeletingPackageId(packageId);
+    try {
+      const res = await fetch(`/api/campaign-plans/${plan.id}/packages/${packageId}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.error) {
+        toast(data.error, 'error');
+        return;
+      }
+      if (data.plan) {
+        applyPlanFromServer(data.plan);
+        toast('已删除计划条目', 'success');
+      }
+    } catch {
+      toast('删除失败', 'error');
+    } finally {
+      setDeletingPackageId(null);
+    }
+  };
+
   const publish = async (planId: string) => {
+    if (!ensureBrandAgreement()) return;
     if (planDirty) {
       toast('请先保存对方案的修改', 'error');
       return;
+    }
+    if (paidQuoteMode) {
+      const briefJson = buildTaskBriefForPublish();
+      try {
+        const brief = JSON.parse(briefJson ?? '{}') as {
+          hiddenBudgetMaxCents?: number;
+          perTaskBudgetCapCents?: number;
+        };
+        await fetch(`/api/campaign-plans/${planId}/settings`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pricingMode: 'provider_quote',
+            hiddenBudgetMaxCents: brief.hiddenBudgetMaxCents,
+            perTaskBudgetCapCents: brief.perTaskBudgetCapCents,
+          }),
+        });
+      } catch {
+        /* ignore parse errors */
+      }
     }
     setPublishing(true);
     const res = await fetch(`/api/campaign-plans/${planId}/publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ brandName }),
+      body: JSON.stringify({
+        brandName,
+        agreementVersion: BRAND_AGREEMENT_VERSION,
+        taskBriefJson: buildTaskBriefForPublish(),
+      }),
     });
     const data = await res.json();
     setPublishing(false);
@@ -514,12 +691,20 @@ export default function DeliveryPlanView({
       toast(data.error, 'error');
       return;
     }
-    toast(`已发布 ${data.orders?.length ?? 0} 个任务到资源平台`, 'success');
-    if (onNavigate) onNavigate('content_delivery', 'order_manage:published');
+    toast(
+      paidQuoteMode
+        ? `已生成 ${data.orders?.length ?? 0} 条报价任务（未冻结余额）`
+        : `已发布 ${data.orders?.length ?? 0} 个任务到资源平台`,
+      'success'
+    );
+    if (onNavigate) {
+      onNavigate('content_delivery', paidQuoteMode ? 'order_manage' : 'order_manage:published');
+    }
     loadPlans();
   };
 
   const publishManual = async () => {
+    if (!ensureBrandAgreement()) return;
     if (!manualTitle.trim()) {
       toast('请填写任务标题', 'error');
       return;
@@ -538,6 +723,7 @@ export default function DeliveryPlanView({
       description: manualDesc,
       deliverable: manualDeliverable || manualDesc || '按任务描述交付',
       acceptance: manualAcceptance,
+      agreementVersion: BRAND_AGREEMENT_VERSION,
     });
     setManualLoading(false);
     if (error) {
@@ -589,9 +775,54 @@ export default function DeliveryPlanView({
 
       {mode === 'ai' ? (
         <>
+          {paidQuoteMode && brandProfile && (
+            <div className="geo-card p-5 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-[var(--color-title)]">品牌基础信息</h3>
+                <span className="text-[10px] text-[var(--neutral-text-03)]">
+                  默认来自品牌资料，供接单方查看
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-[var(--neutral-text-02)]">
+                <div>
+                  <p className="text-[var(--neutral-text-03)]">品牌</p>
+                  <p className="font-medium text-[var(--color-title)] mt-0.5">{brandProfile.name}</p>
+                </div>
+                <div>
+                  <p className="text-[var(--neutral-text-03)]">行业 / 城市</p>
+                  <p className="mt-0.5">
+                    {brandProfile.industry} · {brandProfile.city}
+                  </p>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-[var(--neutral-text-03)]">品牌介绍</p>
+                  <p className="mt-0.5 leading-relaxed">{brandProfile.description || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-[var(--neutral-text-03)]">目标关键词</p>
+                  <p className="mt-0.5">{brandProfile.keywords?.join('、') || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-[var(--neutral-text-03)]">官网</p>
+                  <p className="mt-0.5 truncate">{brandProfile.website || '—'}</p>
+                </div>
+                {brandProfile.forbiddenWords?.length > 0 && (
+                  <div className="md:col-span-2">
+                    <p className="text-[var(--neutral-text-03)]">禁用词 / 合规</p>
+                    <p className="mt-0.5">{brandProfile.forbiddenWords.join('、')}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <AgentInputCard
-            title="AI 制定接单投放方案"
-            description="向资源平台发任务 · 需预算 · 接单方负责写作与发布"
+            title={paidQuoteMode ? '生成付费信源投放计划' : 'AI 制定接单投放方案'}
+            description={
+              paidQuoteMode
+                ? '按媒体平台拆分文章篇数 · 可增删改计划条目 · 确认报价后冻结'
+                : '向资源平台发任务 · 需预算 · 接单方负责写作与发布'
+            }
             footer={
               <button
                 type="button"
@@ -599,7 +830,7 @@ export default function DeliveryPlanView({
                 onClick={() => void generatePlan()}
                 disabled={loading || isAgentTaskBlocking(taskId, taskStatus)}
               >
-                {loading ? '生成中…' : 'AI 生成投放方案'}
+                {loading ? '生成中…' : paidQuoteMode ? 'AI 生成投放计划' : 'AI 生成投放方案'}
               </button>
             }
           >
@@ -738,29 +969,93 @@ export default function DeliveryPlanView({
                     )}
                   </div>
                 )}
+
+                {paidQuoteMode && (
+                  <div>
+                    <FieldLabel>目标媒体平台（可额外勾选）</FieldLabel>
+                    <p className="text-[10px] text-[var(--neutral-text-03)] mb-2">
+                      AI 将按所选媒体拆分文章篇数；生成后仍可手动增删条目
+                    </p>
+                    <div className="flex flex-wrap gap-2 max-w-2xl">
+                      {PAID_SOURCE_PLATFORM_OPTIONS.map((p) => {
+                        const selected = selectedPlatforms.includes(p);
+                        return (
+                          <button
+                            key={p}
+                            type="button"
+                            className={`text-xs px-2.5 py-1 rounded-lg border ${
+                              selected ? 'geo-nav-active' : 'geo-nav-item'
+                            }`}
+                            onClick={() =>
+                              setSelectedPlatforms((cur) =>
+                                selected ? cur.filter((x) => x !== p) : [...cur, p]
+                              )
+                            }
+                          >
+                            {p}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </ArticleFormSection>
 
-              <ArticleFormSection index={2} title="投放预算">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
-                  <div>
-                    <FieldLabel>预算下限（元）</FieldLabel>
-                    <input
-                      type="number"
-                      value={budgetMin}
-                      onChange={(e) => setBudgetMin(Number(e.target.value))}
-                      className="geo-input w-full text-sm"
-                    />
+              <ArticleFormSection index={2} title={paidQuoteMode ? '预算控制（接单方不可见）' : '投放预算'}>
+                {!paidQuoteMode && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
+                    <div>
+                      <FieldLabel>预算下限（元）</FieldLabel>
+                      <input
+                        type="number"
+                        value={budgetMin}
+                        onChange={(e) => setBudgetMin(Number(e.target.value))}
+                        className="geo-input w-full text-sm"
+                      />
+                    </div>
+                    <div>
+                      <FieldLabel>预算上限（元）</FieldLabel>
+                      <input
+                        type="number"
+                        value={budgetMax}
+                        onChange={(e) => setBudgetMax(Number(e.target.value))}
+                        className="geo-input w-full text-sm"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <FieldLabel>预算上限（元）</FieldLabel>
-                    <input
-                      type="number"
-                      value={budgetMax}
-                      onChange={(e) => setBudgetMax(Number(e.target.value))}
-                      className="geo-input w-full text-sm"
-                    />
+                )}
+                {paidQuoteMode && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
+                    <div>
+                      <FieldLabel>隐藏总上限（元）</FieldLabel>
+                      <input
+                        type="number"
+                        className="geo-input w-full text-sm"
+                        value={Math.round(hiddenBudgetMaxCents / 100)}
+                        onChange={(e) =>
+                          setHiddenBudgetMaxCents(Math.max(0, Math.round(Number(e.target.value) * 100)))
+                        }
+                      />
+                      <p className="text-[10px] text-[var(--neutral-text-03)] mt-1">
+                        品牌侧控制总预算，不展示给接单方
+                      </p>
+                    </div>
+                    <div>
+                      <FieldLabel>单任务上限（元）</FieldLabel>
+                      <input
+                        type="number"
+                        className="geo-input w-full text-sm"
+                        value={Math.round(perTaskBudgetCapCents / 100)}
+                        onChange={(e) =>
+                          setPerTaskBudgetCapCents(Math.max(0, Math.round(Number(e.target.value) * 100)))
+                        }
+                      />
+                      <p className="text-[10px] text-[var(--neutral-text-03)] mt-1">
+                        每条报价任务的可接受最高价
+                      </p>
+                    </div>
                   </div>
-                </div>
+                )}
                 <div>
                   <FieldLimitLabel label="补充说明（可选）" className="block mb-1" />
                   <FieldCharLimitBox
@@ -775,13 +1070,19 @@ export default function DeliveryPlanView({
                       }
                       maxLength={CAMPAIGN_SUPPLEMENT_NOTES_MAX}
                       rows={2}
-                      placeholder="如：重点覆盖种植牙与隐形矫正相关问答，或指定优先平台"
+                      placeholder={
+                        paidQuoteMode
+                          ? '如：重点覆盖种植牙问答、指定优先官方媒体等'
+                          : '如：重点覆盖种植牙与隐形矫正相关问答，或指定优先平台'
+                      }
                       className={`geo-input w-full text-sm max-w-xl min-h-[72px] ${fieldCharLimitInputClass(true)}`}
                     />
                   </FieldCharLimitBox>
                 </div>
                 <p className="text-xs text-[var(--neutral-text-03)]">
-                  AI 将按来源与预算，为各内容平台自动生成文章数量、写作要求与预算分配，生成后可修改。
+                  {paidQuoteMode
+                    ? '生成报价任务时不冻结余额；确认某一报价后才冻结对应金额'
+                    : PUBLISH_BUDGET_FREEZE_HINT}
                 </p>
               </ArticleFormSection>
             </div>
@@ -803,14 +1104,22 @@ export default function DeliveryPlanView({
           title="手动创建任务包"
           description="发布非文章类任务到资源平台（一期自定义发布暂未开放）"
           footer={
-            <button
-              type="button"
-              className="geo-btn-primary text-sm"
-              onClick={() => void publishManual()}
-              disabled={manualLoading}
-            >
-              {manualLoading ? '发布中…' : '发布到资源平台'}
-            </button>
+            <div className="space-y-3">
+              <label className="flex items-start gap-2 text-xs text-[var(--neutral-text-03)] cursor-pointer">
+                <input type="checkbox" checked={brandAgreementAccepted} onChange={(e) => setBrandAgreementAccepted(e.target.checked)} className="mt-0.5" />
+                <span>我已阅读并同意
+                  <button type="button" className="ml-0.5 text-[var(--color-accent)] font-medium hover:underline" onClick={(e) => { e.preventDefault(); setBrandAgreementOpen(true); }}>
+                    {BRAND_PUBLISH_AGREEMENT_LABEL}
+                  </button>
+                </span>
+              </label>
+              <p className="text-[10px] text-[var(--neutral-text-03)] leading-relaxed">
+                {PUBLISH_CONTENT_COMPLIANCE_HINT}
+              </p>
+              <button type="button" className="geo-btn-primary text-sm" onClick={() => void publishManual()} disabled={manualLoading}>
+                {manualLoading ? '发布中…' : '发布到资源平台'}
+              </button>
+            </div>
           }
         >
           <div className="space-y-3">
@@ -881,6 +1190,7 @@ export default function DeliveryPlanView({
 
       {activePlan && mode === 'ai' && (() => {
         const summary = summarizePlanPackages(displayPackages);
+        const planEditable = plan?.id === activePlan.id;
         return (
           <div className="geo-card overflow-hidden">
             <div
@@ -911,14 +1221,23 @@ export default function DeliveryPlanView({
                   </button>
                 )}
                 {activePlan.status === 'draft' && (
-                  <button
-                    type="button"
-                    className="geo-btn-primary text-sm"
-                    disabled={publishing || planDirty}
-                    onClick={() => void publish(activePlan.id)}
-                  >
-                    {publishing ? '发布中…' : `发布 ${summary.packageCount} 个任务包`}
-                  </button>
+                  <div className="space-y-2">
+                    <label className="flex items-start justify-end gap-1.5 text-[11px] text-[var(--neutral-text-03)] cursor-pointer">
+                      <input type="checkbox" checked={brandAgreementAccepted} onChange={(e) => setBrandAgreementAccepted(e.target.checked)} className="mt-0.5" />
+                      <span>同意
+                        <button type="button" className="ml-0.5 text-[var(--color-accent)] hover:underline" onClick={(e) => { e.preventDefault(); setBrandAgreementOpen(true); }}>
+                          {BRAND_PUBLISH_AGREEMENT_LABEL}
+                        </button>
+                      </span>
+                    </label>
+                    <button type="button" className="geo-btn-primary text-sm" disabled={publishing || planDirty} onClick={() => void publish(activePlan.id)}>
+                      {publishing
+                        ? '处理中…'
+                        : paidQuoteMode
+                          ? `生成 ${summary.packageCount} 条报价任务`
+                          : `发布 ${summary.packageCount} 个任务包`}
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -931,13 +1250,14 @@ export default function DeliveryPlanView({
                     <th>单价</th>
                     <th>平台预算</th>
                     <th>文章要求</th>
+                    {planEditable && <th className="w-12" />}
                   </tr>
                 </thead>
                 <tbody>
                   {displayPackages.map((pkg) => {
                     const quantity = resolvePackageQuantity(pkg);
                     const unitPrice = resolvePackageUnitPrice(pkg);
-                    const editable = plan?.id === activePlan.id;
+                    const editable = planEditable;
                     return (
                       <tr key={pkg.id}>
                         <td className="whitespace-nowrap">{pkg.platform}</td>
@@ -990,12 +1310,79 @@ export default function DeliveryPlanView({
                             <span className="text-xs">{pkg.deliverable}</span>
                           )}
                         </td>
+                        {editable && (
+                          <td>
+                            <button
+                              type="button"
+                              className="p-1 rounded text-[var(--neutral-text-03)] hover:text-red-600"
+                              disabled={deletingPackageId === pkg.id}
+                              onClick={() => void removePlanPackage(pkg.id)}
+                              aria-label="删除条目"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
+            {planEditable && (
+              <div
+                className="p-4 border-t space-y-3"
+                style={{ borderColor: 'var(--neutral-divider-02)', background: 'var(--neutral-bg-03)' }}
+              >
+                <h4 className="text-xs font-semibold text-[var(--color-title)] flex items-center gap-1.5">
+                  <Plus className="w-3.5 h-3.5" />
+                  手动添加发布需求
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <select
+                    className="geo-input text-sm"
+                    value={newPackagePlatform}
+                    onChange={(e) => setNewPackagePlatform(e.target.value)}
+                  >
+                    {PAID_SOURCE_PLATFORM_OPTIONS.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min={1}
+                    className="geo-input text-sm"
+                    value={newPackageQuantity}
+                    onChange={(e) => setNewPackageQuantity(Math.max(1, Number(e.target.value) || 1))}
+                    placeholder="文章数"
+                  />
+                  <input
+                    type="number"
+                    min={100}
+                    className="geo-input text-sm"
+                    value={newPackageUnitPrice}
+                    onChange={(e) => setNewPackageUnitPrice(Math.max(100, Number(e.target.value) || 100))}
+                    placeholder="单价（元）"
+                  />
+                  <button
+                    type="button"
+                    className="geo-btn-secondary text-sm"
+                    disabled={addingPackage}
+                    onClick={() => void addPlanPackage()}
+                  >
+                    {addingPackage ? '添加中…' : '添加条目'}
+                  </button>
+                </div>
+                <textarea
+                  className="geo-input w-full text-sm min-h-[56px]"
+                  placeholder="文章要求（可选）"
+                  value={newPackageDeliverable}
+                  onChange={(e) => setNewPackageDeliverable(e.target.value)}
+                />
+              </div>
+            )}
           </div>
         );
       })()}
@@ -1003,8 +1390,8 @@ export default function DeliveryPlanView({
   );
 
   if (embedded) {
-    return <div className="geo-page-content space-y-4">{body}</div>;
+    return <><div className="geo-page-content space-y-4">{body}</div><MarketplaceAgreementModal agreement={brandAgreementOpen ? BRAND_TRANSACTION_AGREEMENT : null} onClose={() => setBrandAgreementOpen(false)} /></>;
   }
 
-  return <div className="geo-page-content space-y-4">{body}</div>;
+  return <><div className="geo-page-content space-y-4">{body}</div><MarketplaceAgreementModal agreement={brandAgreementOpen ? BRAND_TRANSACTION_AGREEMENT : null} onClose={() => setBrandAgreementOpen(false)} /></>;
 }

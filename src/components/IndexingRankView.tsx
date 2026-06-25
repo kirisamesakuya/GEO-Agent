@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Play, Plus, X } from 'lucide-react';
+import { Pencil, Play, Plus, X } from 'lucide-react';
 import { formatPlanDateTime, toDatetimeLocalValue } from '../lib/datetime-local';
 import {
   defaultScheduleRunTime,
@@ -30,6 +30,7 @@ interface Plan {
   name: string;
   platforms: string[];
   keywords: string[];
+  keywordIds?: string[];
   status: string;
   queryAt?: string;
   scheduleFrequency?: string;
@@ -38,6 +39,14 @@ interface Plan {
   scheduleMonthDay?: number;
   hitCount?: number;
   resultCount?: number;
+}
+
+function planHasResults(plan: Plan): boolean {
+  return (plan.resultCount ?? 0) > 0;
+}
+
+function canEditPlan(plan: Plan): boolean {
+  return plan.status !== 'running';
 }
 
 interface Keyword {
@@ -64,6 +73,7 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [detailPlanId, setDetailPlanId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [planBrand, setPlanBrand] = useState('');
   const [planName, setPlanName] = useState('');
@@ -176,6 +186,7 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
   };
 
   const openCreateModal = () => {
+    setEditingPlanId(null);
     setPlanName('');
     setSelectedKw([]);
     setSelectedPlatforms([...DEFAULT_INDEXING_PLATFORMS]);
@@ -192,40 +203,79 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
       .catch(() => setBrands([]));
   };
 
+  const openEditModal = async (plan: Plan) => {
+    if (!canEditPlan(plan)) {
+      toast('执行中的计划不可编辑', 'error');
+      return;
+    }
+    setEditingPlanId(plan.id);
+    setPlanBrand(plan.brandName);
+    setPlanName(plan.name);
+    setSelectedPlatforms(plan.platforms.length ? [...plan.platforms] : [...DEFAULT_INDEXING_PLATFORMS]);
+    setQueryAt(plan.queryAt ? toDatetimeLocalValue(plan.queryAt) : toDatetimeLocalValue());
+    setScheduleFrequency((plan.scheduleFrequency ?? '') as ScheduleFrequency);
+    setScheduleRunTime(plan.scheduleRunTime ?? defaultScheduleRunTime());
+    setScheduleWeekday(plan.scheduleWeekday ?? 1);
+    setScheduleMonthDay(plan.scheduleMonthDay ?? 1);
+    setShowCreateModal(true);
+    fetch('/api/brands')
+      .then((r) => r.json())
+      .then((d) => setBrands((d.brands ?? []) as BrandOption[]))
+      .catch(() => setBrands([]));
+    try {
+      const res = await fetch(`/api/indexing/plans/${plan.id}`);
+      const data = (await res.json()) as { plan?: { keywordIds?: string[] } };
+      const ids = data.plan?.keywordIds ?? plan.keywordIds ?? [];
+      setSelectedKw(ids);
+      loadKeywordsForBrand(plan.brandName);
+      fetchAiMonitorSessions(plan.brandName)
+        .then((d) => setModalMonitorSessions(d.sessions))
+        .catch(() => setModalMonitorSessions([]));
+    } catch {
+      toast('加载计划详情失败', 'error');
+    }
+  };
+
   const closeCreateModal = () => {
     if (creating) return;
     setShowCreateModal(false);
+    setEditingPlanId(null);
   };
 
-  const createPlan = async () => {
+  const savePlan = async () => {
     if (!planBrand) return;
     if (!planName.trim() || selectedKw.length === 0 || selectedPlatforms.length === 0) return;
     setCreating(true);
     try {
-      const res = await fetch('/api/indexing/plans', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          brandName: planBrand,
-          name: planName,
-          platforms: selectedPlatforms,
-          keywordIds: selectedKw,
-          queryAt: queryAt ? new Date(queryAt).toISOString() : undefined,
-          scheduleFrequency: scheduleFrequency || undefined,
-          scheduleRunTime: scheduleFrequency ? scheduleRunTime : undefined,
-          scheduleWeekday:
-            scheduleFrequency === 'weekly' ? scheduleWeekday : undefined,
-          scheduleMonthDay:
-            scheduleFrequency === 'monthly' ? scheduleMonthDay : undefined,
-        }),
-      });
+      const payload = {
+        name: planName,
+        platforms: selectedPlatforms,
+        keywordIds: selectedKw,
+        queryAt: queryAt ? new Date(queryAt).toISOString() : undefined,
+        scheduleFrequency: scheduleFrequency || null,
+        scheduleRunTime: scheduleFrequency ? scheduleRunTime : null,
+        scheduleWeekday: scheduleFrequency === 'weekly' ? scheduleWeekday : null,
+        scheduleMonthDay: scheduleFrequency === 'monthly' ? scheduleMonthDay : null,
+      };
+      const res = editingPlanId
+        ? await fetch(`/api/indexing/plans/${editingPlanId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+        : await fetch('/api/indexing/plans', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ brandName: planBrand, ...payload }),
+          });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        toast(data.error ?? '创建失败', 'error');
+        toast(data.error ?? (editingPlanId ? '更新失败' : '创建失败'), 'error');
         return;
       }
-      toast('查询计划已创建', 'success');
+      toast(editingPlanId ? '查询计划已更新' : '查询计划已创建', 'success');
       setShowCreateModal(false);
+      setEditingPlanId(null);
       setPlanName('');
       if (planBrand === brandName) loadPlans();
       else onBrandChange(planBrand);
@@ -346,14 +396,18 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
                   </td>
                 </tr>
               ) : (
-                plans.map((p) => (
+                plans.map((p) => {
+                  const hasResults = planHasResults(p);
+                  const editable = canEditPlan(p);
+                  return (
                   <tr key={p.id}>
                     <td>
                       <button
                         type="button"
-                        className="geo-link"
-                        onClick={() => openPlanDetail(p.id)}
-                        disabled={p.status !== 'done'}
+                        className={`geo-link ${hasResults ? '' : 'opacity-60 cursor-default'}`}
+                        onClick={() => hasResults && openPlanDetail(p.id)}
+                        disabled={!hasResults}
+                        title={hasResults ? '查看采样结果' : '暂无历史采样数据'}
                       >
                         {p.name}
                       </button>
@@ -365,27 +419,40 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
                     <td className="text-xs">{formatIndexPlanStatus(p.status)}</td>
                     <td>{p.hitCount ?? 0}</td>
                     <td className="geo-table__actions">
-                      {(p.status === 'draft' || p.status === 'failed') && (
-                        <button
-                          type="button"
-                          className="geo-link text-xs gap-1 inline-flex"
-                          onClick={() => void runPlan(p)}
-                        >
-                          <Play className="w-3 h-3" /> {p.status === 'failed' ? '重试' : '执行'}
-                        </button>
-                      )}
-                      {p.status === 'done' && (
-                        <button
-                          type="button"
-                          className="geo-link text-xs"
-                          onClick={() => openPlanDetail(p.id)}
-                        >
-                          查看结果
-                        </button>
-                      )}
+                      <div className="inline-flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
+                        {editable && (
+                          <button
+                            type="button"
+                            className="geo-link text-xs inline-flex items-center gap-1 shrink-0"
+                            onClick={() => void openEditModal(p)}
+                          >
+                            <Pencil className="w-3 h-3" />
+                            编辑
+                          </button>
+                        )}
+                        {(p.status === 'draft' || p.status === 'failed') && (
+                          <button
+                            type="button"
+                            className="geo-link text-xs gap-1 inline-flex shrink-0"
+                            onClick={() => void runPlan(p)}
+                          >
+                            <Play className="w-3 h-3" /> {p.status === 'failed' ? '重试' : '执行'}
+                          </button>
+                        )}
+                        {hasResults && (
+                          <button
+                            type="button"
+                            className="geo-link text-xs shrink-0"
+                            onClick={() => openPlanDetail(p.id)}
+                          >
+                            {p.status === 'failed' ? '历史结果' : '查看结果'}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -416,10 +483,12 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
 
             <div className="geo-modal-head">
               <h3 id="index-plan-modal-title" className="font-bold text-sm" style={{ color: 'var(--neutral-text-01)' }}>
-                新建查询计划
+                {editingPlanId ? '编辑查询计划' : '新建查询计划'}
               </h3>
               <p className="text-xs mt-1" style={{ color: 'var(--neutral-text-03)' }}>
-                选择品牌并配置采样关键词与 AI 平台
+                {editingPlanId
+                  ? '修改计划名称、关键词、平台与定时执行配置'
+                  : '选择品牌并配置采样关键词与 AI 平台'}
               </p>
             </div>
 
@@ -430,6 +499,7 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
                   className="geo-input w-full text-sm"
                   value={planBrand}
                   onChange={(e) => setPlanBrand(e.target.value)}
+                  disabled={Boolean(editingPlanId)}
                 >
                   <option value="">请选择品牌</option>
                   {brands.map((b) => (
@@ -624,10 +694,10 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
               <button
                 type="button"
                 className="geo-btn-primary text-sm"
-                onClick={() => void createPlan()}
+                onClick={() => void savePlan()}
                 disabled={creating || !canCreate}
               >
-                {creating ? '创建中…' : '创建计划'}
+                {creating ? '保存中…' : editingPlanId ? '保存修改' : '创建计划'}
               </button>
             </div>
           </div>

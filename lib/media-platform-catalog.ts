@@ -24,6 +24,7 @@ export const MEDIA_PLATFORM_CATEGORY_LABELS: Record<MediaPlatformCategory, strin
   content_publish: '内容发布',
   website: '网站',
   official_media: '官媒',
+  industry_media: '行业媒体',
   ai_search: 'AI 搜索',
 };
 
@@ -31,6 +32,7 @@ export const MEDIA_PLATFORM_CATEGORY_LABELS: Record<MediaPlatformCategory, strin
 export const LOBBY_PLATFORM_CATEGORIES: MediaPlatformCategory[] = [
   'content_publish',
   'website',
+  'industry_media',
   'official_media',
 ];
 

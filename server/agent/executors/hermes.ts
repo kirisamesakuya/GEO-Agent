@@ -23,6 +23,10 @@ import {
   normalizeTaskBusinessOutput,
 } from '../../lib/task-business-output.js';
 import { normalizeIndexSamplingOutput } from '../../lib/index-sampling-output.js';
+import {
+  deriveHermesPublishTaskStatus,
+  normalizeHermesPublishOutput,
+} from '../../lib/hermes-publish.js';
 
 export const GEO_HERMES_SKILL_TASK_TYPES = new Set([
   'geo_quick_start',
@@ -156,6 +160,51 @@ async function hermesFetch(path: string, init?: RequestInit) {
 function buildHermesRunPayload(task: AgentTask) {
   const skill = skillNameForTaskType(task.type);
   const payload = buildSkillPayloadForHermes(task);
+
+  if (task.type === 'hermes_publish') {
+    const userMessage = [
+      `请使用 Hermes 技能「${skill}」完成以下文章发布任务，最终回复必须是单个 JSON object（不要用 Markdown 代码块包裹）。`,
+      '输出需包含：summary、platform、accountName、publishedAt、publishLink、items[]（每项含 contentItemId、title、status、publishLink、evidenceUrl）。',
+      'status 仅允许：published、manual_required、failed、skipped。',
+      '仅在 input.userConfirmed 为 true 时执行真实发布并采集证据；否则返回 ready_for_manual_publish 清单。',
+      '',
+      JSON.stringify(payload, null, 2),
+    ].join('\n');
+    return {
+      input: userMessage,
+      instructions: [
+        `You are executing GEO-Agent publish task ${task.id}.`,
+        `Required skill: ${skill}.`,
+        'Follow the skill contract and return a single JSON object when finished.',
+      ].join(' '),
+      metadata: {
+        taskId: task.id,
+        type: task.type,
+        skill,
+        brandName: task.brandName ?? null,
+        input: payload,
+      },
+    };
+  }
+
+  if (task.type === 'account_verify') {
+    const userMessage = [
+      `请使用 Hermes 技能「${skill}」校验本地发布账号登录态，返回单个 JSON object。`,
+      JSON.stringify(payload, null, 2),
+    ].join('\n');
+    return {
+      input: userMessage,
+      instructions: `Execute ${skill} for account verification task ${task.id}. Return JSON only.`,
+      metadata: {
+        taskId: task.id,
+        type: task.type,
+        skill,
+        brandName: task.brandName ?? null,
+        input: payload,
+      },
+    };
+  }
+
   const website = resolveCanonicalWebsite(payload);
   const preCrawl = payload.preCrawlSnapshot as Record<string, unknown> | undefined;
   const ruleFindings = (payload.ruleScorePreview as { findings?: unknown[] } | undefined)?.findings;
@@ -289,6 +338,30 @@ export class NousHermesExecutor implements AgentExecutor {
           };
         }
 
+        if (task.type === 'hermes_publish') {
+          const publishStatus = deriveHermesPublishTaskStatus(normalized);
+          return {
+            status: publishStatus,
+            progress: 100,
+            output: normalized,
+            userErrorMessage:
+              publishStatus === 'failed'
+                ? '自动发布失败，请改用手动发布或检查 Hermes 账号'
+                : publishStatus === 'partial'
+                  ? '部分文章发布成功，其余需人工处理'
+                  : undefined,
+            log: {
+              level: publishStatus === 'succeeded' ? 'info' : 'warn',
+              message:
+                publishStatus === 'succeeded'
+                  ? (data.summary ?? 'Hermes 发布完成')
+                  : publishStatus === 'partial'
+                    ? 'Hermes 部分发布完成'
+                    : 'Hermes 发布失败',
+            },
+          };
+        }
+
         return {
           status,
           progress: 100,
@@ -396,16 +469,7 @@ export class NousHermesExecutor implements AgentExecutor {
 
     // 发布任务
     if (task.type === 'hermes_publish') {
-      const platform = String(task.input.targetPlatform ?? '小红书');
-      const batchId = String(task.input.contentBatchId ?? task.id);
-      return {
-        publishLink:
-          raw.publishLink ?? raw.url ?? `https://publish.hermes.local/${platform}/${batchId}`,
-        publishedAt: new Date().toISOString(),
-        platform,
-        source: 'hermes_gateway',
-        ...raw,
-      };
+      return normalizeHermesPublishOutput(raw, task.input);
     }
 
     // 账号校验

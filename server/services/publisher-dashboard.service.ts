@@ -8,6 +8,13 @@ import {
 import { getAiCredits } from './ai-credits.service.js';
 import { listKnowledge } from './knowledge.service.js';
 import { listArticleEffectTodos } from './article-effect.service.js';
+import { getBudgetAccount } from './budget.service.js';
+import {
+  buildContentBoardCard,
+  buildContentRecentRow,
+  buildWebsiteBoardCard,
+  buildWebsiteRecentRow,
+} from '../lib/workbench-board.js';
 
 import { GEO_AI_PLATFORM_LABELS } from '../../lib/media-platforms.js';
 const CREDITS_LOW_THRESHOLD = 50;
@@ -53,6 +60,39 @@ export interface PublisherDashboard {
     analyzedAt: string | null;
     mentionRate: number;
   };
+  brandOverview?: {
+    inProgress: number;
+    pendingAction: number;
+    completedThisWeek: number;
+    creditsBalance: number;
+    deliveryBalance: number;
+    publishAccountCount: number;
+    websiteServiceBalance?: number;
+  };
+  brandIndustry?: string;
+  workbenchTodos?: PublisherTodo[];
+  taskBoard?: Array<{
+    id: string;
+    title: string;
+    category: 'content' | 'website';
+    categoryLabel: string;
+    brandStatus: string;
+    statusTone: 'warning' | 'info' | 'neutral';
+    stats: Array<{ label: string; value: number }>;
+    actionLabel: string;
+    targetView: string;
+    targetHint?: string;
+  }>;
+  recentCompleted?: Array<{
+    id: string;
+    title: string;
+    statusLabel: string;
+    categoryLabel: string;
+    responsibleParty?: string;
+    completedAt: string;
+    targetView: string;
+    targetHint?: string;
+  }>;
 }
 
 function startOfDay(d: Date): Date {
@@ -71,6 +111,8 @@ export async function getPublisherDashboard(brandName: string): Promise<Publishe
 
   const { ensureDemoPublisherSnapshot } = await import('../db/demo-publisher-snapshot.js');
   await ensureDemoPublisherSnapshot(brandName);
+  const { ensureDemoWorkbenchBoard } = await import('../db/demo-workbench-board.js');
+  await ensureDemoWorkbenchBoard(brandName);
 
   const today = startOfDay(new Date());
   const thirtyDaysAgo = new Date(today);
@@ -266,10 +308,94 @@ export async function getPublisherDashboard(brandName: string): Promise<Publishe
   const effectTodos = await listArticleEffectTodos(brand.name);
   todos.push(...effectTodos);
 
+  const [taskOrders, budgetAccount, websiteOrders] = await Promise.all([
+    prisma.taskOrder.findMany({
+      where: { brandName: brand.name },
+      include: { quotes: { where: { status: 'pending' } } },
+      orderBy: { updatedAt: 'desc' },
+      take: 50,
+    }),
+    getBudgetAccount(brand.name).catch(() => ({ balance: 0, available: 0 })),
+    prisma.websiteOrder.findMany({
+      where: { brandName: brand.name },
+      include: { request: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 10,
+    }),
+  ]);
+
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+
+  const inProgressStatuses = ['quote_open', 'quote_review', 'matched', 'in_progress', 'pending_review', 'awaiting_freeze'];
+  const inProgress = taskOrders.filter((o) => inProgressStatuses.includes(o.status)).length;
+
+  const quoteConfirmTodos: PublisherTodo[] = taskOrders
+    .filter((o) => o.status === 'quote_review' && o.quotes.length > 0)
+    .map((o) => ({
+      id: `quote-${o.id}`,
+      type: 'quote_confirm',
+      label: `确认报价：${o.title}（${o.quotes.length} 条）`,
+      priority: 'P0',
+      targetView: 'quote_compare',
+      targetHint: `order:${o.id}`,
+    }));
+
+  const acceptanceTodos: PublisherTodo[] = taskOrders
+    .filter((o) => o.status === 'pending_review')
+    .map((o) => ({
+      id: `accept-${o.id}`,
+      type: 'acceptance',
+      label: `待验收：${o.title}`,
+      priority: 'P0',
+      targetView: 'content_delivery',
+      targetHint: `delivery:order:${o.id}`,
+    }));
+
+  const workbenchTodos = [...quoteConfirmTodos, ...acceptanceTodos];
+
+  const contentBoardCards = taskOrders
+    .filter((o) => inProgressStatuses.includes(o.status))
+    .filter((o) => !workbenchTodos.some((t) => t.targetHint?.includes(o.id)))
+    .map((o) => buildContentBoardCard(o));
+
+  const websiteBoardCards = websiteOrders
+    .filter((w) => w.status !== 'completed' && w.status !== 'cancelled')
+    .map((w) => buildWebsiteBoardCard(w));
+
+  const taskBoard = [...contentBoardCards, ...websiteBoardCards].slice(0, 6);
+
+  const recentCompleted = [
+    ...taskOrders
+      .filter((o) => o.status === 'completed' && o.updatedAt >= weekAgo)
+      .map((o) => buildContentRecentRow(o)),
+    ...websiteOrders
+      .filter((w) => w.status === 'completed')
+      .slice(0, 3)
+      .map((w) => buildWebsiteRecentRow(w)),
+  ].sort((a, b) => b.completedAt.localeCompare(a.completedAt));
+
+  const websiteInProgress = websiteOrders.filter(
+    (w) => w.status !== 'completed' && w.status !== 'cancelled'
+  ).length;
+
+  const { isDemoPublisherSnapshotEnabled } = await import('../db/demo-publisher-snapshot.js');
+
+  const brandOverview = {
+    inProgress: inProgress + websiteInProgress,
+    pendingAction: workbenchTodos.length,
+    completedThisWeek: recentCompleted.length,
+    creditsBalance: credits.balance,
+    deliveryBalance: budgetAccount.available ?? budgetAccount.balance ?? 0,
+    publishAccountCount: accounts.filter((a) => a.status === '已授权' || a.status === '正常').length,
+    websiteServiceBalance: isDemoPublisherSnapshotEnabled() ? 18_000 : undefined,
+  };
+
   todos.sort((a, b) => (a.priority === 'P0' ? -1 : 1) - (b.priority === 'P0' ? -1 : 1));
 
   return {
     brandName: brand.name,
+    brandIndustry: brand.industry,
     metrics: {
       totalPublished,
       todayPublished,
@@ -292,6 +418,10 @@ export async function getPublisherDashboard(brandName: string): Promise<Publishe
       planId: r.planId,
     })),
     todos,
+    workbenchTodos,
+    taskBoard,
+    recentCompleted,
+    brandOverview,
     samplingNote: '收录数据来自结构化 Agent 采样，非真机查询',
     geoInsight: {
       latestReportId: latestGeo?.id ?? null,

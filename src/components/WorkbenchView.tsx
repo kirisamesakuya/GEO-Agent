@@ -1,23 +1,49 @@
 import { useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import type { ViewType } from '../types';
-import PageHeaderWithBrand from './common/PageHeaderWithBrand';
-import WorkbenchAlertStrip from './workbench/WorkbenchAlertStrip';
+import WorkbenchResultPanel from './workbench/WorkbenchResultPanel';
 import WorkbenchDashboard, { type CockpitData } from './workbench/WorkbenchDashboard';
-import WorkbenchHermesSummary from './workbench/WorkbenchHermesSummary';
 import { fetchOnboardingStatus, type OnboardingStatus } from '../lib/onboarding-client';
 
 interface PublisherDashboard extends CockpitData {
   brandName: string;
-  geoInsight?: CockpitData['geoInsight'];
-  todos: Array<{
+  brandIndustry?: string;
+  brandOverview?: {
+    inProgress: number;
+    pendingAction: number;
+    completedThisWeek: number;
+    creditsBalance: number;
+    deliveryBalance: number;
+    publishAccountCount: number;
+    websiteServiceBalance?: number;
+  };
+  workbenchTodos?: Array<{
     id: string;
-    type: string;
     label: string;
-    priority: string;
     targetView: string;
     targetHint?: string;
-    count?: number;
+  }>;
+  taskBoard?: Array<{
+    id: string;
+    title: string;
+    category: 'content' | 'website';
+    categoryLabel: string;
+    brandStatus: string;
+    statusTone: 'warning' | 'info' | 'neutral';
+    stats: Array<{ label: string; value: number }>;
+    actionLabel: string;
+    targetView: string;
+    targetHint?: string;
+  }>;
+  recentCompleted?: Array<{
+    id: string;
+    title: string;
+    statusLabel: string;
+    categoryLabel: string;
+    responsibleParty?: string;
+    completedAt: string;
+    targetView?: string;
+    targetHint?: string;
   }>;
 }
 
@@ -28,10 +54,21 @@ interface Props {
   onStartFirstAudit?: () => void;
 }
 
+const EMPTY_OVERVIEW = {
+  inProgress: 0,
+  pendingAction: 0,
+  completedThisWeek: 0,
+  creditsBalance: 0,
+  deliveryBalance: 0,
+  publishAccountCount: 0,
+  websiteServiceBalance: 0,
+};
+
 export default function WorkbenchView({ brandName, onBrandChange, onNavigate, onStartFirstAudit }: Props) {
   const [data, setData] = useState<PublisherDashboard | null>(null);
   const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showLegacyCharts, setShowLegacyCharts] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -57,25 +94,29 @@ export default function WorkbenchView({ brandName, onBrandChange, onNavigate, on
   if (loading && !data) {
     return (
       <div className="geo-page-content space-y-4">
-        <PageHeaderWithBrand
-          title="工作台"
-          titleClassName="text-lg font-bold"
-          brandName={brandName}
-          onBrandChange={onBrandChange}
-        />
+        <header className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-bold text-[var(--color-title)]">工作台</h2>
+        </header>
         <p className="text-sm text-[var(--neutral-text-03)]">加载工作台…</p>
       </div>
     );
   }
 
+  const overview = data?.brandOverview ?? EMPTY_OVERVIEW;
+  const displayBrand = data?.brandName ?? brandName;
+
   return (
     <div className="geo-page-content space-y-4">
-      <PageHeaderWithBrand
-        title="工作台"
-        titleClassName="text-lg font-bold"
-        brandName={brandName}
-        onBrandChange={onBrandChange}
-        actions={
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-[var(--color-title)]">工作台</h2>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="geo-btn-secondary geo-btn-sm text-xs"
+            onClick={() => setShowLegacyCharts((v) => !v)}
+          >
+            {showLegacyCharts ? '收起数据图表' : '展开数据图表'}
+          </button>
           <button
             type="button"
             className="geo-btn-secondary geo-btn-sm inline-flex items-center gap-1.5"
@@ -86,8 +127,8 @@ export default function WorkbenchView({ brandName, onBrandChange, onNavigate, on
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden />
             刷新
           </button>
-        }
-      />
+        </div>
+      </header>
 
       {onboarding?.showOnboardingHero && onStartFirstAudit && (
         <div className="geo-card p-6 md:p-8 space-y-3">
@@ -101,17 +142,27 @@ export default function WorkbenchView({ brandName, onBrandChange, onNavigate, on
         </div>
       )}
 
-      {data && data.todos.length > 0 && (
-        <WorkbenchAlertStrip todos={data.todos} onNavigate={onNavigate} />
-      )}
+      <WorkbenchResultPanel
+        brandName={displayBrand}
+        brandIndustry={data?.brandIndustry}
+        overview={overview}
+        todos={(data?.workbenchTodos ?? []).map((t) => ({
+          ...t,
+          targetView: t.targetView as ViewType,
+        }))}
+        taskCards={(data?.taskBoard ?? []).map((c) => ({
+          ...c,
+          targetView: c.targetView as ViewType,
+        }))}
+        recentCompleted={(data?.recentCompleted ?? []).map((r) => ({
+          ...r,
+          targetView: r.targetView as ViewType | undefined,
+        }))}
+        onNavigate={onNavigate}
+        onBrandChange={onBrandChange}
+      />
 
-      <WorkbenchHermesSummary brandName={brandName} onNavigate={onNavigate} />
-
-      {!data ? (
-        <div className="geo-card p-8 text-center text-sm text-[var(--neutral-text-03)]">
-          <p>暂无该品牌看板数据。请从左侧导航进入 GEO 分析、收录排名或发布任务；待办条会提示需处理事项。</p>
-        </div>
-      ) : (
+      {showLegacyCharts && data && (
         <WorkbenchDashboard
           data={{
             metrics: data.metrics,

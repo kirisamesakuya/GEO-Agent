@@ -23,6 +23,7 @@ export interface CreateLobbyOrderInput {
   deliverable: string;
   acceptance: string;
   description?: string;
+  agreementVersion?: string;
 }
 
 export async function createArticleWritingOrder(
@@ -72,6 +73,7 @@ export async function createLobbyOrder(
     deliverable: input.deliverable,
     acceptance: input.acceptance,
     description: input.description ?? input.deliverable,
+    agreementVersion: input.agreementVersion,
   });
 }
 
@@ -79,7 +81,7 @@ async function postTaskOrder(body: Record<string, unknown>) {
   const res = await fetch('/api/orders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ pricingMode: 'provider_quote', ...body }),
   });
   const data = await res.json();
   if (data.error) return { error: data.error as string };

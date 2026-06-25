@@ -7,6 +7,14 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useToast } from '../../../context/ToastContext';
+import { MARKETPLACE_PLATFORM_FEE_RATE, PROVIDER_COOPERATION_AGREEMENT } from '../../../../lib/marketplace-agreements';
+import {
+  PROVIDER_EARNINGS_FEE_NOTE,
+  PROVIDER_FEE_EXAMPLE,
+  PROVIDER_NO_GUARANTEE_HINT,
+  PROVIDER_ONBOARDING_AGREEMENT_LABEL,
+} from '../../../../lib/platform-legal-copy';
+import MarketplaceAgreementModal from '../../../components/common/MarketplaceAgreementModal';
 import type { EarningsTransaction, WalletSummary } from '../types';
 import { PLATFORM_SHORT } from '../lib/provider-ui';
 import {
@@ -19,6 +27,10 @@ import {
   hasMockProviderPayoutReady,
   loadMockProviderPayoutAccount,
 } from '../lib/provider-mock-payout';
+import {
+  buildEarningsTransactionRowView,
+  matchesEarningsTransactionSearch,
+} from '../../../../lib/earnings-transaction-display';
 
 interface Props {
   providerId: string;
@@ -32,20 +44,11 @@ const CHART_POINTS: Record<DateTab, string[]> = {
   all: ['40,60', '120,70', '200,50', '280,60', '360,40', '440,30', '520,25'],
 };
 
-function formatTxTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function txStatusLabel(tx: EarningsTransaction): string {
-  if (tx.type === 'withdrawal') return tx.status === 'success' ? '已到账' : '处理中';
-  return tx.status === 'settled' ? '已结算' : '待结算';
+function rowView(tx: EarningsTransaction) {
+  return buildEarningsTransactionRowView(
+    tx,
+    tx.platform ? (PLATFORM_SHORT[tx.platform] ?? tx.platform) : undefined
+  );
 }
 
 function channelFromLabel(label: string): string {
@@ -67,6 +70,7 @@ export default function ProviderEarningView({ providerId }: Props) {
   const [withdrawSuccess, setWithdrawSuccess] = useState(false);
   const [activeDateTab, setActiveDateTab] = useState<DateTab>('7d');
   const [localSearch, setLocalSearch] = useState('');
+  const [feeAgreementOpen, setFeeAgreementOpen] = useState(false);
 
   const loadEarnings = async () => {
     setLoading(true);
@@ -129,18 +133,24 @@ export default function ProviderEarningView({ providerId }: Props) {
       });
   }, [providerId]);
 
-  const filteredTx = transactions.filter((tx) => {
-    const q = localSearch.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      tx.title.toLowerCase().includes(q) ||
-      (tx.brand ?? '').toLowerCase().includes(q) ||
-      (tx.orderId ?? '').toLowerCase().includes(q)
-    );
-  });
+  const filteredTx = transactions.filter((tx) =>
+    matchesEarningsTransactionSearch(rowView(tx).searchText, localSearch)
+  );
 
   const graphDataPoints = CHART_POINTS[activeDateTab];
-  const settledCount = transactions.filter((t) => t.type === 'income' && t.status === 'settled').length;
+  const settledCount = transactions.filter(
+    (t) => t.type === 'income' && t.settlementStatus === 'settled'
+  ).length;
+
+  const txRowTone = (tx: EarningsTransaction) => {
+    if (tx.type === 'withdrawal') {
+      if (tx.withdrawalStatus === 'paid') return 'success';
+      if (tx.withdrawalStatus === 'approved') return 'warning';
+      return 'pending';
+    }
+    if (tx.settlementStatus === 'settled') return 'success';
+    return 'pending';
+  };
 
   const handleWithdraw = async (e: FormEvent) => {
     e.preventDefault();
@@ -254,12 +264,30 @@ export default function ProviderEarningView({ providerId }: Props) {
         <div className="provider-card p-6 rounded-2xl shadow-sm text-left flex justify-between items-start">
           <div>
             <p className="text-xs text-provider-muted mb-1 font-medium">平台服务费率</p>
-            <p className="text-2xl font-black text-provider-title font-mono mb-2">8.0%</p>
-            <p className="text-[10px] text-provider-muted font-medium">含技术服务与结算维护费</p>
+            <p className="text-2xl font-black text-provider-title font-mono mb-2">{(MARKETPLACE_PLATFORM_FEE_RATE * 100).toFixed(1)}%</p>
+            <p className="text-[10px] text-provider-muted font-medium">
+              按实际结算金额扣除；例：¥{PROVIDER_FEE_EXAMPLE.settlement} 结算，您得 ¥{PROVIDER_FEE_EXAMPLE.income}
+            </p>
+            <button
+              type="button"
+              className="mt-2 text-[10px] font-medium text-brand hover:underline"
+              onClick={() => setFeeAgreementOpen(true)}
+            >
+              查看{PROVIDER_ONBOARDING_AGREEMENT_LABEL}
+            </button>
           </div>
           <HelpCircle className="w-4 h-4 text-provider-muted" />
         </div>
       </div>
+
+      <p className="text-[10px] text-provider-muted leading-relaxed px-1">
+        {PROVIDER_NO_GUARANTEE_HINT} {PROVIDER_EARNINGS_FEE_NOTE}
+      </p>
+
+      <MarketplaceAgreementModal
+        agreement={feeAgreementOpen ? PROVIDER_COOPERATION_AGREEMENT : null}
+        onClose={() => setFeeAgreementOpen(false)}
+      />
 
       <section className="provider-card rounded-2xl p-6 shadow-sm">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -329,14 +357,14 @@ export default function ProviderEarningView({ providerId }: Props) {
       <section className="provider-card rounded-2xl p-6 shadow-sm">
         <div className="flex justify-between items-center mb-5 gap-4 flex-wrap">
           <h2 className="text-sm font-bold text-provider-title">收支交易明细</h2>
-          <div className="relative w-48">
+          <div className="relative w-56">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-provider-muted w-3.5 h-3.5" />
             <input
               type="text"
               value={localSearch}
               onChange={(e) => setLocalSearch(e.target.value)}
               className="w-full pl-8 pr-3 py-1.5 bg-provider-subtle border-0 rounded-lg text-xs outline-none focus:bg-white focus:border focus:border-brand/30 transition-all font-medium"
-              placeholder="搜索品牌或任务..."
+              placeholder="搜索品牌、账户、金额、状态…"
             />
           </div>
         </div>
@@ -345,7 +373,10 @@ export default function ProviderEarningView({ providerId }: Props) {
           {filteredTx.length === 0 ? (
             <div className="text-center py-6 text-xs text-provider-muted">没有符合条件的流水记录</div>
           ) : (
-            filteredTx.map((tx) => (
+            filteredTx.map((tx) => {
+              const view = rowView(tx);
+              const tone = txRowTone(tx);
+              return (
               <div
                 key={tx.id}
                 className="flex items-center justify-between p-3.5 border border-provider hover:bg-provider-hover/40 rounded-xl transition-colors"
@@ -355,20 +386,18 @@ export default function ProviderEarningView({ providerId }: Props) {
                     className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
                       tx.type === 'withdrawal'
                         ? 'bg-provider-hover text-provider-secondary'
-                        : tx.status === 'settled' || tx.status === 'success'
+                        : tone === 'success'
                           ? 'bg-green-50 text-green-500'
-                          : 'bg-orange-50 text-orange-500'
+                          : tone === 'warning'
+                            ? 'bg-amber-50 text-amber-600'
+                            : 'bg-orange-50 text-orange-500'
                     }`}
                   >
-                    {tx.type === 'withdrawal' ? '提现' : '收益'}
+                    {view.typeBadge}
                   </div>
                   <div className="min-w-0 text-left">
-                    <h4 className="text-xs font-bold text-provider-title mb-1 truncate">{tx.title}</h4>
-                    <p className="text-[10px] text-provider-muted truncate">
-                      品牌: {tx.brand || '平台系统'}
-                      {tx.orderId ? ` | 订单: ${tx.orderId}` : ''}
-                      {tx.platform ? ` | ${PLATFORM_SHORT[tx.platform] ?? tx.platform}` : ''}
-                    </p>
+                    <h4 className="text-xs font-bold text-provider-title mb-1 truncate">{view.title}</h4>
+                    <p className="text-[10px] text-provider-muted truncate">{view.subtitle}</p>
                   </div>
                 </div>
                 <div className="text-right shrink-0 ml-3">
@@ -377,21 +406,24 @@ export default function ProviderEarningView({ providerId }: Props) {
                       tx.type === 'withdrawal' ? 'text-provider-body' : 'text-brand'
                     }`}
                   >
-                    {tx.type === 'withdrawal' ? '-' : '+'} ¥ {tx.amount.toLocaleString()}
+                    {view.amountPrefix} ¥ {view.amountText}
                   </div>
                   <div className="text-[10px] text-provider-muted mt-1 flex items-center gap-1 justify-end font-medium">
                     <span
                       className={`w-1.5 h-1.5 rounded-full inline-block ${
-                        tx.status === 'settled' || tx.status === 'success'
+                        tone === 'success'
                           ? 'bg-green-500'
-                          : 'bg-orange-500'
+                          : tone === 'warning'
+                            ? 'bg-amber-500'
+                            : 'bg-orange-500'
                       }`}
                     />
-                    {txStatusLabel(tx)} | {formatTxTime(tx.time)}
+                    {view.statusLabel} | {view.timeLabel}
                   </div>
                 </div>
               </div>
-            ))
+            );
+            })
           )}
         </div>
       </section>

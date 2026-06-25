@@ -31,6 +31,12 @@ import {
 import { getOrder, submitDelivery, openDispute, submitRevisionResponse } from '../services/order.service.js';
 import { resolveMarketplaceSlots } from '../lib/marketplace-task-slots.js';
 import {
+  submitTaskOrderQuote,
+  listProviderQuotes,
+  QuoteError,
+} from '../services/quote.service.js';
+import { isQuoteOrder } from '../../lib/quote-order.js';
+import {
   isArticleContentOrder,
   submitArticleDraft,
   submitFinalArticleDelivery,
@@ -203,7 +209,7 @@ export function registerProviderRoutes(app: Express) {
     const providerId = requireProviderId(req, res);
     if (!providerId) return;
     try {
-      res.json({ provider: await submitProviderApplication(providerId) });
+      res.json({ provider: await submitProviderApplication(providerId, req.body?.agreementVersion) });
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : '提交失败' });
     }
@@ -289,7 +295,40 @@ export function registerProviderRoutes(app: Express) {
     const order = await getOrder(req.params.id);
     if (!order) return res.status(404).json({ error: '任务不存在' });
     const slots = await resolveMarketplaceSlots(order);
-    res.json({ task: { ...order, ...slots } });
+    const task = {
+      ...order,
+      ...slots,
+      ...(isQuoteOrder(order) ? { budget: undefined } : {}),
+      isQuoteTask: isQuoteOrder(order),
+    };
+    res.json({ task });
+  });
+
+  app.post('/api/provider/task-orders/:id/quotes', async (req, res) => {
+    const identity = await requireProviderIdentity(req, res);
+    if (!identity) return;
+    const body = req.body ?? {};
+    try {
+      const quote = await submitTaskOrderQuote(
+        req.params.id,
+        identity.providerId,
+        identity.providerName,
+        body
+      );
+      res.status(201).json({ quote });
+    } catch (err) {
+      if (err instanceof QuoteError) {
+        return res.status(err.httpStatus).json({ error: err.message, code: err.code });
+      }
+      res.status(400).json({ error: err instanceof Error ? err.message : '提交报价失败' });
+    }
+  });
+
+  app.get('/api/provider/quotes', async (req, res) => {
+    const providerId = requireProviderId(req, res);
+    if (!providerId) return;
+    const quotes = await listProviderQuotes(providerId);
+    res.json({ quotes });
   });
 
   app.post('/api/provider/task-orders/:id/apply', async (req, res) => {

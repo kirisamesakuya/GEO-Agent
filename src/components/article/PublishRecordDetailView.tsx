@@ -59,7 +59,7 @@ export default function PublishRecordDetailView({ brandName, recordId, onNavigat
       <button
         type="button"
         className="geo-btn-secondary geo-btn-sm flex items-center gap-2"
-        onClick={() => onNavigate?.('content_delivery')}
+        onClick={() => onNavigate?.('content_delivery', 'article')}
       >
         <ArrowLeft className="w-4 h-4" />
         返回文章交付

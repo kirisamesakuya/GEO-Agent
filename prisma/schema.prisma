@@ -612,58 +612,131 @@ model GeoActionConfirmation {
 }
 
 model CampaignPlan {
-  id        String             @id @default(uuid())
-  brandName String
-  goal      String
-  platforms String
-  budgetMin Float
-  budgetMax Float
-  status    String             @default("draft")
-  taskId    String?
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  packages  TaskPackageDraft[]
+  id                      String             @id @default(uuid())
+  brandName               String
+  goal                    String
+  platforms               String
+  budgetMin               Float
+  budgetMax               Float
+  hiddenBudgetMaxCents    Int?
+  perTaskBudgetCapCents   Int?
+  budgetVisibleToProvider Boolean            @default(false)
+  pricingMode             String             @default("provider_quote")
+  status                  String             @default("draft")
+  taskId                  String?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  packages                TaskPackageDraft[]
 }
 
 model TaskPackageDraft {
-  id             String       @id @default(uuid())
-  planId         String
-  plan           CampaignPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-  name           String
-  platform       String
-  payeeType      String
-  quantity       Int          @default(1)
-  unitPrice      Float?
-  budget         Float
-  deliverable    String
-  acceptance     String
-  publishToLobby Boolean      @default(true)
-  status         String       @default("pending_confirm")
+  id                String       @id @default(uuid())
+  planId            String
+  plan              CampaignPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  name              String
+  platform          String
+  payeeType         String
+  quantity          Int          @default(1)
+  unitPrice         Float?
+  budget            Float
+  deliverable       String
+  acceptance        String
+  publishToLobby    Boolean      @default(true)
+  status            String       @default("pending_confirm")
+  suggestedMinCents Int?
+  suggestedMaxCents Int?
+  slotCount         Int          @default(1)
+  contentDirection  String?
+  mediaTypeHint     String?
+  quoteRequired     Boolean      @default(true)
 }
 
 model TaskOrder {
-  id           String                    @id @default(uuid())
-  brandName    String
-  title        String
-  type         String
-  platform     String
-  budget       Float
-  deliverable  String
-  acceptance   String
-  description  String?
-  industry     String?
-  city         String?
-  status       String                    @default("published")
-  providerId   String?
-  providerName String?
-  deadline     DateTime?
-  createdAt    DateTime                  @default(now())
-  updatedAt    DateTime                  @updatedAt
-  deliveries   OrderDelivery[]
-  revisions    OrderRevision[]
-  applications TaskOrderApplication[]
-  assignments  ProviderOrderAssignment[]
-  settlement   SettlementRecord?
+  id                      String                    @id @default(uuid())
+  brandName               String
+  title                   String
+  type                    String
+  platform                String
+  budget                  Float
+  deliverable             String
+  acceptance              String
+  description             String?
+  industry                String?
+  city                    String?
+  planId                  String?
+  pricingMode             String                    @default("provider_quote")
+  suggestedMinCents       Int?
+  suggestedMaxCents       Int?
+  hiddenBudgetMaxCents    Int?
+  perTaskBudgetCapCents   Int?
+  contentDirection        String?
+  mediaTypeHint           String?
+  slotCount               Int                       @default(1)
+  taskBriefJson           String?
+  selectedQuoteId         String?
+  acceptedAt              DateTime?
+  serviceFeeRateBps       Int                       @default(3000)
+  feeChargeSide           String                    @default("provider")
+  publisherPayAmountCents Int?
+  platformServiceFeeCents Int?
+  providerIncomeCents     Int?
+  freezeRequestId         String?
+  status                  String                    @default("published")
+  providerId              String?
+  providerName            String?
+  deadline                DateTime?
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+  deliveries              OrderDelivery[]
+  revisions               OrderRevision[]
+  applications            TaskOrderApplication[]
+  assignments             ProviderOrderAssignment[]
+  quotes                  TaskOrderQuote[]
+  settlement              SettlementRecord?
+}
+
+model TaskOrderQuote {
+  id                          String    @id @default(uuid())
+  orderId                     String
+  order                       TaskOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  providerId                  String
+  providerName                String
+  providerExpectedIncomeCents Int
+  publisherPayAmountCents     Int
+  platformServiceFeeCents     Int
+  serviceFeeRateBps           Int       @default(3000)
+  mediaName                   String?
+  mediaType                   String?
+  publishPlatform             String?
+  estimatedPublishAt          DateTime?
+  deliveryPromise             String?
+  includeLink                 Boolean   @default(false)
+  includeScreenshot           Boolean   @default(true)
+  includeIndexingProof        Boolean   @default(false)
+  overRangeReason             String?
+  quoteExpiresAt              DateTime?
+  message                     String?
+  status                      String    @default("pending")
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+
+  @@index([orderId, status])
+  @@index([providerId, createdAt])
+}
+
+model PlatformMediaPriceBand {
+  id                String   @id @default(uuid())
+  mediaType         String
+  contentDirection  String?
+  publishPlatform   String?
+  industry          String?
+  city              String?
+  suggestedMinCents Int
+  suggestedMaxCents Int
+  sampleSize        Int      @default(0)
+  sourceType        String   @default("manual_seed")
+  status            String   @default("active")
+  updatedAt         DateTime @updatedAt
 }
 
 model ProviderOrderAssignment {
@@ -678,15 +751,22 @@ model ProviderOrderAssignment {
 }
 
 model SettlementRecord {
-  id         String    @id @default(uuid())
-  orderId    String    @unique
-  order      TaskOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  status     String    @default("pending_platform")
-  amount     Float
-  note       String?
-  operatorId String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id                        String    @id @default(uuid())
+  orderId                   String    @unique
+  order                     TaskOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status                    String    @default("pending_platform")
+  amount                    Float
+  publisherPayAmountCents   Int?
+  platformServiceFeeCents   Int?
+  providerIncomeCents       Int?
+  serviceFeeRateBps         Int?
+  feeChargeSide             String?
+  settlementBaseAmountCents Int?
+  isDemoSettlement          Boolean   @default(false)
+  note                      String?
+  operatorId                String?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 }
 
 model OrderDelivery {

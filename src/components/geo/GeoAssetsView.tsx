@@ -149,7 +149,7 @@ export default function GeoAssetsView({ brandName, onNavigate }: Props) {
       keywords: brandName,
       notes: buildPrefillNotes(withAnalysis),
     });
-    onNavigate?.('create_website');
+    onNavigate?.('site_optimize');
   };
 
   const hasUrl = Boolean(websiteUrl.trim());

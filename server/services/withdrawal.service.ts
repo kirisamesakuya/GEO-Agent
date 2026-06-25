@@ -6,6 +6,10 @@ import {
   payoutChannelLabel,
   providerPayoutNameMatch,
 } from '../../lib/provider-payout.js';
+import {
+  formatEarningsIncomeTitle,
+} from '../../lib/earnings-transaction-display.js';
+import { MARKETPLACE_PLATFORM_FEE_RATE } from '../../lib/marketplace-agreements.js';
 
 /**
  * DEMO_ONLY:
@@ -14,7 +18,7 @@ import {
  * PRODUCTION_TODO:
  * 真实产品中应接入财务结算、提现审核、发票、税务、风控和打款系统。
  */
-export const PLATFORM_FEE_RATE = 0.08;
+export const PLATFORM_FEE_RATE = MARKETPLACE_PLATFORM_FEE_RATE;
 export const DAILY_WITHDRAWAL_LIMIT = 100_000;
 
 export type WithdrawalStatus = 'pending' | 'approved' | 'paid' | 'rejected';
@@ -434,20 +438,29 @@ export async function buildProviderEarningsTransactions(providerId: string) {
       where: { providerId },
       orderBy: { createdAt: 'desc' },
       take: 50,
+      include: {
+        provider: {
+          select: {
+            payoutChannel: true,
+            payoutAccountName: true,
+            payoutAccountLabel: true,
+          },
+        },
+      },
     }),
   ]);
 
   const incomeTx = orders.map((o) => {
     const gross = orderGrossAmount(o);
     const net = netEarnings(gross);
-    const st = o.settlement?.status ?? 'pending_platform';
+    const settlementStatus = o.settlement?.status ?? 'pending_platform';
     return {
       id: o.settlement?.id ?? o.id,
-      title: o.title,
+      title: formatEarningsIncomeTitle(o.title, o.type),
       brand: o.brandName ?? undefined,
       orderId: o.id,
       type: 'income' as const,
-      status: st === 'settled' ? ('settled' as const) : ('pending' as const),
+      settlementStatus,
       amount: net,
       grossAmount: gross,
       platformFee: Math.round((gross - net) * 100) / 100,
@@ -458,15 +471,23 @@ export async function buildProviderEarningsTransactions(providerId: string) {
 
   const withdrawalTx = withdrawals
     .filter((w) => w.status !== 'rejected')
-    .map((w) => ({
-      id: w.id,
-      title: `提现到 ${w.channelLabel ?? w.channel}`,
-      type: 'withdrawal' as const,
-      status: w.status === 'paid' ? ('success' as const) : ('pending' as const),
-      amount: w.amount,
-      time: w.createdAt.toISOString(),
-      withdrawalStatus: w.status,
-    }));
+    .map((w) => {
+      const p = w.provider;
+      return {
+        id: w.id,
+        title: '提现申请',
+        channelLabel: w.channelLabel ?? payoutChannelLabel(w.channel),
+        payoutChannelLabel: p?.payoutChannel
+          ? payoutChannelLabel(p.payoutChannel)
+          : payoutChannelLabel(w.channel),
+        payoutAccountName: p?.payoutAccountName ?? null,
+        payoutAccountLabel: p?.payoutAccountLabel ?? null,
+        type: 'withdrawal' as const,
+        withdrawalStatus: w.status,
+        amount: w.amount,
+        time: w.createdAt.toISOString(),
+      };
+    });
 
   const transactions = [...incomeTx, ...withdrawalTx].sort(
     (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()

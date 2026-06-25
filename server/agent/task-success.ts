@@ -12,6 +12,7 @@ import { updatePublishRecordFromTask } from '../services/publish-plan.service.js
 import { findBrandRow } from '../services/brand.service.js';
 import { prisma } from '../db/client.js';
 import type { AgentTask } from './types.js';
+import { normalizeHermesPublishOutput } from '../lib/hermes-publish.js';
 import { markTaskPendingResultConfirmation } from '../services/agent-result-confirmation.service.js';
 
 export async function handleTaskSuccess(
@@ -94,12 +95,16 @@ export async function handleTaskSuccess(
       platformMessage?: string;
       errorCode?: string;
     };
-    const evidenceItems = Array.isArray(output.evidenceItems)
-      ? (output.evidenceItems as EvidenceRow[])
+    const normalized = normalizeHermesPublishOutput(
+      output as Record<string, unknown>,
+      task.input
+    );
+    const evidenceItems = Array.isArray(normalized.evidenceItems)
+      ? (normalized.evidenceItems as EvidenceRow[])
       : [];
     const reviewCategory =
-      typeof output.reviewCategory === 'string' ? output.reviewCategory : null;
-    const publishLink = output.publishLink ? String(output.publishLink) : undefined;
+      typeof normalized.reviewCategory === 'string' ? normalized.reviewCategory : null;
+    const publishLink = normalized.publishLink ? String(normalized.publishLink) : undefined;
     const publishJobId = task.input.publishJobId as string | undefined;
     const publishRecordId = task.input.publishRecordId as string | undefined;
     const planId = task.input.planId as string | undefined;

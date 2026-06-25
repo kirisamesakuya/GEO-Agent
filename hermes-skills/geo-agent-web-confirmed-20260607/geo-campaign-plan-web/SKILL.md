@@ -31,6 +31,7 @@ Recommended:
    - brand reviewer
 3. Include budget guidance, evidence requirements, and acceptance rules.
 4. Keep tasks concrete and easy to assign.
+5. **`quantity` must equal the number of articles in `deliverables`** (or in the deliverable text). Do not list 3 articles in requirements while leaving `quantity` at 1.
 
 ## Output
 
@@ -45,10 +46,11 @@ Return JSON:
       "providerName": "",
       "platforms": [],
       "serviceType": "",
+      "quantity": 3,
       "budgetMin": 0,
       "budgetMax": 0,
       "message": "",
-      "deliverables": [],
+      "deliverables": ["article 1 brief", "article 2 brief", "article 3 brief"],
       "acceptanceCriteria": [],
       "evidenceRequired": ["link", "screenshot"],
       "priority": "P1"

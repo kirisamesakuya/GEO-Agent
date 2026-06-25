@@ -1,11 +1,11 @@
 import type { ViewType } from '../types';
 
-/** 与 docs/GEO投放助手_快速发起项目轻量优化小迭代方案.md §1 保持同步 */
+/** 与 docs/GEO投放助手_撮合交易最新链路与线框图.md §6.4 保持同步 */
 export type QuickStartEntryId =
-  | 'geo_analysis'
-  | 'generate_article'
-  | 'create_order'
-  | 'keyword_library';
+  | 'paid_source'
+  | 'free_source'
+  | 'site_optimize'
+  | 'new_site';
 
 export interface QuickStartEntry {
   id: QuickStartEntryId;
@@ -17,34 +17,32 @@ export interface QuickStartEntry {
 
 export const QUICK_START_LAST_KEY = 'geo_quick_start_last';
 
-/** 主路径：诊断 → 自有发布 → 服务商发单 → 词库 */
 export const QUICK_START_ENTRIES: QuickStartEntry[] = [
   {
-    id: 'geo_analysis',
-    view: 'geo_analysis',
-    title: 'GEO 分析',
-    desc: '深度分析检测，报告与技术资产在报告历史中查看',
+    id: 'paid_source',
+    view: 'create_order',
+    title: '付费信源发单',
+    desc: '拆单报价 · 接单方竞价 · 确认后冻结',
+    hint: 'paid_quote',
   },
   {
-    id: 'generate_article',
+    id: 'free_source',
     view: 'generate_article',
-    title: '自己写并发布',
-    desc: 'AI 撰写 · 自有账号 Hermes 发布（免费路径）',
+    title: '免费信源发单',
+    desc: 'AI 生成 GEO 文章 · 自有账号发布',
     hint: 'quick',
   },
   {
-    id: 'create_order',
-    view: 'create_order',
-    title: '找服务商写/发',
-    desc: '向接单端发任务包 · 需预算（收费路径）',
-    hint: 'ai',
+    id: 'site_optimize',
+    view: 'site_optimize',
+    title: '自有网站优化',
+    desc: 'AI 建议 · 工程交付 · 线下服务费',
   },
   {
-    id: 'keyword_library',
-    view: 'keyword_library',
-    title: '关键词挖掘',
-    desc: 'AI 挖词并写入品牌关键词库',
-    hint: 'mine',
+    id: 'new_site',
+    view: 'create_website',
+    title: '新建网站',
+    desc: '建站方案 · 工程交付 · 线下服务费',
   },
 ];
 

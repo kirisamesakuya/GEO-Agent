@@ -3,7 +3,6 @@ import type { ViewType } from '../types';
 import BrandSwitcher from './common/BrandSwitcher';
 import GeoReportHistoryView from './GeoReportHistoryView';
 import GeoQuickStartView from './geo/GeoQuickStartView';
-import GeoAssetsView from './geo/GeoAssetsView';
 import { HermesSubmitGuardProvider } from './hermes/HermesSubmitGuard';
 import {
   type GeoAnalysisTab,
@@ -90,9 +89,6 @@ export default function GeoAnalysisView({ brandName, onBrandChange, onNavigate }
               onNavigate={onNavigate}
               onOpenHistory={(id) => switchGeoTab('history', id)}
             />
-          )}
-          {pageTab === 'assets' && (
-            <GeoAssetsView brandName={brandName} onNavigate={onNavigate} />
           )}
           {pageTab === 'history' && (
             <GeoReportHistoryView

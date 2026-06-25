@@ -46,3 +46,20 @@ export const WEBSITE_PHASE1_DESCRIPTION =
 
 export const WEBSITE_PHASE1_NOTE =
   '一期不做 AI 预览与设计师接单，仅收集客资供运营跟进。';
+
+/** 自有网站优化：已有站点页面优化 */
+export const SITE_OPTIMIZE_PAGE_TYPES = [
+  '官网 GEO 改造',
+  '服务详情页',
+  '品牌介绍页',
+  '活动落地页',
+  'FAQ 页',
+] as const;
+
+export const SITE_OPTIMIZE_TITLE = '发起网站优化需求';
+
+export const SITE_OPTIMIZE_DESCRIPTION =
+  '填写待优化页面链接与诉求，提交后由工程师评估排期；进度可在「内容交付 · 网页需求」查看。';
+
+export const SITE_OPTIMIZE_NOTE =
+  '针对已有官网/品牌站输出优化建议，确认方案后工程交付，按次收取服务费（不走投放账户余额）。';

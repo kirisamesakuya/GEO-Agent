@@ -185,7 +185,12 @@ export function buildCampaignInputFromGeoReport(
 
 export function buildCampaignInputFromBrandProfile(
   brandName: string,
-  overrides?: { budgetMin?: number; budgetMax?: number; supplementNotes?: string }
+  overrides?: {
+    budgetMin?: number;
+    budgetMax?: number;
+    supplementNotes?: string;
+    platforms?: string[];
+  }
 ) {
   const supplement = overrides?.supplementNotes?.trim();
   const goal = supplement
@@ -194,7 +199,7 @@ export function buildCampaignInputFromBrandProfile(
   return {
     source: 'brand_profile' as const,
     goal,
-    platforms: [...CAMPAIGN_PLAN_PLATFORM_LABELS],
+    platforms: overrides?.platforms ?? [...CAMPAIGN_PLAN_PLATFORM_LABELS],
     budgetMin: overrides?.budgetMin ?? 5000,
     budgetMax: overrides?.budgetMax ?? 20000,
   };
@@ -208,6 +213,7 @@ export function buildCampaignInputFromIndexingGap(
     budgetMin?: number;
     budgetMax?: number;
     supplementNotes?: string;
+    platforms?: string[];
   }
 ) {
   const sampleCount = input.sourceIndexResultIds.length;
@@ -221,7 +227,7 @@ export function buildCampaignInputFromIndexingGap(
     sourceIndexPlanId: input.sourceIndexPlanId,
     sourceIndexResultIds: input.sourceIndexResultIds,
     goal: goalParts.join('；'),
-    platforms: [...CAMPAIGN_PLAN_PLATFORM_LABELS],
+    platforms: input.platforms ?? [...CAMPAIGN_PLAN_PLATFORM_LABELS],
     budgetMin: input.budgetMin ?? 5000,
     budgetMax: input.budgetMax ?? 20000,
   };
@@ -297,6 +303,7 @@ export async function createCampaignPlan(input: {
       budgetMin: input.budgetMin,
       budgetMax: input.budgetMax,
       taskId: input.taskId,
+      pricingMode: 'provider_quote',
       status: 'draft',
       packages: input.packages
         ? {
@@ -348,31 +355,112 @@ export async function listCampaignPlans(brandName?: string) {
   });
 }
 
-export async function publishCampaignPlan(planId: string, brandName: string) {
+export async function updateCampaignPlanSettings(
+  planId: string,
+  data: {
+    hiddenBudgetMaxCents?: number;
+    perTaskBudgetCapCents?: number;
+    pricingMode?: string;
+  }
+) {
+  return prisma.campaignPlan.update({
+    where: { id: planId },
+    data: {
+      ...(data.hiddenBudgetMaxCents != null ? { hiddenBudgetMaxCents: data.hiddenBudgetMaxCents } : {}),
+      ...(data.perTaskBudgetCapCents != null ? { perTaskBudgetCapCents: data.perTaskBudgetCapCents } : {}),
+      ...(data.pricingMode != null ? { pricingMode: data.pricingMode } : {}),
+    },
+    include: { packages: true },
+  });
+}
+
+export async function addCampaignPlanPackage(
+  planId: string,
+  input: {
+    platform: string;
+    quantity?: number;
+    unitPrice?: number;
+    deliverable?: string;
+    name?: string;
+    payeeType?: string;
+    acceptance?: string;
+  }
+) {
+  const plan = await prisma.campaignPlan.findUnique({ where: { id: planId } });
+  if (!plan) throw new Error('计划不存在');
+  const platform = String(input.platform ?? '').trim();
+  if (!platform) throw new Error('请选择媒体平台');
+  const quantity = Math.max(1, Math.round(input.quantity ?? 1));
+  const unitPrice = Math.max(100, Number(input.unitPrice ?? 3000));
+  const budget = Math.round(unitPrice * quantity);
+  await prisma.taskPackageDraft.create({
+    data: {
+      planId,
+      name: input.name?.trim() || `${platform} 内容投放`,
+      platform,
+      payeeType: input.payeeType?.trim() || '文章',
+      quantity,
+      unitPrice,
+      budget,
+      deliverable: input.deliverable?.trim() || `GEO 优化文章 ${quantity} 篇`,
+      acceptance: input.acceptance?.trim() || '链接回传',
+      publishToLobby: true,
+    },
+  });
+  return getCampaignPlan(planId);
+}
+
+export async function deleteCampaignPlanPackage(planId: string, packageId: string) {
+  const pkg = await prisma.taskPackageDraft.findFirst({ where: { id: packageId, planId } });
+  if (!pkg) throw new Error('计划条目不存在');
+  await prisma.taskPackageDraft.delete({ where: { id: packageId } });
+  return getCampaignPlan(planId);
+}
+
+export async function publishCampaignPlan(
+  planId: string,
+  brandName: string,
+  opts?: { taskBriefJson?: string }
+) {
   const plan = await prisma.campaignPlan.findUnique({
     where: { id: planId },
     include: { packages: true },
   });
   if (!plan) throw new Error('计划不存在');
 
+  const isQuoteMode = plan.pricingMode === 'provider_quote';
   const totalBudget = plan.packages.reduce((s, p) => s + p.budget, 0);
   const orders = [];
   for (const pkg of plan.packages.filter((p) => p.publishToLobby)) {
-    const order = await prisma.taskOrder.create({
-      data: {
-        brandName,
-        title: pkg.name,
-        type: pkg.payeeType,
-        platform: pkg.platform,
-        budget: pkg.budget,
-        deliverable: pkg.deliverable,
-        acceptance: pkg.acceptance,
-        status: 'published',
-      },
-    });
-    orders.push(order);
+    const qty = pkg.slotCount ?? pkg.quantity ?? 1;
+    for (let i = 0; i < qty; i += 1) {
+      const title = qty > 1 ? `${pkg.name} (${i + 1}/${qty})` : pkg.name;
+      const order = await prisma.taskOrder.create({
+        data: {
+          brandName,
+          planId: plan.id,
+          title,
+          type: pkg.payeeType,
+          platform: pkg.platform,
+          budget: isQuoteMode ? 0 : pkg.budget,
+          deliverable: pkg.deliverable,
+          acceptance: pkg.acceptance,
+          pricingMode: plan.pricingMode ?? 'provider_quote',
+          hiddenBudgetMaxCents: plan.hiddenBudgetMaxCents,
+          perTaskBudgetCapCents: plan.perTaskBudgetCapCents,
+          suggestedMinCents: pkg.suggestedMinCents,
+          suggestedMaxCents: pkg.suggestedMaxCents,
+          contentDirection: pkg.contentDirection,
+          mediaTypeHint: pkg.mediaTypeHint,
+          slotCount: 1,
+          status: isQuoteMode ? 'quote_open' : 'published',
+          taskBriefJson: opts?.taskBriefJson ?? null,
+        },
+      });
+      orders.push(order);
+    }
   }
 
   await prisma.campaignPlan.update({ where: { id: planId }, data: { status: 'published' } });
-  return { plan, orders, totalBudget };
+  return { plan, orders, totalBudget, quoteMode: isQuoteMode };
 }

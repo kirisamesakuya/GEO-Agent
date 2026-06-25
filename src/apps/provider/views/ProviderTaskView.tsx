@@ -2,14 +2,22 @@
 import { Search, ShieldCheck, ChevronRight, Users } from 'lucide-react';
 import { useToast } from '../../../context/ToastContext';
 import { PROVIDER_TASK_HALL_FILTER_PLATFORMS } from '../../../lib/publish-content-platforms';
+import { MARKETPLACE_PLATFORM_FEE_RATE } from '../../../../lib/marketplace-agreements';
+import {
+  PROVIDER_FEE_EXAMPLE,
+  PROVIDER_ONBOARDING_AGREEMENT_LABEL,
+  PROVIDER_TASK_CLAIM_ACK,
+} from '../../../../lib/platform-legal-copy';
 import { matchesSearch, platformPlaceholder, PLATFORM_SHORT, formatMarketplaceSlots, formatTaskPublishedAt } from '../lib/provider-ui';
+import ProviderSubmitQuoteView from './ProviderSubmitQuoteView';
+import { parseTaskBrief } from '../../../../lib/paid-source-brief';
 
 interface Task {
   id: string;
   title: string;
   brandName: string;
   platform: string;
-  budget: number;
+  budget?: number;
   deliverable: string;
   acceptance: string;
   description?: string;
@@ -22,6 +30,11 @@ interface Task {
   claimedCount?: number;
   availableSlots?: number;
   createdAt?: string;
+  taskBriefJson?: string;
+  isQuoteTask?: boolean;
+  pricingMode?: string;
+  contentDirection?: string;
+  taskBriefJson?: string;
 }
 
 interface Props {
@@ -55,6 +68,7 @@ export default function ProviderTaskView({
   const [claimNote, setClaimNote] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showQuoteForm, setShowQuoteForm] = useState(false);
 
   const load = () => {
     const params = new URLSearchParams({ providerId });
@@ -125,8 +139,29 @@ export default function ProviderTaskView({
       matchesSearch(`${t.title} ${t.brandName}`, localSearch)
   );
 
+  if (selected && activeTaskId && showQuoteForm) {
+    return (
+      <ProviderSubmitQuoteView
+        task={selected}
+        providerId={providerId}
+        providerName={providerName}
+        approved={approved}
+        onNeedOnboarding={onNeedOnboarding}
+        onSubmitted={() => {
+          setShowQuoteForm(false);
+          onSelectTask(null);
+          setSelected(null);
+          load();
+        }}
+        onBack={() => setShowQuoteForm(false)}
+      />
+    );
+  }
+
   if (selected && activeTaskId) {
     const matchPct = selected.matchScore ?? 85;
+    const isQuote = selected.isQuoteTask || selected.pricingMode === 'provider_quote';
+    const brief = parseTaskBrief(selected.taskBriefJson);
     return (
       <div className="space-y-6">
         <button
@@ -134,6 +169,7 @@ export default function ProviderTaskView({
           onClick={() => {
             onSelectTask(null);
             setSelected(null);
+            setShowQuoteForm(false);
           }}
           className="text-xs text-provider-muted hover:text-brand flex items-center gap-1"
         >
@@ -149,8 +185,17 @@ export default function ProviderTaskView({
             </div>
             <div className="flex-1">
               <h1 className="text-xl font-bold text-provider-title">{selected.title}</h1>
-              <p className="text-sm text-provider-secondary mt-1">{selected.brandName} · ¥{selected.budget.toLocaleString()}</p>
-              <p className="text-[10px] text-provider-muted mt-1">{formatTaskPublishedAt(selected.createdAt)}</p>
+              <p className="text-sm text-provider-secondary mt-1">
+                {selected.brandName}
+                {!isQuote && selected.budget != null ? ` · 预算 ¥${selected.budget.toLocaleString()}` : ''}
+              </p>
+              {isQuote && (
+                <p className="text-xs text-emerald-700 mt-1">报价任务 · 填写期望到手价 P0</p>
+              )}
+              <p className="text-[10px] text-provider-muted mt-1">
+                验收通过后按实际结算金额结算；平台技术服务费 {(MARKETPLACE_PLATFORM_FEE_RATE * 100).toFixed(0)}%（例：¥{PROVIDER_FEE_EXAMPLE.settlement} 结算，您得 ¥{PROVIDER_FEE_EXAMPLE.income}）
+              </p>
+              <p className="text-[10px] text-provider-muted">{formatTaskPublishedAt(selected.createdAt)}</p>
               {selected.matchLabel && (
                 <span className="inline-block mt-2 text-xs px-2 py-1 rounded-lg bg-brand-light text-brand font-medium">
                   {selected.matchLabel}
@@ -169,6 +214,18 @@ export default function ProviderTaskView({
                 );
               })()}
               <p className="text-sm text-provider-secondary mt-4">{selected.description}</p>
+              {brief && (
+                <div className="mt-4 p-3 bg-provider-subtle rounded-xl text-xs space-y-1">
+                  {brief.brandIntro && <p>品牌介绍：{brief.brandIntro}</p>}
+                  {brief.productSellingPoints && <p>卖点：{brief.productSellingPoints}</p>}
+                  {brief.targetKeywords?.length ? (
+                    <p>关键词：{brief.targetKeywords.join('、')}</p>
+                  ) : null}
+                  {brief.complianceNotes && <p>合规：{brief.complianceNotes}</p>}
+                  {brief.industryLimit && <p>行业限制：{brief.industryLimit}</p>}
+                  {brief.regionLimit && <p>地区限制：{brief.regionLimit}</p>}
+                </div>
+              )}
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                 <div className="p-3 bg-provider-subtle rounded-xl">
                   <p className="text-xs text-provider-muted mb-1">交付物</p>
@@ -194,12 +251,19 @@ export default function ProviderTaskView({
               <span className="text-[10px] text-provider-muted mt-2">匹配度</span>
             </div>
           </div>
+          {!isQuote && (
+            <>
           <p className="text-xs text-provider-secondary mt-6 bg-provider-subtle rounded-lg px-3 py-2">
             领取后任务将立即进入「执行中」，先到先得；若已被他人领取将无法重复领取。
           </p>
-          <label className="flex items-center gap-2 mt-4 text-xs text-provider-secondary">
-            <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
-            我已阅读并理解交付与验收要求
+          <label className="flex items-start gap-2 mt-4 text-xs text-provider-secondary leading-relaxed">
+            <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-0.5" />
+            <span>
+              {PROVIDER_TASK_CLAIM_ACK}
+              <span className="block mt-1 text-[10px] text-provider-muted">
+                协议依据：{PROVIDER_ONBOARDING_AGREEMENT_LABEL}
+              </span>
+            </span>
           </label>
           <textarea
             value={claimNote}
@@ -216,6 +280,17 @@ export default function ProviderTaskView({
           >
             {formatMarketplaceSlots(selected).isFull ? '名额已满' : loading ? '领取中…' : '立即领取'}
           </button>
+            </>
+          )}
+          {isQuote && (
+            <button
+              type="button"
+              className="provider-btn-primary w-full mt-6 py-3 text-sm"
+              onClick={() => setShowQuoteForm(true)}
+            >
+              提交报价
+            </button>
+          )}
         </div>
       </div>
     );
@@ -226,7 +301,7 @@ export default function ProviderTaskView({
       <div className="flex justify-between items-center flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-provider-title">任务大厅</h1>
-          <p className="text-xs text-provider-muted">公开任务可直接领取，领取后前往「我的订单」交付</p>
+          <p className="text-xs text-provider-muted">报价任务提交 P0；历史固定预算任务可直接领取</p>
         </div>
         <div className="relative w-64">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-provider-muted w-4 h-4" />
@@ -306,7 +381,11 @@ export default function ProviderTaskView({
                     </span>
                   </div>
                   <div className="flex justify-between items-center mt-3">
-                    <span className="text-brand font-black">¥{t.budget.toLocaleString()}</span>
+                    {t.isQuoteTask || t.pricingMode === 'provider_quote' ? (
+                      <span className="text-xs font-semibold text-emerald-700">提交报价</span>
+                    ) : (
+                      <span className="text-brand font-black">¥{(t.budget ?? 0).toLocaleString()}</span>
+                    )}
                     {t.matchLabel && (
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-light text-brand">{t.matchLabel}</span>
                     )}
