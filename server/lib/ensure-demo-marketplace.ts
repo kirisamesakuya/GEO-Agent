@@ -34,7 +34,7 @@ async function dedupeOrphanPublishedTasks(brandName: string): Promise<void> {
     const demoExists = await prisma.taskOrder.findFirst({
       where: {
         brandName,
-        status: 'published',
+        status: 'quote_open',
         title: { startsWith: DEMO_PREFIX, contains: orphanTitle },
       },
     });

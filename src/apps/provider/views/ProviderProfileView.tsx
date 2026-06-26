@@ -8,12 +8,14 @@ import {
   ChevronRight,
   ArrowLeft,
   ShieldCheck,
+  Link2,
+  Layers,
+  MapPin,
 } from 'lucide-react';
 import { useToast } from '../../../context/ToastContext';
 import ProviderOnboarding from '../ProviderOnboarding';
 import {
   parseJsonArray,
-  DEFAULT_AVATAR,
   APPLICATION_STATUS_LABEL,
   PAYOUT_CHANNEL_OPTIONS,
   payoutChannelLabel,
@@ -27,11 +29,38 @@ import {
   loadMockProviderPayoutAccount,
 } from '../lib/provider-mock-payout';
 import { PROVIDER_PAYOUT_COMPLIANCE_HINT } from '../../../../lib/platform-legal-copy';
+import type { ProviderRecord } from '../types';
+import ProviderProfileEditor from './ProviderProfileEditor';
+import ProviderAccountShell from '../components/workspace/ProviderAccountShell';
+import {
+  parseCredibilityDraft,
+  PROFILE_REVIEW_STATUS_LABEL,
+  type ProviderProfileReviewStatus,
+  type ProviderCredibilityDraft,
+} from '../../../../lib/provider-profile-change';
+
+interface ProfileSnapshot {
+  name: string;
+  type?: string | null;
+  applicationStatus: string;
+  reviewNote?: string | null;
+  contactName?: string | null;
+  phone?: string | null;
+  platforms: string[];
+  serviceAreas: string[];
+  caseLinks: string[];
+  budgetMin?: number | null;
+  budgetMax?: number | null;
+  pricingNote?: string | null;
+  profileReviewStatus: ProviderProfileReviewStatus;
+  pendingDraft: ProviderCredibilityDraft | null;
+}
 
 interface Props {
   provider: ProviderRecord;
   providerId: string;
   onProviderReady: (id: string) => void;
+  onProfileSynced?: (provider: ProviderRecord) => void;
 }
 
 interface PayoutForm {
@@ -60,6 +89,7 @@ export default function ProviderProfileView({
   provider,
   providerId,
   onProviderReady,
+  onProfileSynced,
 }: Props) {
   const { toast } = useToast();
   const [demoOnboarding, setDemoOnboarding] = useState(false);
@@ -72,8 +102,15 @@ export default function ProviderProfileView({
   });
   const [identityForm, setIdentityForm] = useState({ realName: '', idNumber: '' });
   const [identitySaving, setIdentitySaving] = useState(false);
-  const [industryTags, setIndustryTags] = useState<string[]>([]);
-  const [platforms, setPlatforms] = useState<string[]>([]);
+  const [profileSnapshot, setProfileSnapshot] = useState<ProfileSnapshot>(() => ({
+    name: provider.name,
+    applicationStatus: provider.applicationStatus,
+    platforms: parseJsonArray(provider.platforms),
+    serviceAreas: [],
+    caseLinks: [],
+    profileReviewStatus: 'none',
+    pendingDraft: null,
+  }));
   const [payoutSaved, setPayoutSaved] = useState<PayoutForm | null>(null);
   const [payoutForm, setPayoutForm] = useState<PayoutForm>({
     payoutChannel: 'bank',
@@ -82,9 +119,12 @@ export default function ProviderProfileView({
   });
   const [payoutSaving, setPayoutSaving] = useState(false);
   const [useMockPayout, setUseMockPayout] = useState(false);
-  const approved = provider.applicationStatus === 'approved';
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileSection, setProfileSection] = useState('overview');
+  const approved = profileSnapshot.applicationStatus === 'approved';
   const statusLabel =
-    APPLICATION_STATUS_LABEL[provider.applicationStatus] ?? provider.applicationStatus;
+    APPLICATION_STATUS_LABEL[profileSnapshot.applicationStatus] ??
+    profileSnapshot.applicationStatus;
 
   const loadProfile = () => {
     fetch(`/api/provider/profile?providerId=${providerId}`)
@@ -93,8 +133,31 @@ export default function ProviderProfileView({
         const p = d.provider;
         if (!p) return;
         ensureDemoProviderMockStore(providerId, p.name ?? provider.name);
-        setIndustryTags(parseJsonArray(p.industryTags));
-        setPlatforms(parseJsonArray(p.platforms));
+        const snapshot: ProfileSnapshot = {
+          name: p.name ?? provider.name,
+          type: p.type ?? null,
+          applicationStatus: p.applicationStatus ?? provider.applicationStatus,
+          reviewNote: p.reviewNote ?? null,
+          contactName: p.contactName ?? null,
+          phone: p.phone ?? null,
+          platforms: parseJsonArray(p.platforms),
+          serviceAreas: parseJsonArray(p.serviceAreas),
+          caseLinks: parseJsonArray(p.caseLinks),
+          budgetMin: p.budgetMin ?? null,
+          budgetMax: p.budgetMax ?? null,
+          pricingNote: p.pricingNote ?? null,
+          profileReviewStatus: (p.profileReviewStatus as ProviderProfileReviewStatus) ?? 'none',
+          pendingDraft: parseCredibilityDraft(p.pendingProfileJson),
+        };
+        setProfileSnapshot(snapshot);
+        onProfileSynced?.({
+          id: providerId,
+          name: snapshot.name,
+          applicationStatus: snapshot.applicationStatus,
+          platforms: p.platforms,
+          industryTags: p.industryTags,
+          type: p.type,
+        });
         const channel = (p.payoutChannel as PayoutChannel) || 'alipay';
         const mockIdentity = loadMockProviderIdentity(providerId);
         const mockPayout = loadMockProviderPayoutAccount(providerId);
@@ -321,6 +384,23 @@ export default function ProviderProfileView({
     );
   }
 
+  if (editingProfile && approved) {
+    return (
+      <ProviderProfileEditor
+        providerId={providerId}
+        live={profileSnapshot}
+        profileReviewStatus={profileSnapshot.profileReviewStatus}
+        reviewNote={profileSnapshot.reviewNote}
+        pendingDraft={profileSnapshot.pendingDraft}
+        onClose={() => setEditingProfile(false)}
+        onUpdated={loadProfile}
+      />
+    );
+  }
+
+  const pendingPreview =
+    profileSnapshot.profileReviewStatus === 'pending' ? profileSnapshot.pendingDraft : null;
+
   const payoutDetailPlaceholder = '支付宝登录手机号或邮箱，如 13812348888';
 
   if (payoutPanelOpen && approved) {
@@ -486,42 +566,98 @@ export default function ProviderProfileView({
     );
   }
 
+  const profileNav = approved
+    ? [
+        { id: 'overview', label: '资料概览' },
+        { id: 'payout', label: '实名与提现' },
+      ]
+    : [{ id: 'overview', label: '入驻进度' }];
+
   return (
+    <ProviderAccountShell
+      title="个人中心"
+      subtitle={
+        approved ? '管理账号资料、提现账户与接单偏好' : '注册并提交入驻申请，审核通过后可报价接单'
+      }
+      nav={profileNav}
+      activeId={profileSection}
+      onNavChange={setProfileSection}
+    >
     <div className="space-y-6">
+      {profileSection === 'overview' && (
+      <>
       <div>
-        <h1 className="text-xl font-bold text-provider-title">个人中心</h1>
-        <p className="text-xs text-provider-muted">
-          {approved ? '管理账号资料、提现账户与接单偏好' : '注册并提交入驻申请，审核通过后可领取任务'}
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div />
+          {approved && profileSnapshot.profileReviewStatus !== 'pending' && (
+            <button
+              type="button"
+              className="provider-btn-primary text-sm shrink-0"
+              onClick={() => setEditingProfile(true)}
+            >
+              编辑资料
+            </button>
+          )}
+        </div>
+        {profileSnapshot.profileReviewStatus !== 'none' && (
+          <p
+            className={`text-xs mt-2 rounded-lg px-3 py-2 ${
+              profileSnapshot.profileReviewStatus === 'pending'
+                ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                : 'bg-red-50 text-red-900 border border-red-200'
+            }`}
+          >
+            {PROFILE_REVIEW_STATUS_LABEL[profileSnapshot.profileReviewStatus]}
+            {profileSnapshot.reviewNote ? `：${profileSnapshot.reviewNote}` : ''}
+            {profileSnapshot.profileReviewStatus === 'pending' &&
+              ' · 审核通过前对外仍展示原资料'}
+          </p>
+        )}
       </div>
 
-      <div className="provider-card rounded-2xl p-6 shadow-sm">
-        <div className="flex flex-col md:flex-row gap-6">
-          <img src={DEFAULT_AVATAR} alt="" className="w-20 h-20 rounded-2xl border border-provider object-cover shrink-0" />
-          <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-bold text-provider-title flex items-center gap-2">
-              <User className="w-5 h-5 text-brand" />
-              {provider.name}
-            </h2>
-            {approved ? (
-              <p className="text-xs text-provider-muted mt-1">
-                入驻状态：<span className="text-green-600 font-medium">已通过</span>
-              </p>
-            ) : (
-              <p className="text-xs text-provider-muted mt-1">
-                入驻状态：<span className="text-brand font-medium">{statusLabel}</span>
-                <span className="text-provider-muted mx-1">·</span>
-                请在下方完成资料并提交审核
+      <div className="provider-card rounded-2xl p-6 shadow-sm space-y-4">
+        <h3 className="text-sm font-bold text-provider-title flex items-center gap-2">
+          <User className="w-4 h-4 text-brand" /> 基础资料
+        </h3>
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-xs">
+          <div>
+            <dt className="text-provider-muted mb-0.5">团队/机构名称</dt>
+            <dd className="text-provider-body font-medium">{profileSnapshot.name || '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-provider-muted mb-0.5">主体类型</dt>
+            <dd className="text-provider-body font-medium">{profileSnapshot.type || '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-provider-muted mb-0.5">联系人</dt>
+            <dd className="text-provider-body font-medium">{profileSnapshot.contactName || '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-provider-muted mb-0.5">联系电话</dt>
+            <dd className="text-provider-body font-medium">{profileSnapshot.phone || '—'}</dd>
+          </div>
+          <div className="sm:col-span-2">
+            <dt className="text-provider-muted mb-0.5">入驻状态</dt>
+            <dd className="font-medium">
+              {approved ? (
+                <span className="text-green-600">已通过</span>
+              ) : (
+                <span className="text-brand">{statusLabel}</span>
+              )}
+            </dd>
+            {!approved && profileSnapshot.reviewNote && (
+              <p className="text-amber-700 mt-2 rounded-lg bg-amber-50 px-3 py-2">
+                审核说明：{profileSnapshot.reviewNote}
               </p>
             )}
           </div>
-        </div>
+        </dl>
 
         {approved && (
           <button
             type="button"
-            className="mt-5 w-full flex items-center justify-between gap-3 rounded-xl border border-provider px-4 py-3 text-left hover:border-brand hover:bg-brand-light/20 transition-colors"
-            onClick={openPayoutPanel}
+            className="w-full flex items-center justify-between gap-3 rounded-xl border border-provider px-4 py-3 text-left hover:border-workbench hover:bg-workbench-light/30 transition-colors"
+            onClick={() => setProfileSection('payout')}
           >
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-9 h-9 rounded-lg bg-brand-light flex items-center justify-center shrink-0">
@@ -555,26 +691,126 @@ export default function ProviderProfileView({
         </section>
       )}
 
-      <div className="provider-card rounded-2xl p-6 shadow-sm">
-        <h3 className="text-sm font-bold text-provider-title flex items-center gap-2 mb-4">
-          <Sparkles className="w-4 h-4 text-brand" /> 内容偏好
+      <div className="provider-card rounded-2xl p-6 shadow-sm space-y-5">
+        <h3 className="text-sm font-bold text-provider-title flex items-center gap-2">
+          <Layers className="w-4 h-4 text-brand" /> 平台与地区
         </h3>
-        <div className="flex flex-wrap gap-2">
-          {[...industryTags, ...platforms].length === 0 ? (
-            <p className="text-xs text-provider-muted">入驻所选媒体与地区将用于任务匹配</p>
-          ) : (
-            [...new Set([...industryTags, ...platforms])].map((tag) => (
-              <span key={tag} className="text-xs px-3 py-1.5 rounded-lg bg-brand-light text-brand font-medium">
-                {tag}
-              </span>
-            ))
-          )}
+        <div>
+          <p className="text-xs font-semibold text-provider-body mb-2">可接单媒体</p>
+          <div className="flex flex-wrap gap-2">
+            {profileSnapshot.platforms.length === 0 ? (
+              <p className="text-xs text-provider-muted">尚未选择媒体平台</p>
+            ) : (
+              profileSnapshot.platforms.map((tag) => (
+                <span key={tag} className="text-xs px-3 py-1.5 rounded-lg bg-brand-light text-brand font-medium">
+                  {tag}
+                </span>
+              ))
+            )}
+          </div>
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-provider-body mb-2 flex items-center gap-1">
+            <MapPin className="w-3.5 h-3.5 text-provider-muted" /> 可接单地区
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {profileSnapshot.serviceAreas.length === 0 ? (
+              <p className="text-xs text-provider-muted">尚未选择接单地区</p>
+            ) : (
+              profileSnapshot.serviceAreas.map((tag) => (
+                <span key={tag} className="text-xs px-3 py-1.5 rounded-lg bg-provider-subtle text-provider-body font-medium">
+                  {tag}
+                </span>
+              ))
+            )}
+          </div>
         </div>
       </div>
 
+      <div className="provider-card rounded-2xl p-6 shadow-sm space-y-3">
+        <h3 className="text-sm font-bold text-provider-title flex items-center gap-2">
+          <Link2 className="w-4 h-4 text-brand" /> 案例资源
+        </h3>
+        {!(profileSnapshot.caseLinks ?? []).length ? (
+          <p className="text-xs text-provider-muted">入驻时未填写案例链接</p>
+        ) : (
+          <ul className="space-y-2">
+            {(profileSnapshot.caseLinks ?? []).map((link) => (
+              <li key={link}>
+                <a
+                  href={link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-brand hover:underline break-all"
+                >
+                  {link}
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="provider-card rounded-2xl p-6 shadow-sm space-y-3">
+        <h3 className="text-sm font-bold text-provider-title flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-brand" /> 报价规则
+        </h3>
+        {(profileSnapshot.budgetMin != null || profileSnapshot.budgetMax != null) && (
+          <div>
+            <p className="text-xs font-semibold text-provider-body mb-1">常接单价区间</p>
+            <p className="text-xs text-provider-secondary">
+              ¥
+              {profileSnapshot.budgetMin != null
+                ? profileSnapshot.budgetMin.toLocaleString('zh-CN')
+                : '—'}{' '}
+              – ¥
+              {profileSnapshot.budgetMax != null
+                ? profileSnapshot.budgetMax.toLocaleString('zh-CN')
+                : '—'}
+            </p>
+          </div>
+        )}
+        {profileSnapshot.pricingNote?.trim() ? (
+          <div>
+            <p className="text-xs font-semibold text-provider-body mb-1">报价说明</p>
+            <p className="text-xs text-provider-secondary whitespace-pre-wrap">
+              {profileSnapshot.pricingNote}
+            </p>
+          </div>
+        ) : (
+          profileSnapshot.budgetMin == null &&
+          profileSnapshot.budgetMax == null && (
+            <p className="text-xs text-provider-muted">入驻时未填写报价规则</p>
+          )
+        )}
+      </div>
+
+      {pendingPreview && (
+        <div className="provider-card rounded-2xl p-6 shadow-sm border border-dashed border-brand/40 space-y-2">
+          <h3 className="text-sm font-bold text-brand">待审核变更预览</h3>
+          <p className="text-xs text-provider-muted">
+            以下变更已提交，审核通过后将替换当前展示资料
+          </p>
+          <dl className="text-xs space-y-1 text-provider-secondary">
+            <div>
+              名称：{pendingPreview.name} · 类型：{pendingPreview.type}
+            </div>
+            <div>媒体：{pendingPreview.platforms.join('、') || '—'}</div>
+            <div>地区：{pendingPreview.serviceAreas.join('、') || '—'}</div>
+            <div>案例：{pendingPreview.caseLinks.length} 条</div>
+            {(pendingPreview.budgetMin != null || pendingPreview.budgetMax != null) && (
+              <div>
+                单价：¥{pendingPreview.budgetMin ?? '—'} – ¥{pendingPreview.budgetMax ?? '—'}
+              </div>
+            )}
+            {pendingPreview.pricingNote && <div>说明：{pendingPreview.pricingNote}</div>}
+          </dl>
+        </div>
+      )}
+
       {approved && (
         <div className="bg-brand-light/30 border border-brand-light rounded-2xl p-4 text-sm text-provider-body">
-          您已通过平台入驻审核，可在任务大厅直接领取合作任务。
+          您已通过平台入驻审核，可在任务大厅浏览任务并提交报价。
           {!identity.verified
             ? ' 提现前请先完成身份证实名认证并绑定收款账户。'
             : !payoutSaved
@@ -597,6 +833,38 @@ export default function ProviderProfileView({
           体验入驻流程
         </button>
       </div>
+      </>
+      )}
+
+      {profileSection === 'payout' && approved && (
+        <div className="space-y-4">
+          <div className="provider-section-card space-y-3">
+            <h3 className="text-sm font-bold text-provider-title flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-workbench" /> 身份证实名认证
+            </h3>
+            {identity.verified ? (
+              <p className="text-xs text-green-800 bg-green-50 rounded-lg px-3 py-2">
+                已实名：{identity.realName}
+                {identity.idNumberMask ? ` · ${identity.idNumberMask}` : ''}
+              </p>
+            ) : (
+              <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
+                尚未完成实名认证，绑定提现账户前需先认证。
+              </p>
+            )}
+          </div>
+          <div className="provider-section-card space-y-3">
+            <h3 className="text-sm font-bold text-provider-title flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-workbench" /> 提现账户
+            </h3>
+            <p className={`text-xs ${payoutSaved ? 'text-provider-body' : 'text-amber-700'}`}>{payoutSummary}</p>
+            <button type="button" className="provider-btn-workbench text-sm" onClick={openPayoutPanel}>
+              {payoutSaved ? '修改提现账户' : '开始绑定'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
+    </ProviderAccountShell>
   );
 }

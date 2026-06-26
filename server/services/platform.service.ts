@@ -383,7 +383,9 @@ export async function getPlatformDashboard() {
 
 export async function listPendingProviderApplications() {
   return prisma.provider.findMany({
-    where: { applicationStatus: 'submitted' },
+    where: {
+      OR: [{ applicationStatus: 'submitted' }, { profileReviewStatus: 'pending' }],
+    },
     include: {
       applications: { orderBy: { createdAt: 'desc' }, take: 1 },
       reviewLogs: { orderBy: { createdAt: 'desc' }, take: 5 },

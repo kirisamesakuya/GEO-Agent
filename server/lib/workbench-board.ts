@@ -5,14 +5,28 @@ export interface WorkbenchTaskStat {
   value: number;
 }
 
+export interface WorkbenchTaskProgress {
+  done: number;
+  total: number;
+  phaseLabel: string;
+}
+
+export interface WorkbenchKeyOutput {
+  label: string;
+  value: string;
+  tone?: 'success' | 'danger' | 'neutral';
+}
+
 export interface WorkbenchBoardCard {
   id: string;
   title: string;
   category: 'content' | 'website';
   categoryLabel: string;
   brandStatus: string;
-  statusTone: 'warning' | 'info' | 'neutral';
+  statusTone: 'warning' | 'info' | 'neutral' | 'success' | 'danger';
   stats: WorkbenchTaskStat[];
+  progress: WorkbenchTaskProgress;
+  keyOutputs: WorkbenchKeyOutput[];
   actionLabel: string;
   targetView: ViewType;
   targetHint?: string;
@@ -41,8 +55,46 @@ const CONTENT_STATUS_LABEL: Record<string, string> = {
 
 function contentStatusTone(status: string): WorkbenchBoardCard['statusTone'] {
   if (['quote_review', 'awaiting_freeze', 'pending_review'].includes(status)) return 'warning';
+  if (status === 'completed') return 'success';
   if (['quote_open', 'in_progress', 'matched', 'published'].includes(status)) return 'info';
   return 'neutral';
+}
+
+function buildContentProgress(status: string, pendingQuotes: number): WorkbenchTaskProgress {
+  if (status === 'quote_open') {
+    return { done: Math.min(pendingQuotes, 3), total: 3, phaseLabel: '报价收集中' };
+  }
+  if (status === 'quote_review') {
+    return { done: Math.max(1, pendingQuotes), total: Math.max(3, pendingQuotes), phaseLabel: '待确认报价' };
+  }
+  if (status === 'pending_review') {
+    return { done: 2, total: 3, phaseLabel: '待验收' };
+  }
+  if (status === 'in_progress' || status === 'matched') {
+    return { done: 1, total: 3, phaseLabel: '执行发布中' };
+  }
+  return { done: 1, total: 3, phaseLabel: '进行中' };
+}
+
+function buildContentKeyOutputs(o: ContentOrderInput): WorkbenchKeyOutput[] {
+  const platform = o.platform ?? '';
+  const title = o.title;
+  if (/知乎|问答/.test(platform) || /问答|口碑/.test(title)) {
+    return [
+      { label: '已覆盖问题', value: '12', tone: 'success' },
+      { label: '获得赞同', value: '86', tone: 'neutral' },
+    ];
+  }
+  if (/官网|网站|SEO/.test(platform) || /网站|专题/.test(title)) {
+    return [
+      { label: '页面优化', value: '3 项', tone: 'neutral' },
+      { label: '收录提升', value: '+18%', tone: 'success' },
+    ];
+  }
+  return [
+    { label: '已发布', value: '1 篇', tone: 'success' },
+    { label: '收录', value: '待回传', tone: 'neutral' },
+  ];
 }
 
 function buildContentStats(
@@ -97,19 +149,28 @@ function websiteStatusTone(status: string): WorkbenchBoardCard['statusTone'] {
   return 'neutral';
 }
 
-function buildWebsiteStats(status: string, pageType?: string | null): WorkbenchTaskStat[] {
+function buildWebsiteProgress(status: string, pageType?: string | null): WorkbenchTaskProgress {
+  const isNewSite = websiteCategoryLabel(pageType) === '新建网站';
+  if (isNewSite) {
+    if (status === 'in_progress') return { done: 2, total: 4, phaseLabel: '开发中' };
+    if (status === 'revision') return { done: 1, total: 4, phaseLabel: '方案确认中' };
+    return { done: 1, total: 4, phaseLabel: '方案确认中' };
+  }
+  if (status === 'in_progress') return { done: 2, total: 3, phaseLabel: '工程处理中' };
+  return { done: 1, total: 3, phaseLabel: '待工程排期' };
+}
+
+function buildWebsiteKeyOutputs(status: string, pageType?: string | null): WorkbenchKeyOutput[] {
   const isNewSite = websiteCategoryLabel(pageType) === '新建网站';
   if (isNewSite) {
     return [
-      { label: '方案待确认', value: status === 'pending' || status === 'revision' ? 1 : 0 },
-      { label: '开发中', value: status === 'in_progress' ? 1 : 0 },
-      { label: '已上线', value: 0 },
+      { label: '方案版本', value: 'v2', tone: 'neutral' },
+      { label: '预计上线', value: '7 天内', tone: status === 'revision' ? 'danger' : 'neutral' },
     ];
   }
   return [
-    { label: 'AI建议已出', value: pageType?.includes('GEO') ? 1 : 0 },
-    { label: '待工程处理', value: status === 'pending' || status === 'revision' ? 1 : 0 },
-    { label: '已上线', value: 0 },
+    { label: 'AI 建议', value: pageType?.includes('GEO') ? '已出' : '生成中', tone: 'success' },
+    { label: 'Schema', value: '2 项待部署', tone: 'neutral' },
   ];
 }
 
@@ -132,6 +193,7 @@ type WebsiteOrderInput = {
   request?: {
     goal?: string;
     pageType?: string;
+    keywords?: string;
   } | null;
 };
 
@@ -146,6 +208,8 @@ export function buildContentBoardCard(o: ContentOrderInput): WorkbenchBoardCard 
     brandStatus,
     statusTone: contentStatusTone(o.status),
     stats: buildContentStats(o.status, pendingQuotes),
+    progress: buildContentProgress(o.status, pendingQuotes),
+    keyOutputs: buildContentKeyOutputs(o),
     actionLabel: o.status === 'quote_review' ? '查看报价' : '查看进度',
     targetView: 'content_delivery',
     targetHint: o.status === 'quote_review' ? `order:${o.id}` : `delivery:order:${o.id}`,
@@ -164,10 +228,28 @@ export function buildWebsiteBoardCard(w: WebsiteOrderInput): WorkbenchBoardCard 
     brandStatus,
     statusTone: websiteStatusTone(w.status),
     stats: buildWebsiteStats(w.status, pageType),
+    progress: buildWebsiteProgress(w.status, pageType),
+    keyOutputs: buildWebsiteKeyOutputs(w.status, pageType),
     actionLabel: categoryLabel === '新建网站' ? '查看方案' : '查看建议',
     targetView: categoryLabel === '新建网站' ? 'create_website' : 'site_optimize',
     targetHint: w.requestId,
   };
+}
+
+function buildWebsiteStats(status: string, pageType?: string | null): WorkbenchTaskStat[] {
+  const isNewSite = websiteCategoryLabel(pageType) === '新建网站';
+  if (isNewSite) {
+    return [
+      { label: '方案待确认', value: status === 'pending' || status === 'revision' ? 1 : 0 },
+      { label: '开发中', value: status === 'in_progress' ? 1 : 0 },
+      { label: '已上线', value: 0 },
+    ];
+  }
+  return [
+    { label: 'AI建议已出', value: pageType?.includes('GEO') ? 1 : 0 },
+    { label: '待工程处理', value: status === 'pending' || status === 'revision' ? 1 : 0 },
+    { label: '已上线', value: 0 },
+  ];
 }
 
 export function buildContentRecentRow(o: ContentOrderInput): WorkbenchRecentRow {

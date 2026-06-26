@@ -11,15 +11,15 @@ const hoursAgo = (h: number) => new Date(Date.now() - h * 60 * 60 * 1000).toISOS
 const daysAgo = (d: number) => new Date(Date.now() - d * 24 * 60 * 60 * 1000).toISOString();
 
 /**
- * 演示通知：接单人从任务大厅主动领取；无「品牌方向达人发起邀请」场景。
- * 真实通知由平台派单、领取成功、返修、结算、入驻审核等事件产生。
+ * 演示通知：接单人从任务大厅提交报价；无「品牌方向达人发起邀请」场景。
+ * 真实通知由报价结果、订单履约、返修、结算、入驻审核等事件产生。
  */
 export const MOCK_PROVIDER_NOTIFICATIONS: ProviderNotificationItem[] = [
   {
     id: 'mock-notif-1',
     type: 'task_hall',
     title: '任务大厅有新任务',
-    body: '「小红书种草笔记 | 青岚咖啡新品推广」已上架，与您的擅长领域匹配，可前往任务大厅查看并主动领取。',
+    body: '「小红书种草笔记 | 青岚咖啡新品推广」已开放报价，与您的擅长领域匹配，可前往任务大厅提交 P0 方案。',
     read: false,
     createdAt: hoursAgo(0.15),
   },
@@ -27,7 +27,7 @@ export const MOCK_PROVIDER_NOTIFICATIONS: ProviderNotificationItem[] = [
     id: 'mock-notif-2',
     type: 'order',
     title: '已接订单有新动态',
-    body: '您已领取的「青岚咖啡」相关订单有新的沟通或状态更新，请前往「我的订单」查看。',
+    body: '您已中标的「青岚咖啡」相关订单有新的沟通或状态更新，请前往「我的订单」查看。',
     read: false,
     createdAt: hoursAgo(1),
   },
@@ -51,7 +51,7 @@ export const MOCK_PROVIDER_NOTIFICATIONS: ProviderNotificationItem[] = [
     id: 'mock-notif-5',
     type: 'task_hall',
     title: '任务匹配推荐',
-    body: '系统根据您的服务类型与区域，推荐了 3 条高匹配度任务，建议前往任务大厅浏览并领取。',
+    body: '系统根据您的服务类型与区域，推荐了 3 条高匹配度任务，建议前往任务大厅浏览并提交报价。',
     read: true,
     createdAt: daysAgo(2),
   },
@@ -59,7 +59,7 @@ export const MOCK_PROVIDER_NOTIFICATIONS: ProviderNotificationItem[] = [
     id: 'mock-notif-6',
     type: 'onboarding',
     title: '入驻审核已通过',
-    body: '您已通过平台入驻审核，可在任务大厅浏览任务并主动领取合作订单。',
+    body: '您已通过平台入驻审核，可在任务大厅浏览任务并提交报价方案。',
     read: true,
     createdAt: daysAgo(5),
   },

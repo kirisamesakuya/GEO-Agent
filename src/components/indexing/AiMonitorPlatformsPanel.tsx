@@ -1,19 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Check, Cpu, ExternalLink, RefreshCw, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Check, RefreshCw } from 'lucide-react';
 import type { ViewType } from '../../types';
 import { formatPlanDateTime } from '../../lib/datetime-local';
-import { fetchHermesHealth } from '../../lib/hermes-client';
-import { hermesReady } from '../../lib/hermes-status-utils';
+import { openPlatformLogin } from '../../lib/open-platform-login';
 import { useToast } from '../../context/ToastContext';
-import { useHermesSubmitGuard } from '../hermes/HermesSubmitGuard';
 import {
-  AI_MONITOR_STATUS_LABEL,
   buildDefaultAiMonitorSessions,
   ensureAiMonitorPlatformCatalog,
   fetchAiMonitorSessions,
   mergeAiMonitorSessions,
   summarizeAiMonitorSessions,
-  verifyAiMonitorSessions,
   updateAiMonitorSessionStatus,
   type AiMonitorSession,
 } from '../../lib/ai-monitor-session-client';
@@ -24,18 +20,21 @@ interface Props {
   onSessionsChange?: (sessions: AiMonitorSession[], notReadyCount: number) => void;
 }
 
+function sessionStatusTag(status: AiMonitorSession['status']) {
+  if (status === 'ready') {
+    return { label: '已就绪', tagClass: 'geo-tag-success' };
+  }
+  return { label: '待登录', tagClass: 'geo-tag-warning' };
+}
+
 export default function AiMonitorPlatformsPanel({
   brandName,
-  onNavigate,
   onSessionsChange,
 }: Props) {
   const { toast } = useToast();
-  const { ensureHermesReady } = useHermesSubmitGuard();
   const [sessions, setSessions] = useState<AiMonitorSession[]>(() => buildDefaultAiMonitorSessions());
   const [notReadyCount, setNotReadyCount] = useState(buildDefaultAiMonitorSessions().length);
   const [loading, setLoading] = useState(false);
-  const [verifyingAll, setVerifyingAll] = useState(false);
-  const [hermesOnline, setHermesOnline] = useState(false);
 
   const applySessions = useCallback(
     (list: AiMonitorSession[]) => {
@@ -63,59 +62,26 @@ export default function AiMonitorPlatformsPanel({
     }
   }, [brandName, applySessions]);
 
-  const refreshHermes = useCallback(async () => {
-    try {
-      const health = await fetchHermesHealth();
-      setHermesOnline(hermesReady(health));
-    } catch {
-      setHermesOnline(false);
-    }
-  }, []);
-
   useEffect(() => {
     void loadSessions();
-    void refreshHermes();
-  }, [loadSessions, refreshHermes]);
+  }, [loadSessions]);
 
-  const hasVerifying = sessions.some((s) => s.status === 'verifying');
-
-  useEffect(() => {
-    if (!hasVerifying) return;
-    const t = setInterval(() => void loadSessions(), 2500);
-    return () => clearInterval(t);
-  }, [hasVerifying, loadSessions]);
-
-  const runAutoVerify = async (platforms?: string[]) => {
-    const ready = await ensureHermesReady(brandName);
-    if (!ready) return;
-    if (platforms?.length === 1) {
-      setSessions((prev) =>
-        prev.map((s) =>
-          s.platform === platforms[0] ? { ...s, status: 'verifying' } : s
-        )
-      );
-    } else {
-      setVerifyingAll(true);
-    }
-    const result = await verifyAiMonitorSessions(brandName, platforms);
-    if (!result) {
-      toast('自动检测发起失败', 'error');
-      setVerifyingAll(false);
-      await loadSessions();
-      return;
-    }
-    applySessions(result.sessions);
-    toast(platforms?.length === 1 ? '已开始自动检测' : '已开始检测全部平台', 'success');
-    setVerifyingAll(false);
-  };
-
-  const markStatus = async (platform: string, status: 'ready' | 'login_required' | 'unknown') => {
-    const localPatch: Partial<AiMonitorSession> = {
-      status,
-      lastVerifiedAt: new Date().toISOString(),
-      lastError: status === 'login_required' ? '待在本机浏览器登录' : undefined,
+  const overview = useMemo(() => {
+    const ready = sessions.filter((s) => s.status === 'ready').length;
+    return {
+      ready,
+      pending: sessions.length - ready,
+      total: sessions.length,
     };
-    const updated = await updateAiMonitorSessionStatus(brandName, platform, status);
+  }, [sessions]);
+
+  const markReady = async (platform: string) => {
+    const localPatch: Partial<AiMonitorSession> = {
+      status: 'ready',
+      lastVerifiedAt: new Date().toISOString(),
+      lastError: undefined,
+    };
+    const updated = await updateAiMonitorSessionStatus(brandName, platform, 'ready');
     applySessions(
       mergeAiMonitorSessions(
         sessions.map((s) =>
@@ -123,117 +89,139 @@ export default function AiMonitorPlatformsPanel({
         )
       )
     );
-    if (status === 'ready') toast(`${platform} 已标记为就绪`, 'success');
-    else if (status === 'login_required') toast(`${platform} 已标记为需登录`, 'info');
-    else toast(`${platform} 已重置校验状态`, 'info');
+    toast(`${platform} 已标记为就绪`, 'success');
   };
 
-  const statusClass = (status: AiMonitorSession['status']) => {
-    switch (status) {
-      case 'ready':
-        return 'text-emerald-600';
-      case 'login_required':
-        return 'text-amber-600';
-      case 'verifying':
-        return 'text-[var(--color-primary)]';
-      case 'unknown':
-        return 'text-[var(--neutral-text-03)]';
-      default:
-        return 'text-red-600';
+  const resetStatus = async (platform: string) => {
+    const localPatch: Partial<AiMonitorSession> = {
+      status: 'unknown',
+      lastVerifiedAt: undefined,
+      lastError: undefined,
+    };
+    const updated = await updateAiMonitorSessionStatus(brandName, platform, 'unknown');
+    applySessions(
+      mergeAiMonitorSessions(
+        sessions.map((s) =>
+          s.platform === platform ? { ...s, ...localPatch, ...(updated ?? {}) } : s
+        )
+      )
+    );
+    toast(`${platform} 已重置`, 'info');
+  };
+
+  const openLogin = (row: AiMonitorSession) => {
+    if (!row.loginUrl) {
+      toast('该平台未配置登录地址', 'error');
+      return;
     }
+    if (!openPlatformLogin(row.loginUrl, row.platform)) {
+      toast('浏览器拦截了新标签页，请允许弹窗', 'error');
+    }
+  };
+
+  const renderActions = (row: AiMonitorSession) => {
+    const isReady = row.status === 'ready';
+
+    if (isReady) {
+      return (
+        <span className="flex flex-wrap gap-1 justify-end">
+          <button
+            type="button"
+            className="geo-btn-secondary geo-btn-xs"
+            onClick={() => void resetStatus(row.platform)}
+          >
+            <RefreshCw className="w-3 h-3" />
+            重置
+          </button>
+        </span>
+      );
+    }
+
+    return (
+      <span className="flex flex-wrap gap-1 justify-end">
+        {row.loginUrl && (
+          <button type="button" className="geo-btn-primary geo-btn-xs" onClick={() => openLogin(row)}>
+            打开平台登录页
+          </button>
+        )}
+        <button
+          type="button"
+          className="geo-btn-secondary geo-btn-xs gap-1"
+          onClick={() => void markReady(row.platform)}
+        >
+          <Check className="w-3 h-3" />
+          标记已就绪
+        </button>
+      </span>
+    );
   };
 
   return (
     <div className="space-y-4">
+      <p className="text-xs" style={{ color: 'var(--neutral-text-03)' }}>
+        在各 AI 平台完成登录后点击「标记已就绪」；未就绪即视为待登录。登录页复用同一浏览器标签，避免重复打开。
+      </p>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {[
+          { label: '已就绪', value: overview.ready, sub: `共 ${overview.total} 个平台` },
+          { label: '待登录', value: overview.pending, sub: '需打开登录页并标记' },
+          {
+            label: '监测平台',
+            value: overview.total,
+            sub: overview.ready > 0 ? `${overview.ready} 个可采样` : '全部待配置',
+          },
+        ].map((item) => (
+          <div key={item.label} className="geo-card p-3">
+            <p className="text-[10px]" style={{ color: 'var(--neutral-text-03)' }}>
+              {item.label}
+            </p>
+            <p className="text-lg font-bold mt-0.5">{item.value}</p>
+            <p className="text-[10px] mt-0.5" style={{ color: 'var(--neutral-text-03)' }}>
+              {item.sub}
+            </p>
+          </div>
+        ))}
+      </div>
+
       <div className="geo-table-wrap">
-        <table className="geo-table">
+        <table className="geo-table geo-table--compact">
           <thead>
             <tr>
               <th>平台</th>
-              <th>登录入口</th>
               <th>会话状态</th>
-              <th>上次校验</th>
-              <th className="geo-table__actions min-w-[400px]" aria-label="操作" />
+              <th>登录说明</th>
+              <th>上次标记</th>
+              <th className="text-right">操作</th>
             </tr>
           </thead>
           <tbody>
-            {sessions.map((row) => (
-              <tr key={row.platform}>
-                <td className="font-medium whitespace-nowrap">{row.platform}</td>
-                <td className="max-w-[220px]">
-                  {row.loginUrl ? (
-                    <a
-                      href={row.loginUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="geo-link text-xs inline-flex items-center gap-1 break-all"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5 shrink-0" aria-hidden />
-                      {row.loginUrl}
-                    </a>
-                  ) : (
-                    <span className="text-xs" style={{ color: 'var(--neutral-text-03)' }}>—</span>
-                  )}
-                  {row.loginHint && (
-                    <p className="text-[11px] mt-1" style={{ color: 'var(--neutral-text-03)' }}>
-                      {row.loginHint}
-                    </p>
-                  )}
-                </td>
-                <td>
-                  <span className={`text-xs font-medium ${statusClass(row.status)}`}>
-                    {AI_MONITOR_STATUS_LABEL[row.status]}
-                  </span>
-                  {row.lastError && row.status !== 'ready' && (
-                    <p className="text-[11px] mt-0.5" style={{ color: 'var(--neutral-text-03)' }}>
-                      {row.lastError}
-                    </p>
-                  )}
-                </td>
-                <td className="text-xs whitespace-nowrap" style={{ color: 'var(--neutral-text-02)' }}>
-                  {row.lastVerifiedAt ? formatPlanDateTime(row.lastVerifiedAt) : '—'}
-                </td>
-                <td className="geo-table__actions min-w-[400px]">
-                  <div className="flex flex-nowrap items-center justify-end gap-1.5">
-                    {row.loginUrl && (
-                      <a
-                        href={row.loginUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="geo-btn-primary geo-btn-xs gap-1 shrink-0 whitespace-nowrap"
-                      >
-                        <ExternalLink className="w-3 h-3 shrink-0" />
-                        打开对话页
-                      </a>
+            {sessions.map((row) => {
+              const status = sessionStatusTag(row.status);
+              return (
+                <tr key={row.platform}>
+                  <td className="font-medium whitespace-nowrap">{row.platform}</td>
+                  <td>
+                    <span className={`geo-tag text-[10px] ${status.tagClass}`}>{status.label}</span>
+                  </td>
+                  <td className="max-w-[280px]">
+                    {row.loginHint ? (
+                      <p className="text-xs" style={{ color: 'var(--neutral-text-02)' }}>
+                        {row.loginHint}
+                      </p>
+                    ) : (
+                      <span className="text-xs" style={{ color: 'var(--neutral-text-03)' }}>
+                        —
+                      </span>
                     )}
-                    <button
-                      type="button"
-                      className="geo-btn-secondary geo-btn-xs gap-1 shrink-0 whitespace-nowrap"
-                      onClick={() => void markStatus(row.platform, 'ready')}
-                    >
-                      <Check className="w-3 h-3 shrink-0" />
-                      标记已就绪
-                    </button>
-                    <button
-                      type="button"
-                      className="geo-btn-secondary geo-btn-xs gap-1 shrink-0 whitespace-nowrap"
-                      onClick={() => void markStatus(row.platform, 'login_required')}
-                    >
-                      <X className="w-3 h-3 shrink-0" />
-                      需登录
-                    </button>
-                    <button
-                      type="button"
-                      className="geo-link text-xs shrink-0 whitespace-nowrap inline-flex items-center"
-                      disabled={row.status === 'verifying'}
-                      onClick={() => void runAutoVerify([row.platform])}
-                    >
-                      自动检测
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="text-xs whitespace-nowrap" style={{ color: 'var(--neutral-text-03)' }}>
+                    {row.lastVerifiedAt ? formatPlanDateTime(row.lastVerifiedAt) : '—'}
+                  </td>
+                  <td className="text-right">{renderActions(row)}</td>
+                </tr>
+              );
+            })}
             {loading && sessions.length === 0 && (
               <tr>
                 <td colSpan={5} className="text-center text-xs py-6" style={{ color: 'var(--neutral-text-03)' }}>
@@ -245,37 +233,15 @@ export default function AiMonitorPlatformsPanel({
         </table>
       </div>
 
-      <div
-        className="geo-card px-4 py-3 flex flex-wrap items-center justify-between gap-3 border-dashed"
-      >
-        <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--neutral-text-03)' }}>
-          <Cpu className="w-4 h-4 shrink-0" aria-hidden />
-          <span>可选：本机 Hermes {hermesOnline ? '已连接' : '未就绪'}，用于自动检测登录态</span>
-          <button type="button" className="geo-link text-xs" onClick={() => void refreshHermes()}>
-            刷新
-          </button>
-          {onNavigate && (
-            <button type="button" className="geo-link text-xs" onClick={() => onNavigate('hermes_console')}>
-              管理 Hermes
-            </button>
-          )}
-        </div>
-        <button
-          type="button"
-          className="geo-btn-secondary text-sm gap-1"
-          disabled={verifyingAll || hasVerifying}
-          onClick={() => void runAutoVerify()}
-        >
-          <RefreshCw className={`w-4 h-4 ${verifyingAll || hasVerifying ? 'animate-spin' : ''}`} />
-          自动检测全部
-        </button>
-      </div>
-
       {notReadyCount > 0 && (
         <p className="text-xs px-1 text-amber-600">
-          {notReadyCount} 个平台尚未标记就绪，执行查询计划前建议先完成登录并手动校验。
+          {notReadyCount} 个平台尚未标记就绪，执行查询计划前建议先完成登录并手动标记。
         </p>
       )}
+
+      <p className="text-[10px] text-center" style={{ color: 'var(--neutral-text-03)' }}>
+        会话状态由你手动确认；登录态保存在本机浏览器，更换电脑后需重新登录并标记。
+      </p>
     </div>
   );
 }

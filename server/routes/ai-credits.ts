@@ -4,9 +4,14 @@ import { getAiCredits, addAiCredits, syncAiCreditsFromCloud } from '../services/
 
 export function registerAiCreditsRoutes(app: Express) {
   app.get('/api/ai-credits/:brandName', async (req, res) => {
-    const brandName = await requireBrandNameParam(req, res, req.params.brandName);
-    if (!brandName) return;
-    res.json(await getAiCredits(brandName));
+    try {
+      const brandName = await requireBrandNameParam(req, res, req.params.brandName);
+      if (!brandName) return;
+      res.json(await getAiCredits(brandName));
+    } catch (err) {
+      console.error('[ai-credits]', err);
+      res.status(500).json({ error: '词元账户加载失败' });
+    }
   });
 
   app.post('/api/ai-credits/:brandName/sync', async (req, res) => {

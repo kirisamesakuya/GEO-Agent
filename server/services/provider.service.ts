@@ -18,7 +18,11 @@ import { ensureDemoMarketplaceReady } from '../lib/ensure-demo-marketplace.js';
 import { PROVIDER_AGREEMENT_VERSION } from '../../lib/marketplace-agreements.js';
 import { PROVIDER_SERVICE_AGREEMENT_TITLE } from '../../lib/platform-legal-copy.js';
 import { isQuoteOrder, assertQuoteBypassAllowed } from '../../lib/quote-order.js';
-import { HIDE_PUBLISHER_BUDGET } from '../../lib/feature-flags.js';
+import {
+  type ProviderCredibilityDraft,
+  parseCredibilityDraft,
+  validateCredibilityDraft,
+} from '../../lib/provider-profile-change.js';
 
 export async function getProvider(id: string) {
   return prisma.provider.findUnique({
@@ -117,6 +121,7 @@ export async function upsertProviderProfile(
     serviceAreas?: string[];
     budgetMin?: number;
     budgetMax?: number;
+    pricingNote?: string;
     caseLinks?: string[];
     capabilities?: string[];
   }
@@ -164,6 +169,7 @@ export async function upsertProviderProfile(
     serviceAreas: JSON.stringify(data.serviceAreas ?? []),
     budgetMin: data.budgetMin,
     budgetMax: data.budgetMax,
+    pricingNote: data.pricingNote?.trim() || null,
     caseLinks: JSON.stringify(data.caseLinks ?? []),
   };
 
@@ -172,6 +178,12 @@ export async function upsertProviderProfile(
     if (!existing) throw new Error('接单方不存在');
     if (existing.applicationStatus === 'submitted') {
       throw new Error('待审核中请先撤回申请再修改资料');
+    }
+    if (existing.applicationStatus === 'approved') {
+      throw new Error('已通过入驻，请在个人中心「编辑资料」提交公信力变更审核');
+    }
+    if (existing.profileReviewStatus === 'pending') {
+      throw new Error('资料变更审核中，请等待平台处理或先撤回变更');
     }
     const nextStatus =
       existing.applicationStatus === 'approved' ? 'approved' : 'draft';
@@ -235,6 +247,207 @@ export async function submitProviderApplication(providerId: string, agreementVer
   });
 
   return updated;
+}
+
+function buildCapabilitiesJsonForPlatforms(existingJson: string | null | undefined, platforms: string[]) {
+  type Cap = { id: string; platform: string; reviewStatus: string; reviewNote?: string; reviewedAt?: string; declaredAt?: string };
+  const existing: Cap[] = [];
+  try {
+    const parsed = JSON.parse(existingJson ?? '[]') as unknown;
+    if (Array.isArray(parsed) && parsed[0] && typeof parsed[0] === 'object' && 'platform' in (parsed[0] as object)) {
+      existing.push(...(parsed as Cap[]));
+    }
+  } catch {
+    /* ignore */
+  }
+  const byPlatform = new Map(existing.map((c) => [c.platform, c]));
+  return JSON.stringify(
+    platforms.map((platform, i) => {
+      const prev = byPlatform.get(platform);
+      if (prev) return prev;
+      return {
+        id: `cap-${i}`,
+        platform,
+        reviewStatus: 'pending',
+        declaredAt: new Date().toISOString(),
+      };
+    })
+  );
+}
+
+function serializeCredibilityDraft(data: ProviderCredibilityDraft): string {
+  return JSON.stringify({
+    name: data.name.trim() || '新媒体接单方',
+    type: data.type.trim() || '达人',
+    platforms: data.platforms ?? [],
+    serviceAreas: data.serviceAreas ?? [],
+    caseLinks: data.caseLinks ?? [],
+    budgetMin: data.budgetMin,
+    budgetMax: data.budgetMax,
+    pricingNote: data.pricingNote?.trim() || undefined,
+  });
+}
+
+function credibilityToProviderData(draft: ProviderCredibilityDraft) {
+  const platforms = draft.platforms ?? [];
+  return {
+    name: draft.name.trim() || '新媒体接单方',
+    type: draft.type.trim() || '达人',
+    platforms: JSON.stringify(platforms),
+    serviceAreas: JSON.stringify(draft.serviceAreas ?? []),
+    serviceTypes: JSON.stringify(platforms),
+    industryTags: JSON.stringify([]),
+    caseLinks: JSON.stringify(draft.caseLinks ?? []),
+    budgetMin: draft.budgetMin,
+    budgetMax: draft.budgetMax,
+    pricingNote: draft.pricingNote?.trim() || null,
+  };
+}
+
+/** 已通过入驻：联系方式可即时修改，无需审核 */
+export async function updateProviderContactProfile(
+  providerId: string,
+  data: { contactName?: string; phone?: string }
+) {
+  const provider = await prisma.provider.findUnique({ where: { id: providerId } });
+  if (!provider) throw new Error('接单方不存在');
+  if (provider.applicationStatus !== 'approved') {
+    throw new Error('仅已通过入驻的接单方可修改联系方式');
+  }
+  const contactName = data.contactName?.trim();
+  if (!contactName) throw new Error('请填写联系人');
+
+  const updated = await prisma.provider.update({
+    where: { id: providerId },
+    data: {
+      contactName,
+      phone: data.phone?.trim() || null,
+    },
+  });
+
+  await appendAuditLog({
+    action: 'provider_contact_update',
+    entity: 'Provider',
+    entityId: providerId,
+  });
+
+  return updated;
+}
+
+/** 已通过入驻：保存公信力资料变更草稿（未提交审核） */
+export async function saveProviderCredibilityDraft(
+  providerId: string,
+  data: ProviderCredibilityDraft
+) {
+  const provider = await prisma.provider.findUnique({ where: { id: providerId } });
+  if (!provider) throw new Error('接单方不存在');
+  if (provider.applicationStatus !== 'approved') {
+    throw new Error('请先完成入驻审核');
+  }
+  if (provider.profileReviewStatus === 'pending') {
+    throw new Error('资料变更审核中，暂不可编辑');
+  }
+
+  const err = validateCredibilityDraft(data);
+  if (err) throw new Error(err);
+
+  return prisma.provider.update({
+    where: { id: providerId },
+    data: {
+      pendingProfileJson: serializeCredibilityDraft(data),
+      profileReviewStatus: provider.profileReviewStatus === 'rejected' ? 'rejected' : 'none',
+    },
+  });
+}
+
+/** 提交公信力资料变更，进入平台审核 */
+export async function submitProviderCredibilityChange(providerId: string) {
+  const provider = await prisma.provider.findUnique({ where: { id: providerId } });
+  if (!provider) throw new Error('接单方不存在');
+  if (provider.applicationStatus !== 'approved') {
+    throw new Error('请先完成入驻审核');
+  }
+  if (provider.profileReviewStatus === 'pending') {
+    throw new Error('已有资料变更在审核中');
+  }
+
+  const draft =
+    parseCredibilityDraft(provider.pendingProfileJson) ??
+    parseCredibilityDraft(
+      serializeCredibilityDraft({
+        name: provider.name,
+        type: provider.type,
+        platforms: JSON.parse(provider.platforms ?? '[]') as string[],
+        serviceAreas: JSON.parse(provider.serviceAreas ?? '[]') as string[],
+        caseLinks: JSON.parse(provider.caseLinks ?? '[]') as string[],
+        budgetMin: provider.budgetMin ?? undefined,
+        budgetMax: provider.budgetMax ?? undefined,
+        pricingNote: provider.pricingNote ?? undefined,
+      })
+    );
+  if (!draft) throw new Error('请先编辑并保存资料变更');
+
+  const err = validateCredibilityDraft(draft);
+  if (err) throw new Error(err);
+
+  const version =
+    (await prisma.providerApplication.count({ where: { providerId } })) + 1;
+
+  await prisma.providerApplication.create({
+    data: {
+      providerId,
+      version,
+      payload: JSON.stringify({
+        kind: 'profile_update',
+        proposed: draft,
+        submittedAt: new Date().toISOString(),
+      }),
+      status: 'submitted',
+    },
+  });
+
+  const updated = await prisma.provider.update({
+    where: { id: providerId },
+    data: {
+      pendingProfileJson: serializeCredibilityDraft(draft),
+      profileReviewStatus: 'pending',
+      reviewNote: null,
+    },
+  });
+
+  await appendAuditLog({
+    action: 'provider_profile_change_submit',
+    entity: 'Provider',
+    entityId: providerId,
+  });
+
+  await createProviderNotification({
+    providerId,
+    type: 'onboarding',
+    title: '资料变更已提交',
+    body: '平台将在 1 个工作日内完成审核，审核通过前对外仍展示原资料。',
+  });
+
+  return updated;
+}
+
+/** 撤回待审核的资料变更 */
+export async function withdrawProviderCredibilityChange(providerId: string) {
+  const provider = await prisma.provider.findUnique({ where: { id: providerId } });
+  if (!provider) throw new Error('接单方不存在');
+  if (provider.profileReviewStatus !== 'pending') {
+    throw new Error('当前没有待审核的资料变更');
+  }
+
+  await prisma.providerApplication.updateMany({
+    where: { providerId, status: 'submitted' },
+    data: { status: 'withdrawn', reviewNote: '接单方撤回资料变更' },
+  });
+
+  return prisma.provider.update({
+    where: { id: providerId },
+    data: { profileReviewStatus: 'none' },
+  });
 }
 
 export async function saveApplicationDraft(providerId: string) {
@@ -318,10 +531,10 @@ export async function listTaskMarketplace(filters: {
 
   const orders = await prisma.taskOrder.findMany({
     where: {
-      status: { in: ['published', 'quote_open', 'quote_review'] },
+      status: { in: ['quote_open', 'quote_review'] },
+      pricingMode: 'provider_quote',
       ...(platformFilter && !useIndustryMemoryFilter ? { platform: platformFilter } : {}),
       ...(filters.type ? { type: filters.type } : {}),
-      ...(filters.minBudget ? { budget: { gte: filters.minBudget } } : {}),
       ...(filters.industry ? { industry: filters.industry } : {}),
       ...(filters.city ? { city: filters.city } : {}),
       ...deadlineFilter,
@@ -329,10 +542,11 @@ export async function listTaskMarketplace(filters: {
     orderBy: { createdAt: 'desc' },
   });
 
-  const visibleOrders =
+  const visibleOrders = (
     useIndustryMemoryFilter
       ? orders.filter((o) => orderMatchesHallPlatformFilter(o.platform, platformFilter!))
-      : orders;
+      : orders
+  ).filter(isQuoteOrder);
 
   let provider: Awaited<ReturnType<typeof getProvider>> = null;
   if (filters.providerId) provider = await getProvider(filters.providerId);
@@ -345,10 +559,10 @@ export async function listTaskMarketplace(filters: {
     visibleOrders.map(async (order) => {
       const matchScore = scoreProviderPlatformMatch(providerPlatforms, order.platform);
       const slots = await resolveMarketplaceSlots(order);
-      const quoteMode = isQuoteOrder(order);
+      const quoteMode = true;
       const sanitized = {
         ...order,
-        ...(HIDE_PUBLISHER_BUDGET && quoteMode ? { budget: undefined } : {}),
+        budget: undefined,
         pricingMode: order.pricingMode,
         isQuoteTask: quoteMode,
       };
@@ -651,8 +865,16 @@ export async function deleteProviderAsset(providerId: string, assetId: string) {
 }
 
 export async function listAllProvidersForPlatform(status?: string) {
+  const where =
+    status === 'submitted'
+      ? {
+          OR: [{ applicationStatus: 'submitted' }, { profileReviewStatus: 'pending' }],
+        }
+      : status
+        ? { applicationStatus: status }
+        : {};
   return prisma.provider.findMany({
-    where: status ? { applicationStatus: status } : {},
+    where,
     include: {
       applications: { orderBy: { createdAt: 'desc' }, take: 1 },
       reviewLogs: { orderBy: { createdAt: 'desc' }, take: 5 },
@@ -667,6 +889,81 @@ export async function reviewProviderApplication(
   action: 'approve' | 'reject',
   note?: string
 ) {
+  const existing = await prisma.provider.findUnique({ where: { id: providerId } });
+  if (!existing) throw new Error('接单方不存在');
+
+  const isProfileChange =
+    existing.applicationStatus === 'approved' && existing.profileReviewStatus === 'pending';
+
+  if (isProfileChange) {
+    const draft = parseCredibilityDraft(existing.pendingProfileJson);
+    if (action === 'approve') {
+      if (!draft) throw new Error('待审核资料不存在或已失效');
+      const merged = credibilityToProviderData(draft);
+      const provider = await prisma.provider.update({
+        where: { id: providerId },
+        data: {
+          ...merged,
+          capabilities: buildCapabilitiesJsonForPlatforms(existing.capabilities, draft.platforms),
+          profileReviewStatus: 'none',
+          pendingProfileJson: null,
+          reviewNote: note ?? null,
+        },
+      });
+
+      await prisma.providerApplication.updateMany({
+        where: { providerId, status: 'submitted' },
+        data: { status: 'approved', reviewNote: note },
+      });
+
+      await prisma.providerReviewLog.create({
+        data: { providerId, action: 'profile_change_approve', note },
+      });
+
+      await appendAuditLog({
+        action: 'provider_profile_change_approve',
+        entity: 'Provider',
+        entityId: providerId,
+        detail: note,
+      });
+
+      await createProviderNotification({
+        providerId,
+        type: 'onboarding',
+        title: '资料变更已通过',
+        body: note ?? '更新后的资料已生效，可继续接单与报价。',
+      });
+
+      return provider;
+    }
+
+    const provider = await prisma.provider.update({
+      where: { id: providerId },
+      data: {
+        profileReviewStatus: 'rejected',
+        reviewNote: note,
+      },
+    });
+
+    await prisma.providerApplication.updateMany({
+      where: { providerId, status: 'submitted' },
+      data: { status: 'rejected', reviewNote: note },
+    });
+
+    await prisma.providerReviewLog.create({
+      data: { providerId, action: 'profile_change_reject', note },
+    });
+
+    await createProviderNotification({
+      providerId,
+      type: 'onboarding',
+      title: '资料变更未通过',
+      body: note ?? '请根据审核意见修改后重新提交。',
+    });
+
+    return provider;
+  }
+
   const status = action === 'approve' ? 'approved' : 'rejected';
   const provider = await prisma.provider.update({
     where: { id: providerId },

@@ -23,6 +23,10 @@ import {
   listProviderApplications,
   withdrawProviderApplication,
   getProviderEarnings,
+  updateProviderContactProfile,
+  saveProviderCredibilityDraft,
+  submitProviderCredibilityChange,
+  withdrawProviderCredibilityChange,
 } from '../services/provider.service.js';
 import {
   createWithdrawalRequest,
@@ -154,8 +158,57 @@ export function registerProviderRoutes(app: Express) {
       if (!scoped) return;
       providerId = scoped;
     }
-    const provider = await upsertProviderProfile(providerId, data);
-    res.json({ provider });
+    try {
+      const provider = await upsertProviderProfile(providerId, data);
+      res.json({ provider });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '保存失败' });
+    }
+  });
+
+  app.patch('/api/provider/profile/contact', async (req, res) => {
+    const providerId = requireProviderId(req, res);
+    if (!providerId) return;
+    const { contactName, phone } = req.body ?? {};
+    try {
+      const provider = await updateProviderContactProfile(providerId, { contactName, phone });
+      res.json({ provider });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '保存失败' });
+    }
+  });
+
+  app.put('/api/provider/profile/credibility-draft', async (req, res) => {
+    const providerId = requireProviderId(req, res);
+    if (!providerId) return;
+    try {
+      const provider = await saveProviderCredibilityDraft(providerId, req.body ?? {});
+      res.json({ provider });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '保存失败' });
+    }
+  });
+
+  app.post('/api/provider/profile/credibility-submit', async (req, res) => {
+    const providerId = requireProviderId(req, res);
+    if (!providerId) return;
+    try {
+      const provider = await submitProviderCredibilityChange(providerId);
+      res.json({ provider });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '提交失败' });
+    }
+  });
+
+  app.post('/api/provider/profile/credibility-withdraw', async (req, res) => {
+    const providerId = requireProviderId(req, res);
+    if (!providerId) return;
+    try {
+      const provider = await withdrawProviderCredibilityChange(providerId);
+      res.json({ provider });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : '撤回失败' });
+    }
   });
 
   app.post('/api/provider/identity-verify', async (req, res) => {
@@ -288,16 +341,20 @@ export function registerProviderRoutes(app: Express) {
       deadlineBefore: typeof deadlineBefore === 'string' ? deadlineBefore : undefined,
       providerId,
     });
-    res.json({ tasks });
+    const { attachProviderBrandBriefs } = await import('../services/provider-brand-brief.service.js');
+    res.json({ tasks: await attachProviderBrandBriefs(tasks) });
   });
 
   app.get('/api/provider/task-marketplace/:id', async (req, res) => {
     const order = await getOrder(req.params.id);
     if (!order) return res.status(404).json({ error: '任务不存在' });
     const slots = await resolveMarketplaceSlots(order);
+    const { resolveProviderBrandBrief } = await import('../services/provider-brand-brief.service.js');
+    const brandBrief = await resolveProviderBrandBrief(order.brandName, order.taskBriefJson);
     const task = {
       ...order,
       ...slots,
+      brandBrief,
       ...(isQuoteOrder(order) ? { budget: undefined } : {}),
       isQuoteTask: isQuoteOrder(order),
     };
@@ -391,7 +448,9 @@ export function registerProviderRoutes(app: Express) {
   app.get('/api/provider/orders/:id', async (req, res) => {
     const order = await getOrder(req.params.id);
     if (!order) return res.status(404).json({ error: '订单不存在' });
-    res.json({ order });
+    const { resolveProviderBrandBrief } = await import('../services/provider-brand-brief.service.js');
+    const brandBrief = await resolveProviderBrandBrief(order.brandName, order.taskBriefJson);
+    res.json({ order: { ...order, brandBrief } });
   });
 
   app.post('/api/provider/orders/:id/disputes', async (req, res) => {

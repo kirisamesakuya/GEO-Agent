@@ -1,5 +1,4 @@
-import { ChevronRight, RefreshCw } from 'lucide-react';
-import type { ViewType } from '../../types';
+import { RefreshCw } from 'lucide-react';
 import { useHermesHealth } from '../../hooks/useHermesHealth';
 import {
   HERMES_CAPACITY_STATS_ENABLED,
@@ -14,11 +13,10 @@ import {
 } from '../../lib/hermes-status-utils';
 
 interface Props {
-  onNavigate?: (view: ViewType, hint?: string) => void;
   pollMs?: number;
 }
 
-export default function HermesStatusStrip({ onNavigate, pollMs = 12_000 }: Props) {
+export default function HermesStatusStrip({ pollMs = 12_000 }: Props) {
   const { health, loading, refresh } = useHermesHealth({ pollMs });
 
   const capacity = health?.capacity;
@@ -74,16 +72,6 @@ export default function HermesStatusStrip({ onNavigate, pollMs = 12_000 }: Props
               下载
             </a>
           </>
-        )}
-        {onNavigate && (
-          <button
-            type="button"
-            className="geo-btn-primary geo-btn-xs inline-flex items-center gap-0.5"
-            onClick={() => onNavigate('hermes_console', ready ? undefined : 'setup')}
-          >
-            {ready ? '管理本机 Hermes' : '前往配置'}
-            <ChevronRight className="w-3 h-3" />
-          </button>
         )}
       </div>
     </div>

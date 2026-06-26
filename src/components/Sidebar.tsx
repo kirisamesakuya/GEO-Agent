@@ -146,7 +146,7 @@ export default function Sidebar({
         style={{ height: 'var(--layout-header-height)', borderColor: 'var(--neutral-divider-02)' }}
       >
         <AppBrandMark
-          logo={<PublisherLogo size={28} />}
+          logo={<PublisherLogo size={44} />}
           prefix={PUBLISHER_APP_BRAND_PREFIX}
           productName={PUBLISHER_APP_PRODUCT_NAME}
           fullName={PUBLISHER_APP_NAME}

@@ -9,7 +9,7 @@ export default function OrderDeliveryEmptyState({ kind, brandName }: Props) {
       <div className="p-6 space-y-2 text-center max-w-md mx-auto">
         <p className="text-sm font-medium text-[var(--color-title)]">暂无网页需求</p>
         <p className="text-xs text-[var(--neutral-text-03)]">
-          点击「提交网页需求」填写基础客资，后台处理进度将在此查看。
+          网页改装与页面类需求提交后，处理进度将在此查看。
         </p>
       </div>
     );

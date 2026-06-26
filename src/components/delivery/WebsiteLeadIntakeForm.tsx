@@ -17,7 +17,10 @@ interface Props {
   submitLabel?: string;
   pageTypes?: readonly string[];
   introNote?: string;
+  /** @deprecated 请改用 referenceUrlMode */
   requireReferenceUrl?: boolean;
+  /** hidden=新建站点（无现成网址）；optional=可填参考链接；required=自有网站优化必填 */
+  referenceUrlMode?: 'hidden' | 'optional' | 'required';
   onSuccess?: () => void;
 }
 
@@ -27,16 +30,63 @@ export default function WebsiteLeadIntakeForm({
   submitLabel = '提交需求',
   pageTypes = WEBSITE_PAGE_TYPES,
   introNote = WEBSITE_PHASE1_NOTE,
-  requireReferenceUrl = false,
+  requireReferenceUrl,
+  referenceUrlMode,
   onSuccess,
 }: Props) {
   const { toast } = useToast();
+  const urlMode: 'hidden' | 'optional' | 'required' =
+    referenceUrlMode ?? (requireReferenceUrl ? 'required' : 'hidden');
   const [referenceUrl, setReferenceUrl] = useState(initialValues?.referenceUrl ?? '');
   const [pageType, setPageType] = useState(initialValues?.pageType ?? pageTypes[0]);
   const [keywords, setKeywords] = useState(initialValues?.keywords ?? '');
   const [notes, setNotes] = useState(initialValues?.notes ?? '');
   const [contact, setContact] = useState(initialValues?.contact ?? '');
   const [submitting, setSubmitting] = useState(false);
+
+  const pageTypeLabel =
+    urlMode === 'required' ? '想优化的页面类型' : '需要建设的页面类型';
+
+  const referenceUrlField =
+    urlMode === 'hidden' ? null : (
+      <div>
+        <label className="geo-label">
+          {urlMode === 'required' ? '待优化页面链接 *' : '参考链接（可选）'}
+        </label>
+        <input
+          className="geo-input w-full mt-1 text-sm"
+          placeholder={
+            urlMode === 'required'
+              ? 'https://www.example.com/implant'
+              : '竞品页面或风格参考，无则留空'
+          }
+          value={referenceUrl}
+          onChange={(e) => setReferenceUrl(e.target.value)}
+        />
+        <p className="text-[10px] text-[var(--neutral-text-03)] mt-1">
+          {urlMode === 'required'
+            ? '填写官网或具体落地页 URL，便于工程师定位优化范围'
+            : '可填写竞品或风格参考页，便于设计对齐预期'}
+        </p>
+      </div>
+    );
+
+  const pageTypeField = (
+    <div>
+      <label className="geo-label">{pageTypeLabel}</label>
+      <select
+        className="geo-input w-full mt-1 text-sm"
+        value={pageType}
+        onChange={(e) => setPageType(e.target.value)}
+      >
+        {pageTypes.map((t) => (
+          <option key={t} value={t}>
+            {t}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 
   const submit = async () => {
     if (brandName === '__all__' || !brandName.trim()) {
@@ -47,7 +97,7 @@ export default function WebsiteLeadIntakeForm({
       toast('请填写目标关键词', 'error');
       return;
     }
-    if (requireReferenceUrl && !referenceUrl.trim()) {
+    if (urlMode === 'required' && !referenceUrl.trim()) {
       toast('请填写待优化页面链接', 'error');
       return;
     }
@@ -96,41 +146,23 @@ export default function WebsiteLeadIntakeForm({
 
   return (
     <div className="space-y-4">
-      <p className="text-xs leading-relaxed" style={{ color: 'var(--neutral-text-03)' }}>
-        {introNote}
-      </p>
+      {introNote.trim() ? (
+        <p className="text-xs leading-relaxed" style={{ color: 'var(--neutral-text-03)' }}>
+          {introNote}
+        </p>
+      ) : null}
 
-      <div>
-        <label className="geo-label">
-          {requireReferenceUrl ? '待优化页面链接 *' : '官网 / 落地页链接'}
-        </label>
-        <input
-          className="geo-input w-full mt-1 text-sm"
-          placeholder="https://www.example.com/implant"
-          value={referenceUrl}
-          onChange={(e) => setReferenceUrl(e.target.value)}
-        />
-        {requireReferenceUrl && (
-          <p className="text-[10px] text-[var(--neutral-text-03)] mt-1">
-            填写官网或具体落地页 URL，便于工程师定位优化范围
-          </p>
-        )}
-      </div>
-
-      <div>
-        <label className="geo-label">想优化的页面类型</label>
-        <select
-          className="geo-input w-full mt-1 text-sm"
-          value={pageType}
-          onChange={(e) => setPageType(e.target.value)}
-        >
-          {pageTypes.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-      </div>
+      {urlMode === 'required' ? (
+        <>
+          {referenceUrlField}
+          {pageTypeField}
+        </>
+      ) : (
+        <>
+          {pageTypeField}
+          {referenceUrlField}
+        </>
+      )}
 
       <div>
         <label className="geo-label">目标关键词 *</label>

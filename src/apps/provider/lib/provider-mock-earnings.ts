@@ -94,3 +94,21 @@ export function hasRealEarningsData(
   if ((transactions?.length ?? 0) > 0) return true;
   return wallet.accumulatedIncome > 0 || wallet.extractable > 0 || wallet.frozen > 0;
 }
+
+export function resolveProviderWallet(
+  apiWallet: Partial<WalletSummary> | undefined,
+  transactions?: EarningsTransaction[]
+): WalletSummary {
+  if (hasRealEarningsData(apiWallet as WalletSummary | undefined, transactions)) {
+    return {
+      extractable: Number(apiWallet?.extractable ?? 0),
+      frozen: Number(apiWallet?.frozen ?? 0),
+      accumulatedIncome: Number(apiWallet?.accumulatedIncome ?? 0),
+    };
+  }
+  return {
+    extractable: MOCK_PROVIDER_WALLET.extractable,
+    frozen: MOCK_PROVIDER_WALLET.frozen,
+    accumulatedIncome: MOCK_PROVIDER_WALLET.accumulatedIncome,
+  };
+}

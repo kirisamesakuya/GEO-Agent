@@ -62,6 +62,17 @@ interface PlanPackage {
   deliverable: string;
   acceptance: string;
   publishToLobby: boolean;
+  suggestedMinCents?: number | null;
+  suggestedMaxCents?: number | null;
+}
+
+function formatSuggestedRangeFromPkg(pkg: PlanPackage): string {
+  if (pkg.suggestedMinCents != null && pkg.suggestedMaxCents != null) {
+    return `¥${(pkg.suggestedMinCents / 100).toLocaleString()} – ¥${(pkg.suggestedMaxCents / 100).toLocaleString()}`;
+  }
+  const unit = resolvePackageUnitPrice(pkg);
+  const min = Math.round(unit * 0.6);
+  return `¥${min.toLocaleString()} – ¥${unit.toLocaleString()}`;
 }
 
 function formatMoney(value: number) {
@@ -251,6 +262,8 @@ export default function DeliveryPlanView({
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(PAID_SOURCE_DEFAULT_PLATFORMS);
   const [hiddenBudgetMaxCents, setHiddenBudgetMaxCents] = useState(2_000_000);
   const [perTaskBudgetCapCents, setPerTaskBudgetCapCents] = useState(300_000);
+  const [suggestedMinYuan, setSuggestedMinYuan] = useState(500);
+  const [suggestedMaxYuan, setSuggestedMaxYuan] = useState(3000);
   const [newPackagePlatform, setNewPackagePlatform] = useState(PAID_SOURCE_PLATFORM_OPTIONS[0] ?? '小红书');
   const [newPackageQuantity, setNewPackageQuantity] = useState(1);
   const [newPackageUnitPrice, setNewPackageUnitPrice] = useState(3000);
@@ -1054,6 +1067,30 @@ export default function DeliveryPlanView({
                         每条报价任务的可接受最高价
                       </p>
                     </div>
+                    <div>
+                      <FieldLabel>建议到手下限（元）</FieldLabel>
+                      <input
+                        type="number"
+                        className="geo-input w-full text-sm"
+                        value={suggestedMinYuan}
+                        onChange={(e) => setSuggestedMinYuan(Math.max(0, Number(e.target.value) || 0))}
+                      />
+                      <p className="text-[10px] text-[var(--neutral-text-03)] mt-1">
+                        展示给接单方的参考下限，非冻结金额
+                      </p>
+                    </div>
+                    <div>
+                      <FieldLabel>建议到手上限（元）</FieldLabel>
+                      <input
+                        type="number"
+                        className="geo-input w-full text-sm"
+                        value={suggestedMaxYuan}
+                        onChange={(e) => setSuggestedMaxYuan(Math.max(0, Number(e.target.value) || 0))}
+                      />
+                      <p className="text-[10px] text-[var(--neutral-text-03)] mt-1">
+                        超出此区间需接单方填写原因
+                      </p>
+                    </div>
                   </div>
                 )}
                 <div>
@@ -1192,6 +1229,17 @@ export default function DeliveryPlanView({
         const summary = summarizePlanPackages(displayPackages);
         const planEditable = plan?.id === activePlan.id;
         return (
+          <div className="space-y-3">
+            {paidQuoteMode && (
+              <div className="geo-card p-4 border border-[var(--color-accent)]/20 bg-[var(--color-accent)]/5">
+                <p className="text-xs font-semibold text-[var(--color-title)]">报价撮合资金规则</p>
+                <ul className="text-[11px] text-[var(--neutral-text-02)] mt-2 space-y-1 list-disc pl-4">
+                  <li>生成报价任务时不冻结余额；品牌侧隐藏总预算与单任务上限不对接单方展示</li>
+                  <li>接单方仅看到建议到手区间，按 P0 提交结构化报价</li>
+                  <li>确认选用某一报价后，才按成交支付价 G 冻结对应投放预算</li>
+                </ul>
+              </div>
+            )}
           <div className="geo-card overflow-hidden">
             <div
               className="p-4 border-b flex flex-wrap items-center justify-between gap-4"
@@ -1248,7 +1296,7 @@ export default function DeliveryPlanView({
                     <th>平台</th>
                     <th>文章数</th>
                     <th>单价</th>
-                    <th>平台预算</th>
+                    {paidQuoteMode ? <th>建议到手区间</th> : <th>平台预算</th>}
                     <th>文章要求</th>
                     {planEditable && <th className="w-12" />}
                   </tr>
@@ -1296,7 +1344,15 @@ export default function DeliveryPlanView({
                             formatMoney(unitPrice)
                           )}
                         </td>
-                        <td className="font-medium whitespace-nowrap">{formatMoney(pkg.budget)}</td>
+                        <td className="font-medium whitespace-nowrap">
+                          {paidQuoteMode ? (
+                            <span className="text-xs text-[var(--color-accent)]">
+                              {formatSuggestedRangeFromPkg(pkg)}
+                            </span>
+                          ) : (
+                            formatMoney(pkg.budget)
+                          )}
+                        </td>
                         <td>
                           {editable ? (
                             <textarea
@@ -1383,6 +1439,7 @@ export default function DeliveryPlanView({
                 />
               </div>
             )}
+          </div>
           </div>
         );
       })()}

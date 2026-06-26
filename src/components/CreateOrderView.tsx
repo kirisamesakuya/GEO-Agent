@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ViewType } from '../types';
-import BrandSwitcher from './common/BrandSwitcher';
+import BrandIdentityRow from './common/BrandIdentityRow';
 import DeliveryPlanView from './DeliveryPlanView';
 import {
   type CreateOrderMode,
@@ -81,17 +81,7 @@ export default function CreateOrderView({
         style={{ borderColor: 'var(--neutral-divider-02)', background: 'var(--neutral-bg-03)' }}
       >
         <div className="mb-3">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <h2 className="text-sm font-bold text-[var(--color-title)]">
-              {websiteFlow ? '发布网页改装' : '付费信源发单'}
-            </h2>
-            <BrandSwitcher variant="scope" brandName={brandName} onBrandChange={onBrandChange} />
-          </div>
-          {!websiteFlow && (
-            <p className="text-[10px] text-[var(--neutral-text-03)] mb-2">
-              基于品牌资料 / GEO 报告 / 排名缺口生成投放计划 · 按媒体拆分篇数 · 确认报价后冻结
-            </p>
-          )}
+          <BrandIdentityRow brandName={brandName} onBrandChange={onBrandChange} />
         </div>
         {CUSTOM_PUBLISH_ENABLED && !websiteFlow && VISIBLE_CREATE_ORDER_MODES.length > 1 && (
           <div className="flex gap-1 flex-wrap">

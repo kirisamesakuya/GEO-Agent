@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BadgeCheck } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, ShieldAlert, Star, ExternalLink } from 'lucide-react';
 import type { ViewType } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import { parseTaskBrief, type PaidSourceTaskBrief } from '../../../lib/paid-source-brief';
@@ -9,22 +9,11 @@ import {
   paidSourceDispatchRowStatusLabel,
 } from '../../lib/paid-source-dispatch-filters';
 import { formatTaskOrderListTime } from '../../lib/task-order-flow';
-
-interface QuoteRow {
-  id: string;
-  providerId: string;
-  providerName: string;
-  publisherPayAmountYuan?: string;
-  publisherPayAmountCents: number;
-  mediaName?: string | null;
-  estimatedPublishAt?: string | null;
-  deliveryPromise?: string | null;
-  message?: string | null;
-  includeLink: boolean;
-  includeScreenshot: boolean;
-  includeIndexingProof: boolean;
-  status: string;
-}
+import {
+  mapQuoteCompareRows,
+  type QuoteCompareRowViewModel,
+  type RawPublisherQuoteRow,
+} from '../../lib/view-models/quote-compare';
 
 interface OrderData {
   id?: string;
@@ -36,8 +25,9 @@ interface OrderData {
   acceptance?: string;
   contentDirection?: string;
   taskBriefJson?: string;
-  quotes?: QuoteRow[];
-  pricingMode?: string;
+  quotes?: RawPublisherQuoteRow[];
+  suggestedMinCents?: number | null;
+  suggestedMaxCents?: number | null;
 }
 
 interface Props {
@@ -45,7 +35,6 @@ interface Props {
   onBrandChange?: (name: string) => void;
   orderHint?: string;
   onNavigate: (view: ViewType, hint?: string) => void;
-  /** 嵌入内容交付 · 发单管理时隐藏独立页头 */
   embedded?: boolean;
 }
 
@@ -60,16 +49,9 @@ function deliveryProofFromBrief(brief: PaidSourceTaskBrief | null, acceptance?: 
   return acceptance || '—';
 }
 
-function formatEarliestOnline(iso?: string | null) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return `前 ${d.toLocaleString('zh-CN', {
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })}`;
+function formatSuggestedRange(minCents?: number | null, maxCents?: number | null) {
+  if (minCents == null || maxCents == null) return null;
+  return `¥${(minCents / 100).toLocaleString()} – ¥${(maxCents / 100).toLocaleString()}（到手价参考）`;
 }
 
 export default function QuoteCompareView({
@@ -82,41 +64,51 @@ export default function QuoteCompareView({
   const orderId = parseTaskOrderIdFromHint(orderHint) ?? orderHint?.replace(/^order:/, '');
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [accepting, setAccepting] = useState(false);
 
   useEffect(() => {
     if (!orderId) return;
     setLoading(true);
+    setError(false);
     fetch(`/api/orders/${orderId}?brandName=${encodeURIComponent(brandName)}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error('load failed');
+        return r.json();
+      })
       .then((d) => {
         const o = d.order ?? null;
         setOrder(o);
-        const firstPending = (o?.quotes ?? []).find((q: QuoteRow) => q.status === 'pending');
+        const firstPending = (o?.quotes ?? []).find((q: RawPublisherQuoteRow) => q.status === 'pending');
         if (firstPending) setSelectedQuoteId(firstPending.id);
       })
-      .catch(() => setOrder(null))
+      .catch(() => {
+        setOrder(null);
+        setError(true);
+      })
       .finally(() => setLoading(false));
   }, [orderId, brandName]);
 
-  const brief = useMemo(
-    () => parseTaskBrief(order?.taskBriefJson),
-    [order?.taskBriefJson]
-  );
+  const brief = useMemo(() => parseTaskBrief(order?.taskBriefJson), [order?.taskBriefJson]);
 
-  const pendingQuotes = (order?.quotes ?? []).filter((q) => q.status === 'pending');
-  const selectedQuote = pendingQuotes.find((q) => q.id === selectedQuoteId) ?? null;
+  const quoteRows: QuoteCompareRowViewModel[] = useMemo(() => {
+    const pending = (order?.quotes ?? []).filter((q) => q.status === 'pending');
+    return mapQuoteCompareRows(pending);
+  }, [order?.quotes]);
 
-  const pendingCount = pendingQuotes.length;
+  const selectedQuote = quoteRows.find((q) => q.id === selectedQuoteId) ?? null;
   const canConfirm = ['quote_open', 'quote_review'].includes(order?.status ?? '');
 
   const handleConfirm = async () => {
     if (!orderId || !selectedQuote) return;
-    const g =
-      selectedQuote.publisherPayAmountYuan ??
-      (selectedQuote.publisherPayAmountCents / 100).toFixed(2);
-    if (!confirm(`确认选用「${selectedQuote.providerName}」的报价并冻结 ¥${g}？`)) return;
+    if (
+      !confirm(
+        `确认选用「${selectedQuote.providerName}」的方案并冻结 ¥${Number(selectedQuote.publisherPayAmountYuan).toLocaleString('zh-CN')}？`
+      )
+    ) {
+      return;
+    }
     setAccepting(true);
     try {
       const r = await fetch(`/api/orders/${orderId}/quotes/${selectedQuote.id}/accept`, {
@@ -135,9 +127,7 @@ export default function QuoteCompareView({
     }
   };
 
-  const backToList = () => {
-    onNavigate('content_delivery', 'order_manage');
-  };
+  const backToList = () => onNavigate('content_delivery', 'order_manage');
 
   if (loading) {
     return (
@@ -147,10 +137,12 @@ export default function QuoteCompareView({
     );
   }
 
-  if (!order) {
+  if (error || !order) {
     return (
       <div className={embedded ? 'px-6 py-8' : 'geo-page-content'}>
-        <p className="text-sm text-[var(--neutral-text-03)]">任务不存在或无权查看</p>
+        <p className="text-sm text-[var(--neutral-text-03)]">
+          {error ? '加载失败，请稍后重试' : '任务不存在或无权查看'}
+        </p>
         <button type="button" className="geo-link text-sm mt-2" onClick={backToList}>
           返回发单管理
         </button>
@@ -159,16 +151,12 @@ export default function QuoteCompareView({
   }
 
   const contentDirection =
-    brief?.contentDirection ??
-    order.contentDirection ??
-    brief?.taskType ??
-    order.deliverable ??
-    '—';
+    brief?.contentDirection ?? order.contentDirection ?? brief?.taskType ?? order.deliverable ?? '—';
   const publishRequirements =
     brief?.deliveryNote ??
-    ([order.deliverable, brief?.wordCountRange, brief?.publishDeadline].filter(Boolean).join(' · ') ||
-      '—');
+    ([order.deliverable, brief?.wordCountRange, brief?.publishDeadline].filter(Boolean).join(' · ') || '—');
   const deliveryProof = deliveryProofFromBrief(brief, order.acceptance);
+  const suggestedRange = formatSuggestedRange(order.suggestedMinCents, order.suggestedMaxCents);
 
   return (
     <div className={embedded ? 'flex flex-col min-h-0' : 'geo-page-content space-y-4'}>
@@ -186,9 +174,6 @@ export default function QuoteCompareView({
           <div>
             <h2 className="text-lg font-bold text-[var(--color-title)]">{order.title}</h2>
             <div className="flex flex-wrap items-center gap-2 mt-2">
-              <span className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium bg-[var(--neutral-bg-03)] text-[var(--neutral-text-02)]">
-                服务商
-              </span>
               {order.platform && (
                 <span className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium bg-sky-50 text-sky-700">
                   {order.platform}
@@ -201,25 +186,21 @@ export default function QuoteCompareView({
               </span>
             </div>
             <p className="text-xs text-[var(--neutral-text-03)] mt-2">
-              {pendingCount > 0 ? `已收 ${pendingCount} 份报价` : '暂无报价'}
+              {quoteRows.length > 0 ? `已收 ${quoteRows.length} 份待确认报价` : '暂无报价，等待接单方提交'}
               {order.createdAt ? ` · 发布于 ${formatTaskOrderListTime(order.createdAt)}` : ''}
             </p>
+            {suggestedRange && (
+              <p className="text-xs text-sky-700 mt-1 bg-sky-50 inline-block px-2 py-1 rounded-lg">
+                平台建议区间 {suggestedRange} · 仅作参考，不展示给接单方您的预算上限
+              </p>
+            )}
           </div>
-          {!embedded && (
-            <button
-              type="button"
-              className="geo-btn-secondary geo-btn-sm"
-              onClick={() => onNavigate('quote_detail', orderHint)}
-            >
-              交付信息
-            </button>
-          )}
         </div>
       </div>
 
-      <div className={embedded ? 'px-6 space-y-4 pb-28' : 'space-y-4'}>
+      <div className={embedded ? 'px-6 space-y-4 pb-36' : 'space-y-4'}>
         <section className="geo-card p-5 space-y-4">
-          <h3 className="text-sm font-semibold text-[var(--color-title)]">任务要求与报价</h3>
+          <h3 className="text-sm font-semibold text-[var(--color-title)]">任务要求</h3>
           <div className="grid gap-4 sm:grid-cols-3 text-sm">
             <div>
               <p className="text-xs text-[var(--neutral-text-03)] mb-1">内容方向</p>
@@ -230,44 +211,72 @@ export default function QuoteCompareView({
               <p className="text-[var(--neutral-text-02)] leading-relaxed">{publishRequirements}</p>
             </div>
             <div>
-              <p className="text-xs text-[var(--neutral-text-03)] mb-1">交付证明</p>
+              <p className="text-xs text-[var(--neutral-text-03)] mb-1">验收 / 交付证明</p>
               <p className="text-[var(--neutral-text-02)] leading-relaxed">{deliveryProof}</p>
             </div>
           </div>
         </section>
 
+        {selectedQuote && (
+          <section className="geo-card p-4 border border-emerald-200 bg-emerald-50/40">
+            <h3 className="text-sm font-semibold text-[var(--color-title)] mb-2">当前选用方案</h3>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+              <div>
+                <p className="text-[var(--neutral-text-03)]">接单方</p>
+                <p className="font-medium mt-0.5">{selectedQuote.providerName}</p>
+              </div>
+              <div>
+                <p className="text-[var(--neutral-text-03)]">成交支付价 G</p>
+                <p className="font-semibold text-[var(--color-accent)] mt-0.5">
+                  ¥ {Number(selectedQuote.publisherPayAmountYuan).toLocaleString('zh-CN')}
+                </p>
+              </div>
+              <div>
+                <p className="text-[var(--neutral-text-03)]">最早上线</p>
+                <p className="mt-0.5">{selectedQuote.earliestOnlineLabel}</p>
+              </div>
+              <div>
+                <p className="text-[var(--neutral-text-03)]">交付承诺</p>
+                <p className="mt-0.5">{selectedQuote.deliveryPromiseLabel}</p>
+              </div>
+            </div>
+            <p className="text-[10px] text-[var(--neutral-text-03)] mt-2">
+              确认后将冻结对应金额并开始履约；不向发布方展示接单方到手价 P0 与平台服务费 F。
+            </p>
+          </section>
+        )}
+
         <div className="geo-card overflow-x-auto">
-          <table className="w-full text-sm min-w-[720px]">
+          <table className="w-full text-sm min-w-[960px]">
             <thead>
               <tr className="border-b text-left text-[var(--neutral-text-03)]">
                 <th className="p-3 w-10" />
                 <th className="p-3 font-medium">接单方</th>
+                <th className="p-3 font-medium">认证</th>
                 <th className="p-3 font-medium">可发媒体</th>
-                <th className="p-3 font-medium">报价金额</th>
+                <th className="p-3 font-medium">成交价 G</th>
                 <th className="p-3 font-medium">最早上线</th>
-                <th className="p-3 font-medium">说明</th>
-                <th className="p-3 font-medium">操作</th>
+                <th className="p-3 font-medium">交付承诺</th>
+                <th className="p-3 font-medium">履约表现</th>
               </tr>
             </thead>
             <tbody>
-              {pendingQuotes.length === 0 ? (
+              {quoteRows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-[var(--neutral-text-03)]">
-                    暂无待确认报价，请等待接单方提交
+                  <td colSpan={8} className="p-10 text-center text-[var(--neutral-text-03)]">
+                    暂无待确认报价，请等待接单方在任务大厅提交方案
                   </td>
                 </tr>
               ) : (
-                pendingQuotes.map((q) => {
-                  const g =
-                    q.publisherPayAmountYuan ??
-                    (q.publisherPayAmountCents / 100).toFixed(2);
+                quoteRows.map((q) => {
                   const selected = selectedQuoteId === q.id;
                   return (
                     <tr
                       key={q.id}
-                      className={`border-b last:border-0 transition-colors ${
-                        selected ? 'bg-emerald-50/60 ring-1 ring-inset ring-emerald-200' : ''
+                      className={`border-b last:border-0 transition-colors cursor-pointer ${
+                        selected ? 'bg-emerald-50/60 ring-1 ring-inset ring-emerald-200' : 'hover:bg-[var(--neutral-bg-02)]'
                       }`}
+                      onClick={() => setSelectedQuoteId(q.id)}
                     >
                       <td className="p-3">
                         <input
@@ -278,35 +287,64 @@ export default function QuoteCompareView({
                           className="accent-[var(--color-primary)]"
                         />
                       </td>
+                      <td className="p-3 font-medium">{q.providerName}</td>
                       <td className="p-3">
-                        <div className="flex items-center gap-1.5 font-medium">
-                          {q.providerName}
-                          <BadgeCheck className="w-3.5 h-3.5 text-sky-500 shrink-0" aria-label="企业认证" />
-                        </div>
-                      </td>
-                      <td className="p-3 text-xs text-[var(--neutral-text-02)] max-w-[200px]">
-                        {q.mediaName ?? '—'}
-                      </td>
-                      <td className="p-3 font-semibold text-[var(--color-accent)] whitespace-nowrap">
-                        ¥ {Number(g).toLocaleString('zh-CN')}
-                        <span className="text-[10px] font-normal text-[var(--neutral-text-03)] ml-1">
-                          含税
+                        <span
+                          className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full ${
+                            q.verified ? 'bg-sky-50 text-sky-700' : 'bg-amber-50 text-amber-800'
+                          }`}
+                        >
+                          {q.verified ? (
+                            <BadgeCheck className="w-3 h-3 shrink-0" />
+                          ) : (
+                            <ShieldAlert className="w-3 h-3 shrink-0" />
+                          )}
+                          {q.verificationLabel}
                         </span>
                       </td>
-                      <td className="p-3 text-xs whitespace-nowrap">
-                        {formatEarliestOnline(q.estimatedPublishAt)}
+                      <td className="p-3 text-xs max-w-[160px]">
+                        <div className="font-medium truncate" title={q.mediaLabel}>{q.mediaLabel}</div>
+                        {q.mediaAccountLink && (
+                          <a
+                            href={q.mediaAccountLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-0.5 text-[10px] text-sky-600 hover:text-sky-700 mt-1"
+                          >
+                            查看主页
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        )}
                       </td>
-                      <td className="p-3 text-xs text-[var(--neutral-text-02)] max-w-[220px]">
-                        {q.message ?? q.deliveryPromise ?? '—'}
+                      <td className="p-3 font-semibold text-[var(--color-accent)] whitespace-nowrap">
+                        ¥ {Number(q.publisherPayAmountYuan).toLocaleString('zh-CN')}
                       </td>
-                      <td className="p-3">
-                        <button
-                          type="button"
-                          className={`text-xs font-medium ${selected ? 'text-emerald-700' : 'text-[var(--color-accent)]'}`}
-                          onClick={() => setSelectedQuoteId(q.id)}
-                        >
-                          {selected ? '已选用' : '选用此报价'}
-                        </button>
+                      <td className="p-3 text-xs whitespace-nowrap">{q.earliestOnlineLabel}</td>
+                      <td className="p-3 text-xs max-w-[180px]">
+                        <div className="flex flex-wrap gap-1 mb-1">
+                          {q.deliveryProofTags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--neutral-bg-03)]"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                        {q.message && (
+                          <p className="text-[var(--neutral-text-03)] truncate" title={q.message}>
+                            {q.message}
+                          </p>
+                        )}
+                      </td>
+                      <td className="p-3 text-xs">
+                        <div className="flex items-center gap-1 text-[var(--neutral-text-02)]">
+                          <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                          {q.fulfillmentScore}
+                        </div>
+                        <p className="text-[10px] text-[var(--neutral-text-03)] mt-0.5">
+                          {q.fulfillmentSummary}
+                        </p>
                       </td>
                     </tr>
                   );
@@ -317,7 +355,7 @@ export default function QuoteCompareView({
         </div>
       </div>
 
-      {canConfirm && pendingQuotes.length > 0 && (
+      {canConfirm && quoteRows.length > 0 && (
         <div
           className={`${
             embedded ? 'fixed bottom-0 left-0 right-0 z-20' : 'sticky bottom-0'
@@ -327,32 +365,15 @@ export default function QuoteCompareView({
           <p className="text-sm text-[var(--neutral-text-02)]">
             {selectedQuote ? (
               <>
-                已选报价：
-                <span className="font-medium text-[var(--color-title)]">
-                  {selectedQuote.providerName}
+                将冻结{' '}
+                <span className="font-semibold text-[var(--color-accent)]">
+                  ¥ {Number(selectedQuote.publisherPayAmountYuan).toLocaleString('zh-CN')}
                 </span>
                 {' · '}
-                <span className="font-semibold text-[var(--color-accent)]">
-                  ¥{' '}
-                  {(
-                    selectedQuote.publisherPayAmountYuan ??
-                    (selectedQuote.publisherPayAmountCents / 100).toFixed(2)
-                  ).toLocaleString('zh-CN')}
-                </span>
-                {selectedQuote.estimatedPublishAt && (
-                  <>
-                    {' · '}
-                    最早{' '}
-                    {new Date(selectedQuote.estimatedPublishAt).toLocaleDateString('zh-CN', {
-                      month: 'numeric',
-                      day: 'numeric',
-                    })}{' '}
-                    上线
-                  </>
-                )}
+                {selectedQuote.providerName}
               </>
             ) : (
-              '请选择一份报价'
+              '请选择一份报价方案'
             )}
           </p>
           <button
@@ -361,7 +382,7 @@ export default function QuoteCompareView({
             disabled={!selectedQuote || accepting}
             onClick={() => void handleConfirm()}
           >
-            {accepting ? '处理中…' : '确认发布'}
+            {accepting ? '处理中…' : '确认选用并冻结预算'}
           </button>
         </div>
       )}

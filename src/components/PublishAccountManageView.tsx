@@ -15,15 +15,14 @@ import OverlayDrawer from './common/OverlayDrawer';
 import PlatformLogoUpload from './common/PlatformLogoUpload';
 import { fetchPlatformAuthConfig, getBundledPlatformAuthConfig } from '../lib/platform-auth-client';
 import {
-  PUBLISH_ACCOUNT_SECTION_TITLE,
   bindingToLoginStatus,
   isPublishReady,
   providerLabel,
   publishAccountActionLabels,
 } from '../lib/publish-account-login-status';
+import { openPlatformLogin } from '../lib/open-platform-login';
 import type { AccountBinding, PlatformAuthConfig, ViewType } from '../types';
-import BrandSwitcher from './common/BrandSwitcher';
-import HermesStatusStrip from './hermes/HermesStatusStrip';
+import BrandIdentityRow from './common/BrandIdentityRow';
 import PlatformBadge from './common/PlatformBadge';
 
 interface AssignmentRow {
@@ -284,7 +283,9 @@ export default function PublishAccountManageView({ brandName, onBrandChange, onN
               className="geo-btn-secondary geo-btn-xs"
               onClick={() => {
                 const url = auth.platformLoginUrl(binding.platform, session);
-                if (url) window.open(url, '_blank', 'noopener,noreferrer');
+                if (url && !openPlatformLogin(url, binding.platform)) {
+                  toast('浏览器拦截了新标签页，请允许弹窗', 'error');
+                }
               }}
               title="打开平台登录页"
             >
@@ -323,12 +324,7 @@ export default function PublishAccountManageView({ brandName, onBrandChange, onN
         className="shrink-0 geo-page-content-section py-4 border-b"
         style={{ borderColor: 'var(--neutral-divider-02)', background: 'var(--color-bg-card)' }}
       >
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <h2 className="text-base font-bold" style={{ color: 'var(--neutral-text-01)' }}>
-            {PUBLISH_ACCOUNT_SECTION_TITLE}
-          </h2>
-          <BrandSwitcher variant="scope" brandName={brandName} onBrandChange={onBrandChange} />
-        </div>
+        <BrandIdentityRow brandName={brandName} onBrandChange={onBrandChange} />
       </div>
 
       <div className="flex-1 min-h-0 geo-page-content-section py-[var(--geo-content-block)] space-y-4">
@@ -336,7 +332,6 @@ export default function PublishAccountManageView({ brandName, onBrandChange, onN
           <p className="text-sm" style={{ color: 'var(--neutral-text-02)' }}>请在上方选择具体品牌，再配置本机发布账号。</p>
         ) : (
           <>
-            <HermesStatusStrip onNavigate={onNavigate} />
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 { label: '可发布', value: overview.loggedIn, sub: `共 ${overview.total} 个平台` },

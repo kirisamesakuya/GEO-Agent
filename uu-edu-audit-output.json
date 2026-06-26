@@ -1,0 +1,192 @@
+{
+  "audit": {
+    "reportType": "audit",
+    "brandName": "UU教育",
+    "websiteUrl": "https://youxuejiaoyu.net/",
+    "totalScore": 28,
+    "mentionRate": null,
+    "rank": null,
+    "gapsFound": 8,
+    "scores": {
+      "aiCitability": 5,
+      "brandAuthority": 4,
+      "contentEeat": 6,
+      "technicalGeo": 45,
+      "schema": 0,
+      "platformOptimization": 4
+    },
+    "metadata": {
+      "company": "北京鸿途优学教育科技有限公司",
+      "icp": "京ICP备2024060787号-1",
+      "businessScope": "法律职业资格 + 注册会计师(CPA) 培训",
+      "established": 2015,
+      "auditDate": "2026-06-15",
+      "executedBy": "Hermes Agent (geo-audit skill)"
+    }
+  },
+  "data": {
+    "brandMentionSummary": "UU教育 是真实存在的小型法考培训品牌（2015 年成立，京 ICP 备案 2024），主营法考+CPA 双业务。但在 AI 引擎眼中几乎完全隐形：robots.txt 404、llms.txt 缺失、零 Schema.org 标记、零 Open Graph 标签、零 FAQ 结构化数据。所有结构化信号需在 1-2 周内补齐。",
+    "competitorAnalysis": "在法考赛道远落后于厚大/瑞达/众合/觉晓四大头部（被 AI 平台提及度近 0），CPA 赛道则被东奥/中华会计网校/高顿完全压制。UGC 真实声量近似为零（知乎/小红书/B 站/抖音均无显著内容），过度依赖搜狐号软文矩阵形成'注水声量'，对 AI 引擎无效。",
+    "contentGap": "8 大关键缺口：1) robots.txt 缺失 2) llms.txt 缺失 3) 零 Schema.org JSON-LD（含 Organization/EducationalOrganization/Course/FAQPage）4) 零 Open Graph 5) 师资实名/学历完全空缺 6) 无真实学员案例与可验证通过率 7) 缺办学许可证公示 8) 微信系/字节系/百度系生态几乎为零。",
+    "optimizationSuggestions": "P0（1 周）：部署 robots.txt + llms.txt + 核心 JSON-LD 标记 + 百度百科词条。P1（2-4 周）：Course/FAQPage Schema 完善 + OG/Twitter + 微信/抖音/头条矩阵账号开通。P2（1-2 月）：师资实名页 + 学员案例库 + 退费政策透明化。P3（季度级）：第三方权威媒体背书 + 长期 UGC 生态建设。完成 P0+P1 预计可将 GEO 评分从 28 提升至 60-65。"
+  },
+  "metrics": {
+    "aiCitability": 5,
+    "brandAuthority": 4,
+    "contentEeat": 6,
+    "technicalGeo": 45,
+    "schema": 0,
+    "platformOptimization": 4,
+    "weightedTotal": 28
+  },
+  "findings": [
+    {
+      "id": "f1",
+      "level": "critical",
+      "title": "robots.txt 缺失（404）",
+      "impact": "SEO+GEO 双重事故，AI crawler 无法合规抓取",
+      "suggestion": "立即部署并显式声明 AI bot 策略（GPTBot/ClaudeBot/PerplexityBot/Bytespider）"
+    },
+    {
+      "id": "f2",
+      "level": "critical",
+      "title": "Schema.org JSON-LD 完全缺失",
+      "impact": "AI 无法结构化理解品牌实体和课程",
+      "suggestion": "首页添加 Organization + EducationalOrganization + FAQPage + WebSite Schema"
+    },
+    {
+      "id": "f3",
+      "level": "critical",
+      "title": "Open Graph / Twitter Card 缺失",
+      "impact": "社交/AI 引用均无富媒体预览",
+      "suggestion": "全站补齐 og:title/description/image + twitter:card + canonical"
+    },
+    {
+      "id": "f4",
+      "level": "critical",
+      "title": "师资实名/学历完全空缺",
+      "impact": "AI 无法核实'全博师资'真实性，权威性严重存疑",
+      "suggestion": "为每位教师建立独立页面 + Person Schema + 学历/执业证号"
+    },
+    {
+      "id": "f5",
+      "level": "high",
+      "title": "llms.txt 缺失",
+      "impact": "AI 引擎缺少结构化站点地图",
+      "suggestion": "部署含产品/课程/公司/资质/荣誉的 llms.txt"
+    },
+    {
+      "id": "f6",
+      "level": "high",
+      "title": "无真实学员案例与可验证通过率",
+      "impact": "AI 引擎判定推荐可信度低",
+      "suggestion": "公布具名学员成绩截图 + 第三方调研背书的'96% 推荐率'原始数据"
+    },
+    {
+      "id": "f7",
+      "level": "high",
+      "title": "百度/抖音/微信三大百科词条缺失",
+      "impact": "文心一言/豆包/元宝三大平台信源断层",
+      "suggestion": "1 周内补齐 3 大百科词条 + 8-10 个权威参考资料"
+    },
+    {
+      "id": "f8",
+      "level": "high",
+      "title": "办学许可证公示缺失 + ICP 时间矛盾",
+      "impact": "引发'2015 创立 vs 2024 备案'品牌历史真实性怀疑",
+      "suggestion": "官网/搜狐同步公示办学许可 + 在关于我们页说明 2024 品牌升级与域名迁移"
+    }
+  ],
+  "actionPlan": [
+    {
+      "id": "a1",
+      "horizon": "7d",
+      "title": "部署 robots.txt + llms.txt",
+      "detail": "1 个工程师日，立即见效"
+    },
+    {
+      "id": "a2",
+      "horizon": "7d",
+      "title": "首页核心 JSON-LD 标记",
+      "detail": "Organization + EducationalOrganization + WebSite + FAQPage 共 4 个 schema"
+    },
+    {
+      "id": "a3",
+      "horizon": "7d",
+      "title": "补齐三大百科词条",
+      "detail": "百度百科 + 抖音百科 + 微信百科，各需 8-10 个权威参考资料"
+    },
+    {
+      "id": "a4",
+      "horizon": "30d",
+      "title": "Course / FAQPage Schema 扩展",
+      "detail": "在 /live.html、/class.html、/help.html 全量标记"
+    },
+    {
+      "id": "a5",
+      "horizon": "30d",
+      "title": "全站 OG/Twitter 完整化",
+      "detail": "覆盖首页+核心产品页"
+    },
+    {
+      "id": "a6",
+      "horizon": "30d",
+      "title": "ICP 时间线叙事对齐",
+      "detail": "在关于页说明'2015 公司成立 / 2024 品牌升级与域名迁移'，消除认知冲突"
+    },
+    {
+      "id": "a7",
+      "horizon": "90d",
+      "title": "师资实名页 + Person Schema",
+      "detail": "每位法考/CPA 教师独立 URL + 学历/执业证号/课程对应清单"
+    },
+    {
+      "id": "a8",
+      "horizon": "90d",
+      "title": "退费政策独立页 + 合同模板",
+      "detail": "/refund.html + 公开合同模板 + 历史投诉处理率"
+    }
+  ],
+  "artifacts": [
+    {
+      "type": "markdown",
+      "name": "UU教育-GEO审计报告.md",
+      "preview": "完整 6 维度评估 + P0-P3 清单 + 90 天行动路线"
+    },
+    {
+      "type": "json",
+      "name": "uu-edu-audit-output.json",
+      "preview": "结构化审计输出（与 GEO-Agent GeoReport 模型字段对齐）"
+    },
+    {
+      "type": "schema",
+      "name": "robots.txt",
+      "preview": "AI bot 友好策略 + Sitemap 引用"
+    },
+    {
+      "type": "schema",
+      "name": "llms.txt",
+      "preview": "公司/产品/课程/资质/荣誉结构化清单"
+    },
+    {
+      "type": "schema",
+      "name": "organization-schema.jsonld",
+      "preview": "Organization + EducationalOrganization JSON-LD 草稿"
+    },
+    {
+      "type": "schema",
+      "name": "faqpage-schema.jsonld",
+      "preview": "FAQPage JSON-LD 草稿"
+    }
+  ],
+  "platformScores": {
+    "DeepSeek": 5.5,
+    "豆包": 3.5,
+    "Kimi": 4.0,
+    "腾讯元宝": 4.5,
+    "文心一言": 2.5,
+    "通义千问": 5.0,
+    "ChatGPT": 2.0,
+    "Perplexity": 2.5
+  }
+}

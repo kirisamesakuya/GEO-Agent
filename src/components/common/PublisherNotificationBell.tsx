@@ -8,6 +8,7 @@ import {
   resolveNotificationNavigation,
   type PublisherNotificationItem,
 } from '../../lib/publisher-notifications';
+import { notifyPublisherNotificationsUpdated } from '../../lib/publisher-notification-events';
 import { fetchPendingConfirmTasks } from '../../lib/agent-result-confirmation';
 
 interface Props {
@@ -21,12 +22,18 @@ export default function PublisherNotificationBell({ brandName, onNavigate }: Pro
   const [unreadCount, setUnreadCount] = useState(0);
   const [pendingConfirmCount, setPendingConfirmCount] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  const lastUnreadRef = useRef(0);
+  const lastPendingConfirmRef = useRef(0);
+  const hasLoadedRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!brandName || brandName === '__all__') {
       setItems([]);
       setUnreadCount(0);
       setPendingConfirmCount(0);
+      lastUnreadRef.current = 0;
+      lastPendingConfirmRef.current = 0;
+      hasLoadedRef.current = false;
       return;
     }
     try {
@@ -37,6 +44,17 @@ export default function PublisherNotificationBell({ brandName, onNavigate }: Pro
       setItems(data.notifications);
       setUnreadCount(data.unreadCount);
       setPendingConfirmCount(pendingTasks.length);
+
+      const hasNewActivity =
+        hasLoadedRef.current &&
+        (data.unreadCount > lastUnreadRef.current ||
+          pendingTasks.length > lastPendingConfirmRef.current);
+      if (hasNewActivity) {
+        notifyPublisherNotificationsUpdated();
+      }
+      lastUnreadRef.current = data.unreadCount;
+      lastPendingConfirmRef.current = pendingTasks.length;
+      hasLoadedRef.current = true;
     } catch {
       setItems([]);
       setUnreadCount(0);
@@ -45,9 +63,20 @@ export default function PublisherNotificationBell({ brandName, onNavigate }: Pro
   }, [brandName]);
 
   useEffect(() => {
+    hasLoadedRef.current = false;
+    lastUnreadRef.current = 0;
+    lastPendingConfirmRef.current = 0;
     void load();
-    const timer = setInterval(() => void load(), 30000);
-    return () => clearInterval(timer);
+  }, [load]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void load();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, [load]);
 
   useEffect(() => {
@@ -95,7 +124,10 @@ export default function PublisherNotificationBell({ brandName, onNavigate }: Pro
         type="button"
         disabled={disabled}
         title={bellTitle}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          void load();
+          setOpen((v) => !v);
+        }}
         className="relative p-2 rounded-full geo-nav-item disabled:opacity-50"
         style={{ color: 'var(--neutral-text-03)' }}
       >

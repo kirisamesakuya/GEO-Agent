@@ -93,7 +93,7 @@ export default function ProviderMessages({ providerId, embedded }: Props) {
             <Bell className="w-5 h-5 text-brand" /> 消息通知
           </h1>
           {!embedded && (
-            <p className="text-xs text-provider-muted mt-1">任务大厅、已接订单与平台系统通知（需您主动领取任务）</p>
+            <p className="text-xs text-provider-muted mt-1">任务大厅、报价结果、订单履约与平台系统通知</p>
           )}
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -125,7 +125,7 @@ export default function ProviderMessages({ providerId, embedded }: Props) {
 
       {isDemo && (
         <div className="bg-amber-50 border border-amber-100 text-amber-800 text-xs py-2.5 px-4 rounded-xl">
-          当前为演示通知，不含「品牌邀请接单」类消息。真实通知来自任务上架、领取结果、返修与结算等。
+          当前为演示通知，不含「品牌邀请接单」类消息。真实通知来自任务上架、报价结果、返修与结算等。
         </div>
       )}
 

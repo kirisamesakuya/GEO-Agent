@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ViewType } from '../types';
-import BrandSwitcher from './common/BrandSwitcher';
+import BrandIdentityRow from './common/BrandIdentityRow';
 import GeoReportHistoryView from './GeoReportHistoryView';
 import GeoQuickStartView from './geo/GeoQuickStartView';
 import { HermesSubmitGuardProvider } from './hermes/HermesSubmitGuard';
@@ -69,15 +69,11 @@ export default function GeoAnalysisView({ brandName, onBrandChange, onNavigate }
           style={{ borderColor: 'var(--neutral-divider-02)' }}
         >
           <div className="mb-3">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <h2 className="text-sm font-bold text-[var(--color-title)]">GEO 分析</h2>
-              <BrandSwitcher
-                variant="scope"
-                brandName={brandName}
-                onBrandChange={onBrandChange}
-                allowAll
-              />
-            </div>
+            <BrandIdentityRow
+              brandName={brandName}
+              onBrandChange={onBrandChange}
+              allowAll
+            />
           </div>
           <GeoAnalysisTabs tab={pageTab} onTabChange={(t) => switchGeoTab(t)} />
         </div>

@@ -12,9 +12,14 @@ import {
 
 export function registerBudgetRoutes(app: Express) {
   app.get('/api/budget/:brandName', async (req, res) => {
-    const brandName = await requireBrandNameParam(req, res, req.params.brandName);
-    if (!brandName) return;
-    res.json(await getBudgetAccount(brandName));
+    try {
+      const brandName = await requireBrandNameParam(req, res, req.params.brandName);
+      if (!brandName) return;
+      res.json(await getBudgetAccount(brandName));
+    } catch (err) {
+      console.error('[budget/account]', err);
+      res.status(500).json({ error: '投放账户加载失败' });
+    }
   });
 
   app.get('/api/budget/:brandName/ledger', async (req, res) => {

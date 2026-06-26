@@ -1,0 +1,33 @@
+{
+  "brand": "UU教育",
+  "topic": "UU教育 怎么样 真实学员反馈",
+  "published": [],
+  "failed": [
+    {
+      "status": "failed",
+      "error": "login_required",
+      "needsRelogin": true,
+      "platform": "wechat_mp",
+      "title": "UU教育 怎么样 | 2026 真实学员反馈"
+    },
+    {
+      "status": "failed",
+      "error": "login_required",
+      "needsRelogin": true,
+      "platform": "zhihu",
+      "title": "UU教育 怎么样 | 2026 真实学员反馈"
+    },
+    {
+      "status": "failed",
+      "error": "login_required",
+      "needsRelogin": true,
+      "platform": "baijia",
+      "title": "UU教育 怎么样 | 2026 真实学员反馈"
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "success": 0,
+    "failed": 3
+  }
+}

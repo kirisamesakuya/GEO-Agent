@@ -18,7 +18,7 @@ import { fetchAvailablePublishAccounts, toAccountBindingShape } from '../lib/pub
 import { isPublishReady } from '../lib/publish-account-login-status';
 import TaskStatusPill from './common/TaskStatusPill';
 import { resolveBatchPillDisplay } from '../lib/agent-task-display';
-import BrandSwitcher from './common/BrandSwitcher';
+import BrandIdentityRow from './common/BrandIdentityRow';
 import HermesWorkingOverlay from './common/HermesWorkingOverlay';
 import HermesPublishConfirmDialog, {
   type HermesPublishConfirmPayload,
@@ -1294,19 +1294,16 @@ export default function ContentLibraryView({
         }}
       >
         <div className="p-3 border-b shrink-0 space-y-2" style={{ borderColor: 'var(--neutral-divider-02)' }}>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h2 className="text-sm font-semibold" style={{ color: 'var(--neutral-text-01)' }}>
-              {embedded ? (projectTitle ?? '文章结果') : '文章结果'}
-            </h2>
-            {!embedded && (
-              <BrandSwitcher
-                variant="scope"
-                brandName={brandName}
-                onBrandChange={onBrandChange}
-                allowAll
-              />
-            )}
-          </div>
+          <h2 className="text-sm font-semibold" style={{ color: 'var(--neutral-text-01)' }}>
+            {embedded ? (projectTitle ?? '文章结果') : '文章结果'}
+          </h2>
+          {!embedded && (
+            <BrandIdentityRow
+              brandName={brandName}
+              onBrandChange={onBrandChange}
+              allowAll
+            />
+          )}
           {!embedded && onNavigate && brandName !== '__all__' && (
             <button
               type="button"

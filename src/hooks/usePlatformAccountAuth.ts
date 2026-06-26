@@ -1,13 +1,9 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { AccountBinding, AgentTask, PlatformAuthConfig, PendingBindSession } from '../types';
 import { useToast } from '../context/ToastContext';
 import { useAgentTaskPolling } from './useAgentTaskPolling';
 import { fetchPlatformAuthConfig } from '../lib/platform-auth-client';
-
-function openPlatformLogin(url: string): boolean {
-  const opened = window.open(url, '_blank', 'noopener,noreferrer');
-  return opened != null;
-}
+import { openPlatformLogin } from '../lib/open-platform-login';
 
 export function platformLoginUrl(
   platform: string,
@@ -26,6 +22,7 @@ export function usePlatformAccountAuth(brandName: string, onAccountsUpdated?: ()
   const [hermesOk, setHermesOk] = useState<boolean | null>(null);
   const [verifyTaskId, setVerifyTaskId] = useState<string | null>(null);
   const [verifyAccountId, setVerifyAccountId] = useState<string | null>(null);
+  const bindStartInFlight = useRef(new Set<string>());
 
   const scopeBrand = brandName && brandName !== '__all__' ? brandName : '';
 
@@ -98,11 +95,24 @@ export function usePlatformAccountAuth(brandName: string, onAccountsUpdated?: ()
       toast('请先在顶部选择具体品牌', 'error');
       return;
     }
+    if (bindStartInFlight.current.has(acc.id)) return;
+
     const cfg = configByPlatform[acc.platform];
     const loginUrl = cfg?.loginUrl?.trim();
+    const existingSession = pendingBind[acc.id];
+    const urlToOpen = existingSession?.loginUrl ?? loginUrl;
+
+    if (existingSession && urlToOpen) {
+      if (!openPlatformLogin(urlToOpen, acc.platform)) {
+        toast('浏览器拦截了新标签页，请允许弹窗', 'error');
+      }
+      return;
+    }
+
+    bindStartInFlight.current.add(acc.id);
     let opened = false;
     if (loginUrl) {
-      opened = openPlatformLogin(loginUrl);
+      opened = openPlatformLogin(loginUrl, acc.platform);
       if (!opened) toast('浏览器拦截了新标签页，请允许弹窗', 'error');
     }
     setLoadingId(acc.id);
@@ -119,7 +129,11 @@ export function usePlatformAccountAuth(brandName: string, onAccountsUpdated?: ()
         }
         if (data.accounts) setAccounts(data.accounts);
         const resolvedUrl = (data.loginUrl as string) || loginUrl;
-        if (!opened && resolvedUrl) openPlatformLogin(resolvedUrl);
+        if (!opened && resolvedUrl) {
+          if (!openPlatformLogin(resolvedUrl, acc.platform)) {
+            toast('浏览器拦截了新标签页，请允许弹窗', 'error');
+          }
+        }
         setPendingBind((prev) => ({
           ...prev,
           [acc.id]: {
@@ -133,12 +147,14 @@ export function usePlatformAccountAuth(brandName: string, onAccountsUpdated?: ()
           cfg?.loginHint ??
             (loginUrl
               ? `已打开 ${acc.platform} 登录页`
-              : `请在浏览器打开 ${acc.platform} 后台完成登录，然后点击确认`)
-          ,
+              : `请在浏览器打开 ${acc.platform} 后台完成登录，然后点击确认`),
           'info'
         );
       })
-      .finally(() => setLoadingId(null));
+      .finally(() => {
+        bindStartInFlight.current.delete(acc.id);
+        setLoadingId(null);
+      });
   };
 
   const handleBindConfirm = (acc: AccountBinding) => {

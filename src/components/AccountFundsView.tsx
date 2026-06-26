@@ -80,12 +80,33 @@ export default function AccountFundsView({ brandName, embedded }: Props) {
         fetch(`/api/budget/${encodeURIComponent(brandName)}/ledger`),
         fetch(`/api/budget/${encodeURIComponent(brandName)}/recharge-orders`),
       ]);
-      const [credits, acc, led, orders] = await Promise.all([
-        creditsRes.json(),
-        accRes.json(),
-        ledRes.json(),
-        ordersRes.json(),
-      ]);
+
+      let credits: Record<string, unknown> = {};
+      let acc: Record<string, unknown> = {};
+      let led: { ledger?: unknown[] } = {};
+      let orders: { orders?: unknown[] } = {};
+
+      try {
+        credits = await creditsRes.json();
+      } catch {
+        if (!creditsRes.ok) throw new Error('词元账户加载失败');
+      }
+      try {
+        acc = await accRes.json();
+      } catch {
+        if (!accRes.ok) throw new Error('投放账户加载失败');
+      }
+      try {
+        led = await ledRes.json();
+      } catch {
+        /* ledger 可选 */
+      }
+      try {
+        orders = await ordersRes.json();
+      } catch {
+        /* orders 可选 */
+      }
+
       if (!creditsRes.ok) {
         toast(typeof credits.error === 'string' ? credits.error : '词元账户加载失败', 'error');
       } else {
@@ -96,8 +117,8 @@ export default function AccountFundsView({ brandName, embedded }: Props) {
       } else {
         setDelivery(normalizeDelivery(acc));
       }
-      setLedger(Array.isArray(led.ledger) ? led.ledger : []);
-      setRechargeOrders(Array.isArray(orders.orders) ? orders.orders : []);
+      setLedger(Array.isArray(led.ledger) ? (led.ledger as typeof ledger) : []);
+      setRechargeOrders(Array.isArray(orders.orders) ? (orders.orders as typeof rechargeOrders) : []);
     } catch {
       toast('账户数据加载失败', 'error');
     }

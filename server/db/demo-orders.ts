@@ -415,6 +415,18 @@ async function resolveProvider(name: string) {
 }
 
 export async function ensureDemoTaskOrders(brandName: string) {
+  await prisma.taskOrder.updateMany({
+    where: {
+      brandName,
+      title: { startsWith: DEMO_PREFIX },
+      status: 'published',
+    },
+    data: {
+      status: 'quote_open',
+      pricingMode: 'provider_quote',
+    },
+  });
+
   const existing = await prisma.taskOrder.findMany({
     where: { brandName, title: { startsWith: DEMO_PREFIX } },
     select: { title: true },
@@ -433,9 +445,11 @@ export async function ensureDemoTaskOrders(brandName: string) {
     }
 
     const publishedAt =
-      spec.status === 'published' && spec.publishedMinutesAgo != null
+      spec.status === 'quote_open' && spec.publishedMinutesAgo != null
         ? new Date(Date.now() - spec.publishedMinutesAgo * 60_000)
         : undefined;
+
+    const hallStatus = spec.status === 'published' ? 'quote_open' : spec.status;
 
     await prisma.taskOrder.create({
       data: {
@@ -447,8 +461,8 @@ export async function ensureDemoTaskOrders(brandName: string) {
         deliverable: spec.deliverable,
         acceptance: spec.acceptance,
         description: spec.description,
-        pricingMode: 'fixed',
-        status: spec.status,
+        pricingMode: 'provider_quote',
+        status: hallStatus,
         providerId: providerId ?? null,
         providerName: providerName ?? null,
         ...(publishedAt ? { createdAt: publishedAt, updatedAt: publishedAt } : {}),

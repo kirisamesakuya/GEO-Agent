@@ -33,6 +33,7 @@ function maskQuoteForPublisher(quote: {
   includeScreenshot: boolean;
   includeIndexingProof: boolean;
   message: string | null;
+  mediaAccountLink: string | null;
   status: string;
   createdAt: Date;
 }) {
@@ -45,6 +46,7 @@ function maskQuoteForPublisher(quote: {
     mediaName: quote.mediaName,
     mediaType: quote.mediaType,
     publishPlatform: quote.publishPlatform,
+    mediaAccountLink: quote.mediaAccountLink,
     estimatedPublishAt: quote.estimatedPublishAt?.toISOString() ?? null,
     deliveryPromise: quote.deliveryPromise,
     includeLink: quote.includeLink,
@@ -69,6 +71,7 @@ export async function submitTaskOrderQuote(
     mediaName?: string;
     mediaType?: string;
     publishPlatform?: string;
+    mediaAccountLink?: string;
     estimatedPublishAt?: string;
     quoteExpiresAt: string;
     includeLink?: boolean;
@@ -137,6 +140,7 @@ export async function submitTaskOrderQuote(
         mediaName: input.mediaName ?? null,
         mediaType: input.mediaType ?? null,
         publishPlatform: input.publishPlatform ?? order.platform,
+        mediaAccountLink: input.mediaAccountLink ?? null,
         estimatedPublishAt: input.estimatedPublishAt ? new Date(input.estimatedPublishAt) : null,
         deliveryPromise: input.deliveryPromise ?? null,
         includeLink: input.includeLink ?? false,

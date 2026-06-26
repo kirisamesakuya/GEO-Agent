@@ -6,7 +6,7 @@ interface Props {
   size?: number;
 }
 
-export default function PublisherLogo({ className = '', size = 32 }: Props) {
+export default function PublisherLogo({ className = '', size = 44 }: Props) {
   return (
     <img
       src={publisherLogo}

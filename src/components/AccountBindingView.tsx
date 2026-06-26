@@ -12,6 +12,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { fetchPlatformAuthConfig } from '../lib/platform-auth-client';
+import { openPlatformLogin } from '../lib/open-platform-login';
 import {
   PUBLISH_ACCOUNT_SECTION_DESC,
   PUBLISH_ACCOUNT_SECTION_TITLE,
@@ -45,12 +46,6 @@ function platformLoginUrl(
   session?: PendingBindSession
 ): string | undefined {
   return session?.loginUrl ?? configByPlatform[platform]?.loginUrl;
-}
-
-/** 须在用户点击的同步栈内调用，避免 await 后 window.open 被拦截 */
-function openPlatformLogin(url: string): boolean {
-  const opened = window.open(url, '_blank', 'noopener,noreferrer');
-  return opened != null;
 }
 
 export default function AccountBindingView({ brandName, embedded }: AccountBindingViewProps) {
@@ -137,7 +132,7 @@ export default function AccountBindingView({ brandName, embedded }: AccountBindi
       return;
     }
 
-    const opened = openPlatformLogin(loginUrl);
+    const opened = openPlatformLogin(loginUrl, acc.platform);
     if (!opened) {
       toast('浏览器拦截了新标签页，请允许弹窗或点击下方「打开登录页」', 'error');
     }
@@ -156,7 +151,7 @@ export default function AccountBindingView({ brandName, embedded }: AccountBindi
         }
         if (data.accounts) setAccounts(data.accounts);
         const resolvedUrl = (data.loginUrl as string) || loginUrl;
-        if (!opened && resolvedUrl) openPlatformLogin(resolvedUrl);
+        if (!opened && resolvedUrl) openPlatformLogin(resolvedUrl, acc.platform);
         setPendingBind((prev) => ({
           ...prev,
           [acc.id]: {
@@ -216,7 +211,7 @@ export default function AccountBindingView({ brandName, embedded }: AccountBindi
       toast('平台登录地址未加载，请刷新页面后重试', 'error');
       return;
     }
-    if (!openPlatformLogin(url)) {
+    if (!openPlatformLogin(url, acc.platform)) {
       toast('请允许弹窗，或复制下方链接到浏览器打开', 'error');
     }
   };

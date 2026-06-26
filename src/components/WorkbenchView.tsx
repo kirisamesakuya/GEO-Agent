@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ViewType } from '../types';
-import WorkbenchResultPanel from './workbench/WorkbenchResultPanel';
-import WorkbenchDashboard, { type CockpitData } from './workbench/WorkbenchDashboard';
+import WorkbenchResultPanel, {
+  type WorkbenchKpi,
+} from './workbench/WorkbenchResultPanel';
 import { fetchOnboardingStatus, type OnboardingStatus } from '../lib/onboarding-client';
+import { PUBLISHER_NOTIFICATIONS_UPDATED_EVENT } from '../lib/publisher-notification-events';
 
-interface PublisherDashboard extends CockpitData {
+interface PublisherDashboard {
   brandName: string;
   brandIndustry?: string;
   brandOverview?: {
@@ -17,9 +18,30 @@ interface PublisherDashboard extends CockpitData {
     publishAccountCount: number;
     websiteServiceBalance?: number;
   };
+  workbenchKpi?: WorkbenchKpi;
+  metrics?: {
+    totalPublished: number;
+    todayPublished: number;
+    articlesGenerated: number;
+    indexedKeywords: number;
+    platformHitRate: number;
+    brandMentionRate: number;
+    freeSourcePublished: number;
+    paidSourcePublished: number;
+  };
+  platformShare?: Array<{ platform: string; count: number }>;
+  indexByKeyword?: Array<{ keyword: string; hits: number }>;
+  geoInsight?: {
+    latestReportId: string | null;
+    analyzedAt: string | null;
+    mentionRate: number;
+  };
+  samplingNote?: string;
   workbenchTodos?: Array<{
     id: string;
     label: string;
+    priority?: string;
+    type?: string;
     targetView: string;
     targetHint?: string;
   }>;
@@ -29,8 +51,10 @@ interface PublisherDashboard extends CockpitData {
     category: 'content' | 'website';
     categoryLabel: string;
     brandStatus: string;
-    statusTone: 'warning' | 'info' | 'neutral';
+    statusTone: 'warning' | 'info' | 'neutral' | 'success' | 'danger';
     stats: Array<{ label: string; value: number }>;
+    progress?: { done: number; total: number; phaseLabel: string };
+    keyOutputs?: Array<{ label: string; value: string; tone?: 'success' | 'danger' | 'neutral' }>;
     actionLabel: string;
     targetView: string;
     targetHint?: string;
@@ -43,6 +67,14 @@ interface PublisherDashboard extends CockpitData {
     responsibleParty?: string;
     completedAt: string;
     targetView?: string;
+    targetHint?: string;
+  }>;
+  workbenchInProgress?: Array<{
+    id: string;
+    title: string;
+    categoryLabel: string;
+    statusLabel: string;
+    targetView: string;
     targetHint?: string;
   }>;
 }
@@ -64,40 +96,83 @@ const EMPTY_OVERVIEW = {
   websiteServiceBalance: 0,
 };
 
+async function fetchPublisherDashboard(brandName: string): Promise<PublisherDashboard> {
+  const res = await fetch(`/api/publisher/dashboard?brandName=${encodeURIComponent(brandName)}`);
+  let body: PublisherDashboard & { error?: string } = {} as PublisherDashboard & { error?: string };
+  try {
+    body = await res.json();
+  } catch {
+    throw new Error('工作台数据加载失败');
+  }
+  if (!res.ok || body.error) {
+    throw new Error(typeof body.error === 'string' ? body.error : '工作台数据加载失败');
+  }
+  return body;
+}
+
 export default function WorkbenchView({ brandName, onBrandChange, onNavigate, onStartFirstAudit }: Props) {
   const [data, setData] = useState<PublisherDashboard | null>(null);
   const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [showLegacyCharts, setShowLegacyCharts] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
-  const load = () => {
-    setLoading(true);
-    Promise.all([
-      fetch(`/api/publisher/dashboard?brandName=${encodeURIComponent(brandName)}`).then((r) => r.json()),
-      fetchOnboardingStatus(brandName).catch(() => null),
-    ])
-      .then(([d, ob]) => {
-        if (d.error) setData(null);
-        else setData(d);
-        setOnboarding(ob);
-      })
-      .catch(() => setData(null))
-      .finally(() => setLoading(false));
-  };
+  const load = useCallback(async (options?: { background?: boolean }) => {
+    const isFirstLoad = !hasLoadedRef.current;
+    if (isFirstLoad && !options?.background) setInitialLoading(true);
 
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 15000);
-    return () => clearInterval(t);
+    try {
+      const dashboard = await fetchPublisherDashboard(brandName);
+      setData(dashboard);
+      setLoadError(null);
+      hasLoadedRef.current = true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '工作台数据加载失败';
+      setLoadError(message);
+      if (isFirstLoad && !options?.background) setData(null);
+    } finally {
+      if (isFirstLoad && !options?.background) setInitialLoading(false);
+    }
+
+    void fetchOnboardingStatus(brandName)
+      .then(setOnboarding)
+      .catch(() => setOnboarding(null));
   }, [brandName]);
 
-  if (loading && !data) {
+  useEffect(() => {
+    hasLoadedRef.current = false;
+    setData(null);
+    setLoadError(null);
+    setInitialLoading(true);
+    void load();
+  }, [brandName, load]);
+
+  useEffect(() => {
+    const onNotificationsUpdated = () => {
+      void load({ background: true });
+    };
+    window.addEventListener(PUBLISHER_NOTIFICATIONS_UPDATED_EVENT, onNotificationsUpdated);
+    return () => window.removeEventListener(PUBLISHER_NOTIFICATIONS_UPDATED_EVENT, onNotificationsUpdated);
+  }, [load]);
+
+  if (initialLoading && !data) {
     return (
       <div className="geo-page-content space-y-4">
-        <header className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-bold text-[var(--color-title)]">工作台</h2>
-        </header>
         <p className="text-sm text-[var(--neutral-text-03)]">加载工作台…</p>
+      </div>
+    );
+  }
+
+  if (loadError && !data) {
+    return (
+      <div className="geo-page-content space-y-4">
+        <div className="geo-card p-6 space-y-3 max-w-lg">
+          <p className="text-sm font-medium text-[var(--color-title)]">工作台数据加载失败</p>
+          <p className="text-sm text-[var(--neutral-text-03)]">{loadError}</p>
+          <button type="button" className="geo-btn-primary geo-btn-sm" onClick={() => void load()}>
+            重试
+          </button>
+        </div>
       </div>
     );
   }
@@ -107,28 +182,17 @@ export default function WorkbenchView({ brandName, onBrandChange, onNavigate, on
 
   return (
     <div className="geo-page-content space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-bold text-[var(--color-title)]">工作台</h2>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="geo-btn-secondary geo-btn-sm text-xs"
-            onClick={() => setShowLegacyCharts((v) => !v)}
-          >
-            {showLegacyCharts ? '收起数据图表' : '展开数据图表'}
-          </button>
-          <button
-            type="button"
-            className="geo-btn-secondary geo-btn-sm inline-flex items-center gap-1.5"
-            onClick={load}
-            disabled={loading}
-            aria-label="刷新工作台数据"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden />
-            刷新
+      {loadError && (
+        <div
+          className="rounded-lg border px-3 py-2 text-xs text-amber-800 bg-amber-50 flex flex-wrap items-center justify-between gap-2"
+          style={{ borderColor: 'var(--neutral-divider-02)' }}
+        >
+          <span>刷新失败：{loadError}</span>
+          <button type="button" className="geo-link text-xs" onClick={() => void load({ background: true })}>
+            重试
           </button>
         </div>
-      </header>
+      )}
 
       {onboarding?.showOnboardingHero && onStartFirstAudit && (
         <div className="geo-card p-6 md:p-8 space-y-3">
@@ -146,6 +210,27 @@ export default function WorkbenchView({ brandName, onBrandChange, onNavigate, on
         brandName={displayBrand}
         brandIndustry={data?.brandIndustry}
         overview={overview}
+        kpi={data?.workbenchKpi}
+        geoMonitor={
+          data?.metrics
+            ? {
+                metrics: {
+                  indexedKeywords: data.metrics.indexedKeywords,
+                  platformHitRate: data.metrics.platformHitRate,
+                  brandMentionRate: data.metrics.brandMentionRate,
+                  freeSourcePublished: data.metrics.freeSourcePublished ?? 0,
+                  paidSourcePublished: data.metrics.paidSourcePublished ?? 0,
+                },
+                platformShare: data.platformShare ?? [],
+                indexByKeyword: data.indexByKeyword ?? [],
+                geoInsight: data.geoInsight,
+              }
+            : undefined
+        }
+        inProgressItems={(data?.workbenchInProgress ?? []).map((item) => ({
+          ...item,
+          targetView: item.targetView as ViewType,
+        }))}
         todos={(data?.workbenchTodos ?? []).map((t) => ({
           ...t,
           targetView: t.targetView as ViewType,
@@ -161,22 +246,6 @@ export default function WorkbenchView({ brandName, onBrandChange, onNavigate, on
         onNavigate={onNavigate}
         onBrandChange={onBrandChange}
       />
-
-      {showLegacyCharts && data && (
-        <WorkbenchDashboard
-          data={{
-            metrics: data.metrics,
-            platformShare: data.platformShare,
-            indexByKeyword: data.indexByKeyword,
-            publishTrend: data.publishTrend,
-            indexTrend: data.indexTrend,
-            recentIndexResults: data.recentIndexResults,
-            samplingNote: data.samplingNote,
-            geoInsight: data.geoInsight,
-          }}
-          onNavigate={onNavigate}
-        />
-      )}
     </div>
   );
 }

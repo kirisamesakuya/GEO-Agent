@@ -39,13 +39,13 @@ export const WEBSITE_ACCEPTANCE =
 export const WEBSITE_PAYEE_TYPE = '网页设计师';
 
 /** 一期：仅客资收集，不做 AI 预览与设计师接单 */
-export const WEBSITE_PHASE1_TITLE = '网页需求（客资收集）';
+export const WEBSITE_PHASE1_TITLE = '新建网页需求';
 
 export const WEBSITE_PHASE1_DESCRIPTION =
-  '填写页面优化诉求与联系方式，提交后由后台跟进；进度可在「任务交付 · 网页需求」查看。';
+  '填写页面类型、目标关键词与联系方式，提交后由后台跟进；进度可在「内容交付 · 网页需求」查看。';
 
 export const WEBSITE_PHASE1_NOTE =
-  '一期不做 AI 预览与设计师接单，仅收集客资供运营跟进。';
+  '一期不做 AI 预览与设计师接单，仅收集客资供运营跟进。新建站点时无需填写现有网址。';
 
 /** 自有网站优化：已有站点页面优化 */
 export const SITE_OPTIMIZE_PAGE_TYPES = [

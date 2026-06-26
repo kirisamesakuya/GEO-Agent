@@ -8,11 +8,17 @@ import {
   matchesSearch,
   PLATFORM_SHORT,
 } from '../lib/provider-ui';
+import ProviderPageHeader from '../components/workspace/ProviderPageHeader';
+import ProviderStatusTabs from '../components/workspace/ProviderStatusTabs';
 import {
   isArticleContentOrder,
   DELIVERY_STAGE_LABEL,
   DELIVERY_REVIEW_STATUS_LABEL,
 } from '../../../lib/task-order-flow';
+import ProviderBrandBriefCard from '../components/ProviderBrandBriefCard';
+import type { ProviderBrandBriefView } from '../../../../lib/provider-brand-brief';
+import { buildProviderBrandBriefView } from '../../../../lib/provider-brand-brief';
+import { parseTaskBrief } from '../../../../lib/paid-source-brief';
 
 const TABS = [
   { id: '', label: '全部' },
@@ -42,6 +48,8 @@ interface Order {
   status: string;
   deliverable: string;
   acceptance: string;
+  taskBriefJson?: string | null;
+  brandBrief?: ProviderBrandBriefView;
   deliveries?: OrderDeliveryRow[];
   revisions?: Array<{ reason: string; createdAt: string; status?: string }>;
   settlement?: { status: string; amount: number } | null;
@@ -174,25 +182,9 @@ export default function ProviderOrderView({
 
   return (
     <div className="space-y-4 -m-2">
-      <div>
-        <h1 className="text-xl font-bold text-provider-title">我的订单</h1>
-        <p className="text-xs text-provider-muted">管理合作进度、交付与验收</p>
-      </div>
+      <ProviderPageHeader title="我的订单" subtitle="管理合作进度、交付与验收" />
 
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={`text-xs px-4 py-2 rounded-xl font-medium shrink-0 ${
-              tab === t.id ? 'provider-nav-active' : 'provider-nav-item provider-card'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <ProviderStatusTabs tabs={[...TABS]} active={tab} onChange={setTab} />
 
       <div className="provider-split-layout flex gap-4 min-h-[480px]">
         <div className="provider-split-list w-full lg:w-72 shrink-0 provider-card rounded-2xl overflow-hidden flex flex-col">
@@ -203,7 +195,7 @@ export default function ProviderOrderView({
                 type="button"
                 onClick={() => void selectOrder(o.id)}
                 className={`w-full text-left px-4 py-3 border-b border-provider transition-colors ${
-                  (selected?.id ?? activeOrderId) === o.id ? 'bg-brand-light/50' : 'hover:bg-provider-hover'
+                  (selected?.id ?? activeOrderId) === o.id ? 'bg-workbench-light/60' : 'hover:bg-provider-hover'
                 }`}
               >
                 <div className="flex justify-between gap-2 mb-1">
@@ -242,6 +234,17 @@ export default function ProviderOrderView({
                   </p>
                 )}
               </div>
+
+              <ProviderBrandBriefCard
+                brief={
+                  selected.brandBrief ??
+                  buildProviderBrandBriefView(
+                    selected.brandName ?? '',
+                    null,
+                    parseTaskBrief(selected.taskBriefJson)
+                  )
+                }
+              />
 
               <div className="p-4 bg-provider-subtle rounded-xl text-sm">
                 <p className="text-xs text-provider-muted mb-1">验收标准</p>

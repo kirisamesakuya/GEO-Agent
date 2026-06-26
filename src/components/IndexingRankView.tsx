@@ -359,7 +359,7 @@ export default function IndexingRankView({ brandName, onBrandChange, onNavigate 
           style={{ color: 'var(--neutral-text-02)' }}
         >
           <span>
-            {monitorNotReadyCount} 个监测平台未就绪，执行采样前建议先完成会话检测与登录。
+            {monitorNotReadyCount} 个监测平台未就绪，执行采样前建议先完成登录并手动标记会话状态。
           </span>
           <button type="button" className="geo-link" onClick={() => setActiveTab('monitor')}>
             去监测平台配置

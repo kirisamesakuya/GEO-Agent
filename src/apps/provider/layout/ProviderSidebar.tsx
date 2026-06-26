@@ -55,7 +55,7 @@ export default function ProviderSidebar({
         <div className="provider-sidebar-brand flex items-center gap-2">
           <AppBrandMark
             className="flex-1 min-w-0"
-            logo={<ProviderLogo size={28} />}
+            logo={<ProviderLogo size={44} />}
             prefix={PROVIDER_APP_BRAND_PREFIX}
             productName={PROVIDER_APP_PRODUCT_NAME}
             fullName={PROVIDER_APP_NAME}
@@ -86,7 +86,7 @@ export default function ProviderSidebar({
                   isActive ? 'provider-nav-active' : 'provider-nav-item'
                 }`}
               >
-                <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-brand' : 'text-provider-muted'}`} />
+                <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-workbench' : 'text-provider-muted'}`} />
                 <span>{item.label}</span>
               </button>
             );
@@ -132,7 +132,7 @@ export default function ProviderSidebar({
             currentTab === 'profile' ? 'provider-nav-active' : 'provider-nav-item'
           }`}
         >
-          <User className={`w-5 h-5 shrink-0 ${currentTab === 'profile' ? 'text-brand' : 'text-provider-muted'}`} />
+          <User className={`w-5 h-5 shrink-0 ${currentTab === 'profile' ? 'text-workbench' : 'text-provider-muted'}`} />
           <span>个人中心</span>
         </button>
         <div className="text-[10px] text-provider-muted px-1">

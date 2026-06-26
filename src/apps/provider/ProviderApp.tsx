@@ -84,6 +84,16 @@ export default function ProviderApp() {
     refreshNotifications();
   }, [provider?.id, currentTab, refreshNotifications]);
 
+  useEffect(() => {
+    if (currentTab !== 'profile' || !provider?.id) return;
+    fetch(`/api/provider/profile?providerId=${provider.id}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.provider) setProvider(d.provider);
+      })
+      .catch(() => {});
+  }, [currentTab, provider?.id]);
+
   const handleTabChange = (tab: ProviderPageId) => {
     closeSidebar();
     const nextTab = isProviderViewEnabled(tab) ? tab : 'profile';
@@ -114,7 +124,7 @@ export default function ProviderApp() {
   const renderMain = () => {
     if (!provider) {
       return (
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-3xl mx-auto w-full">
           <ProviderOnboarding providerId={null} onProviderReady={(id) => {
             fetch(`/api/provider/profile?providerId=${id}`)
               .then((r) => r.json())
@@ -152,7 +162,6 @@ export default function ProviderApp() {
             activeTaskId={activeTaskId}
             onSelectTask={setActiveTaskId}
             onNeedOnboarding={() => setCurrentTab('profile')}
-            onClaimed={() => setCurrentTab('orders')}
           />
         );
       case 'quotes':
@@ -186,8 +195,11 @@ export default function ProviderApp() {
             onProviderReady={(id) => {
               fetch(`/api/provider/profile?providerId=${id}`)
                 .then((r) => r.json())
-                .then((d) => setProvider(d.provider));
+                .then((d) => {
+                  if (d.provider) setProvider(d.provider);
+                });
             }}
+            onProfileSynced={(p) => setProvider(p)}
           />
         );
       case 'messages':

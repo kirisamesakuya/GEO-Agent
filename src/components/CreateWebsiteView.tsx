@@ -7,7 +7,7 @@ import { History, ChevronRight } from 'lucide-react';
 import type { ViewType } from '../types';
 import { resolveWebsiteLeadFields } from '../../lib/website-lead-intake';
 import { consumeGeoAssetWebsitePrefill } from '../lib/geo-asset-website-prefill';
-import { WEBSITE_PHASE1_DESCRIPTION, WEBSITE_PHASE1_TITLE } from '../../lib/website-order-flow';
+import { WEBSITE_PHASE1_TITLE } from '../../lib/website-order-flow';
 
 interface Props {
   brandName: string;
@@ -76,14 +76,12 @@ export default function CreateWebsiteView({
   );
 
   const formCard = (
-    <AgentInputCard
-      title={embedded ? WEBSITE_PHASE1_TITLE : '创建网页需求'}
-      description={WEBSITE_PHASE1_DESCRIPTION}
-    >
+    <AgentInputCard title={embedded ? WEBSITE_PHASE1_TITLE : '新建网页需求'}>
       <WebsiteLeadIntakeForm
         key={draftKey}
         brandName={brandName}
         initialValues={prefill}
+        introNote=""
         onSuccess={() => onNavigate?.('content_delivery', 'website')}
       />
     </AgentInputCard>
@@ -102,7 +100,7 @@ export default function CreateWebsiteView({
     <div className="flex min-h-0 flex-col">
       <div className="shrink-0 px-6 pt-4 pb-3 geo-page-content-section">
         <PageHeaderWithBrand
-          title="创建网页需求"
+          title="新建网页需求"
           brandName={brandName}
           onBrandChange={onBrandChange}
           actions={historyButton}

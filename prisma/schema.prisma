@@ -708,6 +708,7 @@ model TaskOrderQuote {
   mediaName                   String?
   mediaType                   String?
   publishPlatform             String?
+  mediaAccountLink            String?
   estimatedPublishAt          DateTime?
   deliveryPromise             String?
   includeLink                 Boolean   @default(false)
@@ -813,8 +814,13 @@ model Provider {
   serviceAreas      String?
   budgetMin         Float?
   budgetMax         Float?
+  pricingNote       String?
   caseLinks         String?
   reviewNote        String?
+  /// none | pending | rejected — 已通过入驻后的资料变更审核态
+  profileReviewStatus String  @default("none")
+  /// 待审核的公信力资料 JSON（ProviderCredibilityDraft）
+  pendingProfileJson  String?
   /// 提现渠道：bank | alipay | wechat
   payoutChannel       String?
   /// 提现账户实名

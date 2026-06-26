@@ -25,6 +25,7 @@ interface ProviderRow {
   name: string;
   type: string;
   applicationStatus: string;
+  profileReviewStatus?: string | null;
   contactName?: string | null;
   phone?: string | null;
   email?: string | null;
@@ -138,7 +139,7 @@ export default function PlatformProvidersView({ onNavigate }: { onNavigate?: (vi
       toast(data.error, 'error');
       return;
     }
-    toast(action === 'approve' ? '已通过入驻' : '已驳回入驻', 'success');
+    toast(action === 'approve' ? (target.profileReviewStatus === 'pending' ? '资料变更已通过' : '已通过入驻') : (target.profileReviewStatus === 'pending' ? '已驳回资料变更' : '已驳回入驻'), 'success');
     setRejectNote('');
     setSelected(null);
     load();
@@ -203,8 +204,16 @@ export default function PlatformProvidersView({ onNavigate }: { onNavigate?: (vi
               header: '入驻状态',
               render: (r) => (
                 <PlatformStatusTag
-                  label={STATUS_LABELS[r.applicationStatus] ?? r.applicationStatus}
-                  kind={statusKind(r.applicationStatus)}
+                  label={
+                    r.profileReviewStatus === 'pending'
+                      ? '资料变更待审'
+                      : STATUS_LABELS[r.applicationStatus] ?? r.applicationStatus
+                  }
+                  kind={
+                    r.profileReviewStatus === 'pending'
+                      ? 'pending'
+                      : statusKind(r.applicationStatus)
+                  }
                 />
               ),
             },
@@ -223,7 +232,7 @@ export default function PlatformProvidersView({ onNavigate }: { onNavigate?: (vi
           renderActions={(r) => (
             <PlatformTableActions>
               <PlatformTableAction label="详情" variant="primary" onClick={() => setSelected(r)} />
-              {r.applicationStatus === 'submitted' && (
+              {(r.applicationStatus === 'submitted' || r.profileReviewStatus === 'pending') && (
                 <>
                   <PlatformTableAction label="通过" variant="primary" onClick={() => void review('approve', r)} />
                   <PlatformTableAction label="驳回" variant="danger" onClick={() => setSelected(r)} />
@@ -244,7 +253,7 @@ export default function PlatformProvidersView({ onNavigate }: { onNavigate?: (vi
             setRejectNote('');
           }}
           footer={
-            selected.applicationStatus === 'submitted' ? (
+            selected.applicationStatus === 'submitted' || selected.profileReviewStatus === 'pending' ? (
               <div className="space-y-2">
                 <input
                   value={rejectNote}

@@ -1,5 +1,18 @@
 ﻿import { useState, useEffect, useCallback, useRef } from 'react';
-import { CheckCircle2, Circle, Clock, AlertCircle } from 'lucide-react';
+import {
+  CheckCircle2,
+  Circle,
+  Clock,
+  AlertCircle,
+  Sparkles,
+  PenLine,
+  Building2,
+  Users,
+  ArrowRight,
+  Target,
+  Wallet,
+  ShieldCheck,
+} from 'lucide-react';
 import { DEFAULT_PROVIDER_ONBOARDING_OPTIONS } from '../../../lib/provider-onboarding-defaults';
 import {
   MARKETPLACE_PLATFORM_FEE_RATE,
@@ -16,9 +29,10 @@ import {
   PROVIDER_FEE_EXAMPLE,
   PROVIDER_NO_GUARANTEE_HINT,
 } from '../../../lib/platform-legal-copy';
+import { PROVIDER_APP_NAME } from '../../lib/app-branding';
 import { useToast } from '../../context/ToastContext';
 import MarketplaceAgreementModal from '../../components/common/MarketplaceAgreementModal';
-
+import ProviderLogo from '../../components/common/ProviderLogo';
 interface Provider {
   id: string;
   name: string;
@@ -31,6 +45,7 @@ interface Provider {
   caseLinks?: string | null;
   budgetMin?: number | null;
   budgetMax?: number | null;
+  pricingNote?: string | null;
 }
 
 interface ApplicationVersion {
@@ -71,6 +86,41 @@ const WIZARD_STEPS = [
   { id: 4, title: '协议确认' },
 ] as const;
 
+type OnboardingPhase = 'welcome' | 'identity' | 'form';
+
+const IDENTITY_OPTIONS = [
+  {
+    id: '达人',
+    title: '达人 / KOL',
+    desc: '拥有社媒账号，可接单发布种草、测评、探店等内容',
+    icon: Sparkles,
+  },
+  {
+    id: '内容写手',
+    title: '内容写手',
+    desc: '擅长撰稿与 SEO 内容，可接稿件类与品牌介绍任务',
+    icon: PenLine,
+  },
+  {
+    id: '媒体机构',
+    title: '媒体 / 机构',
+    desc: '具备官方媒体或垂类账号，可接权威发布与行业媒体任务',
+    icon: Building2,
+  },
+  {
+    id: 'MCN',
+    title: 'MCN / 服务商',
+    desc: '统一管理多位创作者或媒体资源，可批量承接撮合任务',
+    icon: Users,
+  },
+] as const;
+
+const ONBOARDING_VALUE_PROPS = [
+  { icon: Target, label: '智能匹配', desc: '按平台与地区推荐任务' },
+  { icon: Wallet, label: 'P0 报价', desc: '填写到手价，系统自动算 G/F' },
+  { icon: ShieldCheck, label: '平台撮合', desc: '验收通过后结算到账' },
+  { icon: Sparkles, label: '品牌合作', desc: '对接 GEO 投放品牌方' },
+] as const;
 const STATUS_LABEL: Record<string, string> = {
   draft: '草稿',
   submitted: '待审核',
@@ -117,8 +167,9 @@ export default function ProviderOnboarding({
   const [budgetMin, setBudgetMin] = useState('');
   const [budgetMax, setBudgetMax] = useState('');
   const [pricingNote, setPricingNote] = useState('');
-  const [wizardStep, setWizardStep] = useState(0);
-  const [status, setStatus] = useState('draft');
+  const [providerType, setProviderType] = useState('达人');
+  const [phase, setPhase] = useState<OnboardingPhase>(() => (embedded ? 'form' : 'welcome'));
+  const [wizardStep, setWizardStep] = useState(0);  const [status, setStatus] = useState('draft');
   const [reviewNote, setReviewNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [agreed, setAgreed] = useState(false);
@@ -180,16 +231,25 @@ export default function ProviderOnboarding({
         if (!p) return;
         setStatus(p.applicationStatus);
         setReviewNote(p.reviewNote ?? '');
-        setPlatforms(parseJsonArray(p.platforms));
-        setServiceAreas(parseJsonArray(p.serviceAreas));
+        setProviderType(p.type ?? '达人');
+        setPlatforms(parseJsonArray(p.platforms));        setServiceAreas(parseJsonArray(p.serviceAreas));
         setDisplayName(p.name ?? '');
         setContactName(p.contactName ?? '');
         setPhone(p.phone ?? '');
         setCaseLinksText(parseJsonArray(p.caseLinks).join('\n'));
         setBudgetMin(p.budgetMin != null ? String(p.budgetMin) : '');
         setBudgetMax(p.budgetMax != null ? String(p.budgetMax) : '');
-      });
-    loadVersions();
+        setPricingNote(p.pricingNote ?? '');
+        const hasProgress =
+          Boolean(p.name?.trim()) ||
+          parseJsonArray(p.platforms).length > 0 ||
+          parseJsonArray(p.serviceAreas).length > 0;
+        if (embedded && !hasProgress && p.applicationStatus === 'draft') {
+          setPhase('identity');
+        } else if (embedded || hasProgress) {
+          setPhase('form');
+        }
+      });    loadVersions();
   }, [providerId, loadVersions, demoMode]);
 
   const togglePlatform = (platform: string) => {
@@ -215,20 +275,20 @@ export default function ProviderOnboarding({
 
   const buildPayload = () => ({
     name: displayName.trim() || '新媒体接单方',
-    type: '达人',
-    contactName: contactName.trim(),
+    type: providerType,    contactName: contactName.trim(),
     phone: phone.trim() || undefined,
     platforms,
     serviceAreas,
     serviceTypes: platforms,
     capabilities: platforms,
-    industryTags: pricingNote.trim() ? [pricingNote.trim()] : platforms,
+    industryTags: [],
     caseLinks: caseLinksText
       .split('\n')
       .map((s) => s.trim())
       .filter(Boolean),
     budgetMin: budgetMin ? Number(budgetMin) : undefined,
     budgetMax: budgetMax ? Number(budgetMax) : undefined,
+    pricingNote: pricingNote.trim() || undefined,
   });
 
   const save = async (silent = false) => {
@@ -383,6 +443,91 @@ export default function ProviderOnboarding({
     );
   };
 
+  const renderWelcome = () => (
+    <div className="provider-onboarding-shell space-y-6">
+      <div className="provider-onboarding-hero">
+        <ProviderLogo size={56} className="mx-auto mb-4" />
+        <p className="text-[11px] font-semibold text-brand tracking-wide uppercase">欢迎入驻</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-provider-title mt-2">
+          加入 {PROVIDER_APP_NAME}
+        </h1>
+        <p className="text-sm text-provider-secondary mt-3 max-w-md mx-auto leading-relaxed">
+          开通接单资格，获取品牌 GEO 投放合作机会。平台负责撮合、验收与结算，您专注内容与交付。
+        </p>
+        <div className="provider-onboarding-value-grid">
+          {ONBOARDING_VALUE_PROPS.map(({ icon: Icon, label, desc }) => (
+            <div key={label} className="provider-onboarding-value-item">
+              <Icon className="w-5 h-5 text-brand mx-auto mb-1.5" />
+              <p className="text-xs font-semibold text-provider-title">{label}</p>
+              <p className="text-[10px] text-provider-muted mt-0.5 leading-snug">{desc}</p>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="provider-btn-primary mt-8 px-8 py-3 text-sm inline-flex items-center gap-2"
+          onClick={() => setPhase('identity')}
+        >
+          立即开始入驻
+          <ArrowRight className="w-4 h-4" />
+        </button>
+        <p className="text-[11px] text-provider-muted mt-4">
+          预计 5 分钟完成资料 · 审核约 1 个工作日
+        </p>
+      </div>
+    </div>
+  );
+
+  const renderIdentity = () => (
+    <div className="provider-onboarding-shell space-y-6">
+      <div className="text-center">
+        <p className="text-[11px] font-semibold text-brand">步骤 1 / 2</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-provider-title mt-2">选择您的入驻身份</h1>
+        <p className="text-sm text-provider-secondary mt-2 max-w-lg mx-auto">
+          不同身份对应不同的任务匹配与展示方式，请选择最符合您实际情况的一项
+        </p>
+      </div>
+      <div className="provider-onboarding-identity-grid">
+        {IDENTITY_OPTIONS.map(({ id, title, desc, icon: Icon }) => {
+          const selected = providerType === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setProviderType(id)}
+              className={`provider-onboarding-identity-card ${
+                selected ? 'provider-onboarding-identity-card--selected' : ''
+              }`}
+            >
+              <div className="provider-onboarding-identity-icon">
+                <Icon className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-provider-title">{title}</p>
+                <p className="text-xs text-provider-secondary mt-1 leading-relaxed">{desc}</p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex justify-between gap-3 pt-2">
+        {!embedded && (
+          <button type="button" className="provider-btn-secondary text-sm px-4" onClick={() => setPhase('welcome')}>
+            返回
+          </button>
+        )}
+        <button
+          type="button"
+          className="provider-btn-primary text-sm px-6 ml-auto inline-flex items-center gap-1.5"
+          onClick={() => setPhase('form')}
+        >
+          下一步：填写资料
+          <ArrowRight className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+
   const renderWizardStepper = () => (
     <div className="flex items-center justify-center gap-0 mb-8 overflow-x-auto pb-2">
       {WIZARD_STEPS.map((s, i) => {
@@ -392,12 +537,8 @@ export default function ProviderOnboarding({
           <div key={s.id} className="flex items-center shrink-0">
             <div className="flex flex-col items-center min-w-[72px] sm:min-w-[88px]">
               <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors ${
-                  active
-                    ? 'bg-brand border-brand text-white'
-                    : done
-                      ? 'bg-brand-light border-brand text-brand'
-                      : 'bg-white border-provider-subtle text-provider-muted'
+                className={`provider-onboarding-step-dot ${
+                  active ? 'provider-onboarding-step-dot--active' : done ? 'provider-onboarding-step-dot--done' : ''
                 }`}
               >
                 {done ? <CheckCircle2 className="w-3.5 h-3.5" /> : s.id + 1}
@@ -407,14 +548,13 @@ export default function ProviderOnboarding({
               </span>
             </div>
             {i < WIZARD_STEPS.length - 1 && (
-              <div className={`w-8 sm:w-12 h-0.5 mx-1 mb-5 ${done || active ? 'bg-brand/40' : 'bg-provider-track'}`} />
+              <div className={`provider-onboarding-step-line ${done || active ? 'provider-onboarding-step-line--active' : ''}`} />
             )}
           </div>
         );
       })}
     </div>
   );
-
   const canWizardNext = () => {
     if (wizardStep === 0) return checks.basic;
     if (wizardStep === 1) return checks.media && checks.regions;
@@ -424,14 +564,18 @@ export default function ProviderOnboarding({
   const renderWizardStepContent = () => {
     if (wizardStep === 0) {
       return (
-        <section className="provider-card rounded-2xl p-6 shadow-sm space-y-4">
-          <h2 className="text-sm font-bold text-provider-title">基础资料</h2>
+        <section className="provider-section-card space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-bold text-provider-title">基础资料</h2>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-light text-brand font-medium">
+              身份：{providerType}
+            </span>
+          </div>
           <p className="text-xs text-provider-muted">填写对外展示名称与联系人，便于平台审核与撮合沟通</p>
           <label className="block text-xs">
             <span className="text-provider-secondary font-medium">团队/机构名称</span>
             <input
-              className="provider-input w-full mt-1"
-              value={displayName}
+              className="provider-input-field w-full mt-1"              value={displayName}
               disabled={!canEdit}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="如：晨光传媒工作室"
@@ -440,7 +584,7 @@ export default function ProviderOnboarding({
           <label className="block text-xs">
             <span className="text-provider-secondary font-medium">联系人</span>
             <input
-              className="provider-input w-full mt-1"
+              className="provider-input-field w-full mt-1"
               value={contactName}
               disabled={!canEdit}
               onChange={(e) => setContactName(e.target.value)}
@@ -450,7 +594,7 @@ export default function ProviderOnboarding({
           <label className="block text-xs">
             <span className="text-provider-secondary font-medium">联系电话（选填）</span>
             <input
-              className="provider-input w-full mt-1"
+              className="provider-input-field w-full mt-1"
               value={phone}
               disabled={!canEdit}
               onChange={(e) => setPhone(e.target.value)}
@@ -463,12 +607,12 @@ export default function ProviderOnboarding({
     if (wizardStep === 1) {
       return (
         <>
-          <section className="provider-card rounded-2xl p-6 shadow-sm">
+          <section className="provider-section-card">
             <h2 className="text-sm font-bold text-provider-title mb-1">媒体平台</h2>
             <p className="text-xs text-provider-muted mb-4">平台名单由后台维护，请选择您可接单的内容渠道</p>
             {renderChipGroup(options.mediaPlatforms, platforms, togglePlatform)}
           </section>
-          <section className="provider-card rounded-2xl p-6 shadow-sm">
+          <section className="provider-section-card">
             <h2 className="text-sm font-bold text-provider-title mb-1">接单地区</h2>
             <p className="text-xs text-provider-muted mb-4">地区名单由后台维护，可多选</p>
             {renderChipGroup(options.serviceRegions, serviceAreas, toggleRegion)}
@@ -478,11 +622,11 @@ export default function ProviderOnboarding({
     }
     if (wizardStep === 2) {
       return (
-        <section className="provider-card rounded-2xl p-6 shadow-sm space-y-3">
+        <section className="provider-section-card space-y-3">
           <h2 className="text-sm font-bold text-provider-title">案例资源</h2>
           <p className="text-xs text-provider-muted">每行填写一个可公开访问的案例链接，发布方比价时可查看</p>
           <textarea
-            className="provider-input w-full min-h-[140px] text-sm"
+            className="provider-input-field w-full min-h-[140px] text-sm"
             value={caseLinksText}
             disabled={!canEdit}
             onChange={(e) => setCaseLinksText(e.target.value)}
@@ -493,7 +637,7 @@ export default function ProviderOnboarding({
     }
     if (wizardStep === 3) {
       return (
-        <section className="provider-card rounded-2xl p-6 shadow-sm space-y-4">
+        <section className="provider-section-card space-y-4">
           <h2 className="text-sm font-bold text-provider-title">报价规则</h2>
           <p className="text-xs text-provider-muted">说明您的常接单价区间与报价习惯，便于平台撮合（选填）</p>
           <div className="grid grid-cols-2 gap-3">
@@ -501,7 +645,7 @@ export default function ProviderOnboarding({
               <span className="text-provider-secondary font-medium">最低单价（元）</span>
               <input
                 type="number"
-                className="provider-input w-full mt-1"
+                className="provider-input-field w-full mt-1"
                 value={budgetMin}
                 disabled={!canEdit}
                 onChange={(e) => setBudgetMin(e.target.value)}
@@ -512,7 +656,7 @@ export default function ProviderOnboarding({
               <span className="text-provider-secondary font-medium">最高单价（元）</span>
               <input
                 type="number"
-                className="provider-input w-full mt-1"
+                className="provider-input-field w-full mt-1"
                 value={budgetMax}
                 disabled={!canEdit}
                 onChange={(e) => setBudgetMax(e.target.value)}
@@ -523,7 +667,7 @@ export default function ProviderOnboarding({
           <label className="block text-xs">
             <span className="text-provider-secondary font-medium">报价说明</span>
             <textarea
-              className="provider-input w-full min-h-[80px] mt-1 text-sm"
+              className="provider-input-field w-full min-h-[80px] mt-1 text-sm"
               value={pricingNote}
               disabled={!canEdit}
               onChange={(e) => setPricingNote(e.target.value)}
@@ -534,11 +678,11 @@ export default function ProviderOnboarding({
       );
     }
     return (
-      <section className="provider-card rounded-2xl p-6 shadow-sm space-y-3">
+      <section className="provider-section-card space-y-3">
         <h2 className="text-sm font-bold text-provider-title">资料核对</h2>
         <p className="text-xs text-provider-muted">确认以下信息无误后，在右侧勾选协议并提交审核</p>
         <div className="text-xs space-y-2 text-provider-secondary">
-          <p>名称：{displayName || '—'} · 联系人：{contactName || '—'}</p>
+          <p>身份：{providerType} · 名称：{displayName || '—'} · 联系人：{contactName || '—'}</p>
           <p>媒体：{platforms.join('、') || '—'}</p>
           <p>地区：{serviceAreas.join('、') || '—'}</p>
           <p>案例：{caseLinksText.split('\n').filter(Boolean).length} 条</p>
@@ -556,12 +700,8 @@ export default function ProviderOnboarding({
           <div key={s.id} className="flex items-center">
             <div className="flex flex-col items-center min-w-[100px]">
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-colors ${
-                  active
-                    ? 'bg-brand border-brand text-white'
-                    : done
-                      ? 'bg-brand-light border-brand text-brand'
-                      : 'bg-white border-provider-subtle text-provider-muted'
+                className={`provider-onboarding-step-dot w-8 h-8 text-sm ${
+                  active ? 'provider-onboarding-step-dot--active' : done ? 'provider-onboarding-step-dot--done' : ''
                 }`}
               >
                 {done ? <CheckCircle2 className="w-4 h-4" /> : s.id + 1}
@@ -571,7 +711,7 @@ export default function ProviderOnboarding({
               </span>
             </div>
             {i < MACRO_STEPS.length - 1 && (
-              <div className={`w-16 sm:w-24 h-0.5 mx-2 mb-6 ${done || active ? 'bg-brand/40' : 'bg-provider-track'}`} />
+              <div className={`provider-onboarding-step-line w-16 sm:w-24 ${done || active ? 'provider-onboarding-step-line--active' : ''}`} />
             )}
           </div>
         );
@@ -580,34 +720,60 @@ export default function ProviderOnboarding({
   );
 
   const renderResult = () => (
-    <div className="provider-card rounded-2xl p-8 shadow-sm text-center max-w-lg mx-auto">
-      {status === 'approved' && (
-        <>
-          <CheckCircle2 className="w-14 h-14 text-green-500 mx-auto mb-4" />
-          <h2 className="text-lg font-bold text-provider-title">审核已通过</h2>
-          <p className="text-sm text-provider-secondary mt-2">您已具备接单资格，可前往任务大厅领取合作任务。</p>
-        </>
-      )}
-      {status === 'submitted' && (
-        <>
-          <Clock className="w-14 h-14 text-amber-500 mx-auto mb-4" />
-          <h2 className="text-lg font-bold text-provider-title">审核进行中</h2>
-          <p className="text-sm text-provider-secondary mt-2">预计 1 个工作日内完成，结果将通过消息通知您。</p>
-          <button type="button" className="provider-btn-secondary mt-6" onClick={() => void withdraw()}>
-            {demoMode ? '返回修改' : '撤回申请'}
-          </button>
-        </>
-      )}
+    <div className="provider-onboarding-shell space-y-5">
+      <div className="provider-section-card p-8 shadow-sm text-center">
+        {status === 'approved' && (
+          <>
+            <CheckCircle2 className="w-14 h-14 text-green-500 mx-auto mb-4" />
+            <h2 className="text-lg font-bold text-provider-title">审核已通过</h2>
+            <p className="text-sm text-provider-secondary mt-2">
+              您已具备接单资格，可前往任务大厅浏览任务并提交 P0 报价方案。
+            </p>
+          </>
+        )}
+        {status === 'submitted' && (
+          <>
+            <Clock className="w-14 h-14 text-amber-500 mx-auto mb-4" />
+            <h2 className="text-lg font-bold text-provider-title">审核进行中</h2>
+            <p className="text-sm text-provider-secondary mt-2">预计 1 个工作日内完成，结果将通过消息通知您。</p>
+            <button type="button" className="provider-btn-secondary mt-6" onClick={() => void withdraw()}>
+              {demoMode ? '返回修改' : '撤回申请'}
+            </button>
+          </>
+        )}
+      </div>
+
+      <div className="provider-onboarding-earnings-card">
+        <h3 className="text-sm font-bold text-provider-title flex items-center gap-2">
+          <Wallet className="w-4 h-4 text-brand" /> 开通后您可以
+        </h3>
+        <ul className="mt-3 space-y-2 text-xs text-provider-secondary">
+          <li>· 在任务大厅查看匹配任务，填写期望到手价 P0 提交报价</li>
+          <li>
+            · 验收通过后按实际结算金额到账（平台收取 {(MARKETPLACE_PLATFORM_FEE_RATE * 100).toFixed(0)}% 技术服务费）
+          </li>
+          <li>
+            · 参考：单笔结算 ¥{PROVIDER_FEE_EXAMPLE.settlement.toLocaleString('zh-CN')}，您可结算 ¥
+            {PROVIDER_FEE_EXAMPLE.income.toLocaleString('zh-CN')}
+          </li>
+        </ul>
+        <p className="text-[10px] text-provider-muted mt-3">{PROVIDER_NO_GUARANTEE_HINT}</p>
+      </div>
     </div>
   );
-
   const renderPageHeader = () => {
-    if (embedded) return null;
+    if (embedded || phase !== 'form') return null;
     return (
-      <div>
-        <h1 className="text-xl font-bold text-provider-title">入驻审核</h1>
+      <div className="text-center sm:text-left">
+        <p className="text-[11px] font-semibold text-brand">步骤 2 / 2 · 填写入驻资料</p>
+        <h1 className="text-xl font-bold text-provider-title mt-1">完善资料并提交审核</h1>
         <p className="text-xs text-provider-muted mt-1">
-          选择可接单媒体与地区，提交入驻申请并同意撮合服务协议后等待平台审核
+          身份：<span className="text-brand font-medium">{providerType}</span>
+          {!embedded && (
+            <button type="button" className="text-brand hover:underline ml-2" onClick={() => setPhase('identity')}>
+              修改
+            </button>
+          )}
         </p>
         {!demoMode && status !== 'submitted' && status !== 'approved' && (
           <p className="text-xs text-provider-secondary mt-1">
@@ -620,7 +786,6 @@ export default function ProviderOnboarding({
       </div>
     );
   };
-
   const renderCheckRow = (ok: boolean, label: string, detail: string) => (
     <div className="flex items-start gap-3 py-2">
       {ok ? (
@@ -655,7 +820,7 @@ export default function ProviderOnboarding({
               onClick={() => onToggle(item)}
               className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${
                 on
-                  ? 'bg-brand-light border-brand-light text-brand'
+                  ? 'provider-nav-active-brand border-brand-light'
                   : 'border-provider text-provider-secondary hover:border-provider-subtle disabled:opacity-60'
               }`}
             >
@@ -672,11 +837,16 @@ export default function ProviderOnboarding({
     return (
       <div className="space-y-6">
         {renderDemoBanner()}
-        {renderPageHeader()}
+        {!embedded && (
+          <div className="text-center">
+            <h1 className="text-xl font-bold text-provider-title">入驻审核</h1>
+            <p className="text-xs text-provider-muted mt-1">您的申请已进入平台审核流程</p>
+          </div>
+        )}
         {renderStepper()}
         {renderResult()}
         {versions.length > 0 && (
-          <div className="provider-card rounded-2xl p-4 shadow-sm max-w-lg mx-auto">
+          <div className="provider-section-card max-w-lg mx-auto">
             <h3 className="text-sm font-bold text-provider-title mb-3">申请记录</h3>
             {versions.slice(0, 3).map((v) => (
               <div key={v.id} className="flex justify-between text-xs py-2 border-b border-provider last:border-0">
@@ -690,9 +860,26 @@ export default function ProviderOnboarding({
     );
   }
 
+  if (phase === 'welcome' && !embedded) {
+    return (
+      <div className="space-y-6">
+        {renderDemoBanner()}
+        {renderWelcome()}
+      </div>
+    );
+  }
+
+  if (phase === 'identity') {
+    return (
+      <div className="space-y-6">
+        {renderDemoBanner()}
+        {renderIdentity()}
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      {renderDemoBanner()}
+    <div className={`space-y-6 ${embedded ? '' : 'provider-onboarding-shell--wide'}`}>      {renderDemoBanner()}
       {renderPageHeader()}
       {embedded && (
         <p className="text-xs text-provider-secondary -mt-2">
@@ -726,21 +913,31 @@ export default function ProviderOnboarding({
               >
                 上一步
               </button>
-              <button
-                type="button"
-                className="provider-btn-primary text-sm px-4"
-                disabled={!canWizardNext()}
-                onClick={() => setWizardStep((s) => Math.min(WIZARD_STEPS.length - 1, s + 1))}
-              >
-                下一步
-              </button>
+              <div className="flex gap-2 ml-auto">
+                {!embedded && (
+                  <button
+                    type="button"
+                    className="provider-btn-secondary text-sm px-4"
+                    onClick={() => setPhase('identity')}
+                  >
+                    修改身份
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="provider-btn-primary text-sm px-4"
+                  disabled={!canWizardNext()}
+                  onClick={() => setWizardStep((s) => Math.min(WIZARD_STEPS.length - 1, s + 1))}
+                >
+                  下一步
+                </button>
+              </div>
             </div>
-          )}
-        </div>
+          )}        </div>
 
         <div className="lg:col-span-1">
           {wizardStep === WIZARD_STEPS.length - 1 ? (
-          <div className="provider-card rounded-2xl p-6 shadow-sm sticky top-4">
+          <div className="provider-section-card sticky top-4">
             <h2 className="text-sm font-bold text-provider-title mb-4">提交审核</h2>
             {renderCheckRow(
               checks.basic,
@@ -867,8 +1064,7 @@ export default function ProviderOnboarding({
             )}
           </div>
           ) : (
-            <div className="provider-card rounded-2xl p-6 shadow-sm sticky top-4 text-xs text-provider-secondary">
-              <p className="font-medium text-provider-title mb-2">当前步骤：{WIZARD_STEPS[wizardStep]?.title}</p>
+            <div className="provider-section-card sticky top-4 text-xs text-provider-secondary">              <p className="font-medium text-provider-title mb-2">当前步骤：{WIZARD_STEPS[wizardStep]?.title}</p>
               <p>完成本步后点击「下一步」，全部步骤完成后在此提交审核。</p>
               {lastSavedAt && canEdit && (
                 <p className="text-provider-muted mt-3">已自动保存 {lastSavedAt}</p>

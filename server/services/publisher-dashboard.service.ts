@@ -39,6 +39,8 @@ export interface PublisherDashboard {
     indexedKeywords: number;
     platformHitRate: number;
     brandMentionRate: number;
+    freeSourcePublished: number;
+    paidSourcePublished: number;
   };
   platformShare: Array<{ platform: string; count: number }>;
   indexByKeyword: Array<{ keyword: string; hits: number }>;
@@ -71,14 +73,29 @@ export interface PublisherDashboard {
   };
   brandIndustry?: string;
   workbenchTodos?: PublisherTodo[];
+  workbenchKpi?: {
+    weekPublished: number;
+    monthPublished: number;
+    monthIndexed: number;
+    exposureEstimate: number;
+    rankTop10: number;
+    rankTop50: number;
+    newKeywordsWeek: number;
+    rankTrend: number[];
+    monthSpend: number;
+    roiArticlesPer10k: number;
+    rankDeltaWeek: number;
+  };
   taskBoard?: Array<{
     id: string;
     title: string;
     category: 'content' | 'website';
     categoryLabel: string;
     brandStatus: string;
-    statusTone: 'warning' | 'info' | 'neutral';
+    statusTone: 'warning' | 'info' | 'neutral' | 'success' | 'danger';
     stats: Array<{ label: string; value: number }>;
+    progress: { done: number; total: number; phaseLabel: string };
+    keyOutputs: Array<{ label: string; value: string; tone?: 'success' | 'danger' | 'neutral' }>;
     actionLabel: string;
     targetView: string;
     targetHint?: string;
@@ -90,6 +107,14 @@ export interface PublisherDashboard {
     categoryLabel: string;
     responsibleParty?: string;
     completedAt: string;
+    targetView: string;
+    targetHint?: string;
+  }>;
+  workbenchInProgress?: Array<{
+    id: string;
+    title: string;
+    categoryLabel: string;
+    statusLabel: string;
     targetView: string;
     targetHint?: string;
   }>;
@@ -327,6 +352,23 @@ export async function getPublisherDashboard(brandName: string): Promise<Publishe
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 7);
 
+  const weekPublished = publishTrend.slice(-7).reduce((s, d) => s + d.count, 0);
+  const monthPublished = publishTrend.reduce((s, d) => s + d.count, 0);
+  const monthIndexed = indexTrend.reduce((s, d) => s + d.count, 0);
+  const rankTop10 = indexByKeyword.filter((k) => k.hits >= 1).length;
+  const rankTop50 = kwHits.size;
+  const weekKeywords = new Set(
+    indexResults
+      .filter((r) => r.hit && r.sampledAt >= weekAgo)
+      .map((r) => r.keyword)
+  );
+  const newKeywordsWeek = weekKeywords.size;
+  const rankTrend = indexTrend.slice(-7).map((d) => d.count);
+  const prevWeekRankHits = indexTrend.slice(-14, -7).reduce((s, d) => s + d.count, 0);
+  const thisWeekRankHits = rankTrend.reduce((s, d) => s + d, 0);
+  const rankDeltaWeek = thisWeekRankHits - prevWeekRankHits;
+  const exposureEstimate = totalPublished * 1_200 + monthIndexed * 350;
+
   const inProgressStatuses = ['quote_open', 'quote_review', 'matched', 'in_progress', 'pending_review', 'awaiting_freeze'];
   const inProgress = taskOrders.filter((o) => inProgressStatuses.includes(o.status)).length;
 
@@ -365,6 +407,35 @@ export async function getPublisherDashboard(brandName: string): Promise<Publishe
 
   const taskBoard = [...contentBoardCards, ...websiteBoardCards].slice(0, 6);
 
+  const workbenchInProgress = [
+    ...taskOrders
+      .filter((o) => inProgressStatuses.includes(o.status))
+      .map((o) => {
+        const card = buildContentBoardCard(o);
+        return {
+          id: o.id,
+          title: card.title,
+          categoryLabel: card.categoryLabel,
+          statusLabel: card.brandStatus,
+          targetView: card.targetView,
+          targetHint: card.targetHint,
+        };
+      }),
+    ...websiteOrders
+      .filter((w) => w.status !== 'completed' && w.status !== 'cancelled')
+      .map((w) => {
+        const card = buildWebsiteBoardCard(w);
+        return {
+          id: w.id,
+          title: card.title,
+          categoryLabel: card.categoryLabel,
+          statusLabel: card.brandStatus,
+          targetView: card.targetView,
+          targetHint: card.targetHint,
+        };
+      }),
+  ];
+
   const recentCompleted = [
     ...taskOrders
       .filter((o) => o.status === 'completed' && o.updatedAt >= weekAgo)
@@ -380,6 +451,28 @@ export async function getPublisherDashboard(brandName: string): Promise<Publishe
   ).length;
 
   const { isDemoPublisherSnapshotEnabled } = await import('../db/demo-publisher-snapshot.js');
+  const { countPublishedBySource } = await import('./article-delivery-list.service.js');
+  const { freeSourcePublished, paidSourcePublished } = await countPublishedBySource(brand.name);
+
+  const monthSpend = isDemoPublisherSnapshotEnabled()
+    ? Math.max(0, 20_000 - (budgetAccount.available ?? budgetAccount.balance ?? 0))
+    : Math.round(monthPublished * 800);
+  const roiArticlesPer10k =
+    monthSpend > 0 ? Math.round((monthPublished / monthSpend) * 10_000) : 0;
+
+  const workbenchKpi = {
+    weekPublished,
+    monthPublished,
+    monthIndexed,
+    exposureEstimate,
+    rankTop10,
+    rankTop50,
+    newKeywordsWeek,
+    rankTrend,
+    monthSpend,
+    roiArticlesPer10k,
+    rankDeltaWeek,
+  };
 
   const brandOverview = {
     inProgress: inProgress + websiteInProgress,
@@ -403,6 +496,8 @@ export async function getPublisherDashboard(brandName: string): Promise<Publishe
       indexedKeywords,
       platformHitRate,
       brandMentionRate: latestGeo?.mentionRate ?? 0,
+      freeSourcePublished,
+      paidSourcePublished,
     },
     platformShare,
     indexByKeyword,
@@ -419,7 +514,9 @@ export async function getPublisherDashboard(brandName: string): Promise<Publishe
     })),
     todos,
     workbenchTodos,
+    workbenchKpi,
     taskBoard,
+    workbenchInProgress,
     recentCompleted,
     brandOverview,
     samplingNote: '收录数据来自结构化 Agent 采样，非真机查询',

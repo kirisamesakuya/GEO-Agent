@@ -1,9 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus } from 'lucide-react';
 import type { ViewType } from '../types';
 import GeoListPageShell from './common/GeoListPageShell';
 import OrderDeliveryEmptyState from './common/OrderDeliveryEmptyState';
-import WebPageRequirementSubmitModal from './delivery/WebPageRequirementSubmitModal';
 import {
   formatTaskOrderListTime,
   isArticleContentOrder,
@@ -69,7 +67,6 @@ export default function OrderDeliveryView({
   const [websiteStatusFilter, setWebsiteStatusFilter] = useState<WebsiteRequirementStatusFilter>(
     parseWebsiteRequirementStatusFromUrl()
   );
-  const [showSubmitModal, setShowSubmitModal] = useState(false);
 
   const ordersQuery = () =>
     brandName === '__all__' ? '/api/orders' : `/api/orders?brandName=${encodeURIComponent(brandName)}`;
@@ -156,18 +153,6 @@ export default function OrderDeliveryView({
         allowAllBrands
         hidePageHeader={Boolean(embeddedTab)}
         title={pageTitle}
-        primaryAction={
-          tab === 'website' && brandName !== '__all__' && !embeddedTab ? (
-            <button
-              type="button"
-              className="geo-btn-primary geo-btn-sm flex items-center gap-1.5"
-              onClick={() => setShowSubmitModal(true)}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              新建网页需求
-            </button>
-          ) : undefined
-        }
         sectionTabs={
           embeddedTab
             ? undefined
@@ -188,18 +173,6 @@ export default function OrderDeliveryView({
           if (tab === 'website') switchWebsiteStatus(id as WebsiteRequirementStatusFilter);
           else setTypeFilter(id as OrderTypeFilter);
         }}
-        toolbar={
-          tab === 'website' && brandName !== '__all__' && embeddedTab ? (
-            <button
-              type="button"
-              className="geo-btn-primary geo-btn-sm flex shrink-0 items-center gap-1.5 whitespace-nowrap"
-              onClick={() => setShowSubmitModal(true)}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              新建网页需求
-            </button>
-          ) : undefined
-        }
       >
         <div className="geo-list-table-panel">
           {tab === 'task' ? (
@@ -323,13 +296,6 @@ export default function OrderDeliveryView({
           )}
         </div>
       </GeoListPageShell>
-
-      <WebPageRequirementSubmitModal
-        brandName={brandName}
-        open={showSubmitModal}
-        onClose={() => setShowSubmitModal(false)}
-        onSubmitted={loadRequirements}
-      />
     </>
   );
 }

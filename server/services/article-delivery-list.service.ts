@@ -242,3 +242,27 @@ export async function countTaskOrdersByStage(
   }
   return counts;
 }
+
+/** 已上线内容按信源统计（与文章交付列表口径一致） */
+export async function countPublishedBySource(brandName: string): Promise<{
+  freeSourcePublished: number;
+  paidSourcePublished: number;
+}> {
+  const rows = await listArticleDeliveries({ brandName, stage: 'all' });
+  let freeSourcePublished = 0;
+  let paidSourcePublished = 0;
+  for (const row of rows) {
+    if (row.source === 'ai_generated' && row.stage === 'published') {
+      freeSourcePublished += 1;
+    }
+    if (
+      row.source === 'manual_order' &&
+      (row.stage === 'pending_acceptance' ||
+        row.stage === 'final_revision' ||
+        row.stage === 'completed')
+    ) {
+      paidSourcePublished += 1;
+    }
+  }
+  return { freeSourcePublished, paidSourcePublished };
+}

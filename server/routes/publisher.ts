@@ -37,11 +37,16 @@ async function listPublisherNotificationsHandler(
 
 export function registerPublisherRoutes(app: Express) {
   app.get('/api/publisher/dashboard', async (req, res) => {
-    const brandName = await requireBrandName(req, res);
-    if (!brandName) return;
-    const data = await getPublisherDashboard(brandName);
-    if (!data) return res.status(404).json({ error: '品牌不存在' });
-    res.json(data);
+    try {
+      const brandName = await requireBrandName(req, res);
+      if (!brandName) return;
+      const data = await getPublisherDashboard(brandName);
+      if (!data) return res.status(404).json({ error: '品牌不存在' });
+      res.json(data);
+    } catch (err) {
+      console.error('[publisher/dashboard]', err);
+      res.status(500).json({ error: '工作台数据加载失败' });
+    }
   });
 
   app.get('/api/publisher/notifications', listPublisherNotificationsHandler);

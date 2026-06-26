@@ -4,6 +4,7 @@ import { useToast } from '../../../context/ToastContext';
 import { parseJsonArray } from '../lib/provider-ui';
 import { PROVIDER_TASK_HALL_FILTER_PLATFORMS, PROVIDER_INDUSTRY_MEDIA_OUTLETS } from '../../../lib/publish-content-platforms';
 import { PROVIDER_CASE_SUBMISSION_ENABLED } from '../provider-feature-flags';
+import ProviderAccountShell from '../components/workspace/ProviderAccountShell';
 
 const PLATFORMS = [...PROVIDER_TASK_HALL_FILTER_PLATFORMS];
 const INDUSTRIES = ['医疗健康', '本地生活', '教育', '美业', 'B2B'];
@@ -31,6 +32,13 @@ export default function ProviderAccountView({ providerId }: Props) {
   const [ruleMin, setRuleMin] = useState('');
   const [ruleMax, setRuleMax] = useState('');
   const [showAddAsset, setShowAddAsset] = useState(false);
+  const [section, setSection] = useState('platforms');
+
+  const accountNav = [
+    { id: 'platforms', label: '平台与行业' },
+    { id: 'pricing', label: '报价规则' },
+    ...(PROVIDER_CASE_SUBMISSION_ENABLED ? [{ id: 'cases', label: '案例素材' }] : []),
+  ];
 
   const loadAssets = () => {
     fetch(`/api/provider/assets?providerId=${providerId}`)
@@ -90,16 +98,17 @@ export default function ProviderAccountView({ providerId }: Props) {
   const canAcceptCount = platforms.length;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-provider-title">账号资源</h1>
-        <p className="text-xs text-provider-muted">
-          {PROVIDER_CASE_SUBMISSION_ENABLED
-            ? '管理可接单平台、案例与报价规则'
-            : '管理可接单平台与报价规则（本期无需提交案例）'}
-        </p>
-      </div>
-
+    <ProviderAccountShell
+      title="账号资源"
+      subtitle={
+        PROVIDER_CASE_SUBMISSION_ENABLED
+          ? '管理可接单平台、案例与报价规则'
+          : '管理可接单平台与报价规则（本期无需提交案例）'
+      }
+      nav={accountNav}
+      activeId={section}
+      onNavChange={setSection}
+    >
       <div className={`grid gap-4 ${PROVIDER_CASE_SUBMISSION_ENABLED ? 'grid-cols-3' : 'grid-cols-2'}`}>
         <div className="provider-card rounded-2xl p-4 text-center shadow-sm">
           <p className="text-2xl font-bold text-provider-title">{platforms.length}</p>
@@ -117,6 +126,8 @@ export default function ProviderAccountView({ providerId }: Props) {
         )}
       </div>
 
+      {section === 'platforms' && (
+      <>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {platforms.map((p) => (
           <div key={p} className="provider-card rounded-2xl p-5 shadow-sm flex justify-between items-start">
@@ -232,12 +243,14 @@ export default function ProviderAccountView({ providerId }: Props) {
             />
           </div>
         )}
-        <button type="button" className="provider-btn-primary" onClick={() => void save()}>
+        <button type="button" className="provider-btn-workbench" onClick={() => void save()}>
           保存服务资源
         </button>
       </div>
+      </>
+      )}
 
-      {PROVIDER_CASE_SUBMISSION_ENABLED && (
+      {section === 'cases' && PROVIDER_CASE_SUBMISSION_ENABLED && (
       <div className="provider-card rounded-2xl p-6 shadow-sm space-y-4">
         <div className="flex justify-between items-center">
           <h2 className="text-sm font-bold text-provider-title flex items-center gap-2">
@@ -302,6 +315,7 @@ export default function ProviderAccountView({ providerId }: Props) {
       </div>
       )}
 
+      {section === 'pricing' && (
       <div className="provider-card rounded-2xl p-6 shadow-sm space-y-3">
         <h2 className="text-sm font-bold text-provider-title">报价规则</h2>
         {pricingRules.map((r) => (
@@ -364,6 +378,7 @@ export default function ProviderAccountView({ providerId }: Props) {
           </button>
         </div>
       </div>
-    </div>
+      )}
+    </ProviderAccountShell>
   );
 }

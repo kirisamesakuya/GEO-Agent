@@ -8,8 +8,6 @@ import { ArrowRight, History, ChevronRight } from 'lucide-react';
 import { resolveWebsiteLeadFields } from '../../../lib/website-lead-intake';
 import { consumeGeoAssetWebsitePrefill } from '../../lib/geo-asset-website-prefill';
 import {
-  SITE_OPTIMIZE_DESCRIPTION,
-  SITE_OPTIMIZE_NOTE,
   SITE_OPTIMIZE_PAGE_TYPES,
   SITE_OPTIMIZE_TITLE,
 } from '../../../lib/website-order-flow';
@@ -89,7 +87,6 @@ export default function SiteOptimizeView({ brandName, onBrandChange, onNavigate 
       <div className="shrink-0 px-6 pt-4 pb-3 geo-page-content-section">
         <PageHeaderWithBrand
           title="自有网站优化"
-          description="针对已有官网/品牌站，由 Hermes 输出页面优化建议，品牌确认后提交工程师处理。"
           brandName={brandName}
           onBrandChange={onBrandChange}
           actions={
@@ -107,14 +104,14 @@ export default function SiteOptimizeView({ brandName, onBrandChange, onNavigate 
       </div>
 
       <div className="geo-page-content max-w-2xl pb-8 space-y-4">
-        <AgentInputCard title={SITE_OPTIMIZE_TITLE} description={SITE_OPTIMIZE_DESCRIPTION}>
+        <AgentInputCard title={SITE_OPTIMIZE_TITLE}>
           <WebsiteLeadIntakeForm
             key={draftKey}
             brandName={brandName}
             initialValues={prefill}
             pageTypes={SITE_OPTIMIZE_PAGE_TYPES}
-            introNote={SITE_OPTIMIZE_NOTE}
-            requireReferenceUrl
+            introNote=""
+            referenceUrlMode="required"
             submitLabel="提交优化需求"
             onSuccess={() => onNavigate('content_delivery', 'website')}
           />

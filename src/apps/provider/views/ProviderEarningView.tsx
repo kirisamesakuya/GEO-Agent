@@ -31,6 +31,8 @@ import {
   buildEarningsTransactionRowView,
   matchesEarningsTransactionSearch,
 } from '../../../../lib/earnings-transaction-display';
+import ProviderAccountShell from '../components/workspace/ProviderAccountShell';
+import ProviderWorkbenchState from '../components/workspace/ProviderWorkbenchState';
 
 interface Props {
   providerId: string;
@@ -60,6 +62,7 @@ function channelFromLabel(label: string): string {
 export default function ProviderEarningView({ providerId }: Props) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [isDemo, setIsDemo] = useState(false);
   const [wallet, setWallet] = useState<WalletSummary>(MOCK_PROVIDER_WALLET);
   const [transactions, setTransactions] = useState<EarningsTransaction[]>(MOCK_PROVIDER_TRANSACTIONS);
@@ -71,11 +74,21 @@ export default function ProviderEarningView({ providerId }: Props) {
   const [activeDateTab, setActiveDateTab] = useState<DateTab>('7d');
   const [localSearch, setLocalSearch] = useState('');
   const [feeAgreementOpen, setFeeAgreementOpen] = useState(false);
+  const [financeSection, setFinanceSection] = useState('overview');
+  const [ledgerPage, setLedgerPage] = useState(1);
+  const LEDGER_PAGE_SIZE = 8;
+
+  const financeNav = [
+    { id: 'overview', label: '收益总览' },
+    { id: 'ledger', label: '收支明细' },
+  ];
 
   const loadEarnings = async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const res = await fetch(`/api/provider/earnings?providerId=${providerId}`);
+      if (!res.ok) throw new Error('failed');
       const d = await res.json();
       const apiWallet = d.wallet as WalletSummary | undefined;
       const apiTx = (d.transactions ?? []) as EarningsTransaction[];
@@ -83,15 +96,18 @@ export default function ProviderEarningView({ providerId }: Props) {
         setWallet(apiWallet);
         setTransactions(apiTx);
         setIsDemo(false);
+        setLoadError(false);
       } else {
         setWallet(MOCK_PROVIDER_WALLET);
         setTransactions(MOCK_PROVIDER_TRANSACTIONS);
         setIsDemo(true);
+        setLoadError(false);
       }
     } catch {
       setWallet(MOCK_PROVIDER_WALLET);
       setTransactions(MOCK_PROVIDER_TRANSACTIONS);
       setIsDemo(true);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -136,6 +152,16 @@ export default function ProviderEarningView({ providerId }: Props) {
   const filteredTx = transactions.filter((tx) =>
     matchesEarningsTransactionSearch(rowView(tx).searchText, localSearch)
   );
+
+  const totalLedgerPages = Math.max(1, Math.ceil(filteredTx.length / LEDGER_PAGE_SIZE));
+  const pagedTx = filteredTx.slice(
+    (ledgerPage - 1) * LEDGER_PAGE_SIZE,
+    ledgerPage * LEDGER_PAGE_SIZE
+  );
+
+  useEffect(() => {
+    setLedgerPage(1);
+  }, [localSearch, financeSection]);
 
   const graphDataPoints = CHART_POINTS[activeDateTab];
   const settledCount = transactions.filter(
@@ -198,15 +224,35 @@ export default function ProviderEarningView({ providerId }: Props) {
   };
 
   if (loading) {
-    return <p className="text-sm text-provider-muted py-8">加载中…</p>;
+    return <ProviderWorkbenchState mode="loading" />;
   }
 
   return (
+    <ProviderAccountShell
+      title="收益中心"
+      subtitle="管理合作结算收益与提现"
+      nav={financeNav}
+      activeId={financeSection}
+      onNavChange={setFinanceSection}
+    >
     <div className="space-y-6 relative">
       {isDemo && (
         <div className="bg-amber-50 border border-amber-100 text-amber-800 text-xs py-2.5 px-4 rounded-xl">
           当前为演示数据（参考接单助手样式）。完成订单并结算后，将自动切换为真实收益。
         </div>
+      )}
+
+      {loadError && (
+        <ProviderWorkbenchState
+          mode="error"
+          title="收益数据加载失败"
+          description="已展示演示数据，可重试获取最新记录"
+          action={
+            <button type="button" className="provider-btn-workbench text-sm" onClick={() => void loadEarnings()}>
+              重试
+            </button>
+          }
+        />
       )}
 
       {withdrawSuccess && (
@@ -222,12 +268,13 @@ export default function ProviderEarningView({ providerId }: Props) {
       )}
 
       <div>
-        <h1 className="text-xl font-bold text-provider-title">收益中心</h1>
-        <p className="text-xs text-provider-muted">管理合作结算收益与提现</p>
+        <p className="text-xs text-provider-muted">工作台蓝为高频操作色；提现前请先在个人中心完成实名与收款绑定。</p>
       </div>
 
+      {financeSection === 'overview' && (
+      <>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <div className="bg-brand-50 border border-brand-light p-6 rounded-2xl shadow-sm relative overflow-hidden flex justify-between items-start">
+        <div className="bg-workbench-light border border-workbench/20 p-6 rounded-2xl shadow-sm relative overflow-hidden flex justify-between items-start">
           <div className="text-left">
             <p className="text-xs text-provider-secondary mb-1 font-medium">可提现金额</p>
             <p className="text-2xl font-black text-provider-title font-mono mb-2">
@@ -244,7 +291,7 @@ export default function ProviderEarningView({ providerId }: Props) {
             className={`text-xs font-bold px-4 py-2 rounded-xl transition-all shrink-0 ${
               wallet.extractable <= 0
                 ? 'bg-provider-track text-provider-muted cursor-not-allowed'
-                : 'provider-btn-primary shadow-md'
+                : 'provider-btn-workbench shadow-md'
             }`}
           >
             去提现
@@ -289,7 +336,7 @@ export default function ProviderEarningView({ providerId }: Props) {
         onClose={() => setFeeAgreementOpen(false)}
       />
 
-      <section className="provider-card rounded-2xl p-6 shadow-sm">
+      <section className="provider-section-card">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <h2 className="text-sm font-bold text-provider-title">收益波动走势</h2>
           <div className="flex gap-1.5 p-1 bg-provider-subtle rounded-xl">
@@ -306,7 +353,7 @@ export default function ProviderEarningView({ providerId }: Props) {
                 onClick={() => setActiveDateTab(d.id)}
                 className={`text-[10px] font-bold px-3 py-1 rounded-lg transition-colors ${
                   activeDateTab === d.id
-                    ? 'bg-white text-brand shadow-sm'
+                    ? 'bg-white text-workbench shadow-sm'
                     : 'text-provider-muted hover:text-provider-title'
                 }`}
               >
@@ -317,14 +364,14 @@ export default function ProviderEarningView({ providerId }: Props) {
         </div>
 
         <div className="h-56 relative w-full pt-4">
-          <svg className="w-full h-full text-brand shrink-0" viewBox="0 0 540 120" preserveAspectRatio="none">
+          <svg className="w-full h-full text-workbench shrink-0" viewBox="0 0 540 120" preserveAspectRatio="none">
             <line x1="40" y1="10" x2="520" y2="10" stroke="#f3f4f6" strokeWidth="1" strokeDasharray="4,4" />
             <line x1="40" y1="60" x2="520" y2="60" stroke="#f3f4f6" strokeWidth="1" strokeDasharray="4,4" />
             <line x1="40" y1="110" x2="520" y2="110" stroke="#f3f4f6" strokeWidth="1" strokeDasharray="4,4" />
             <defs>
               <linearGradient id="provider-earnings-chart-grad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#ff2442" stopOpacity="0.25" />
-                <stop offset="100%" stopColor="#ff2442" stopOpacity="0" />
+                <stop offset="0%" stopColor="#2563eb" stopOpacity="0.25" />
+                <stop offset="100%" stopColor="#2563eb" stopOpacity="0" />
               </linearGradient>
             </defs>
             <path
@@ -333,7 +380,7 @@ export default function ProviderEarningView({ providerId }: Props) {
             />
             <polyline
               fill="none"
-              stroke="#ff2442"
+              stroke="#2563eb"
               strokeWidth="2.5"
               strokeLinecap="round"
               points={graphDataPoints.join(' ')}
@@ -341,7 +388,7 @@ export default function ProviderEarningView({ providerId }: Props) {
             {graphDataPoints.map((pt, index) => {
               const [x, y] = pt.split(',');
               return (
-                <circle key={index} cx={x} cy={y} r="4" className="fill-brand stroke-white stroke-2" />
+                <circle key={index} cx={x} cy={y} r="4" className="fill-workbench stroke-white stroke-2" />
               );
             })}
           </svg>
@@ -353,8 +400,11 @@ export default function ProviderEarningView({ providerId }: Props) {
           </div>
         </div>
       </section>
+      </>
+      )}
 
-      <section className="provider-card rounded-2xl p-6 shadow-sm">
+      {financeSection === 'ledger' && (
+      <section className="provider-section-card">
         <div className="flex justify-between items-center mb-5 gap-4 flex-wrap">
           <h2 className="text-sm font-bold text-provider-title">收支交易明细</h2>
           <div className="relative w-56">
@@ -373,7 +423,7 @@ export default function ProviderEarningView({ providerId }: Props) {
           {filteredTx.length === 0 ? (
             <div className="text-center py-6 text-xs text-provider-muted">没有符合条件的流水记录</div>
           ) : (
-            filteredTx.map((tx) => {
+            pagedTx.map((tx) => {
               const view = rowView(tx);
               const tone = txRowTone(tx);
               return (
@@ -426,7 +476,33 @@ export default function ProviderEarningView({ providerId }: Props) {
             })
           )}
         </div>
+        {filteredTx.length > LEDGER_PAGE_SIZE && (
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-provider-subtle">
+            <p className="text-[10px] text-provider-muted">
+              共 {filteredTx.length} 条 · 第 {ledgerPage}/{totalLedgerPages} 页
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={ledgerPage <= 1}
+                onClick={() => setLedgerPage((p) => Math.max(1, p - 1))}
+                className="provider-btn-secondary text-xs px-3 py-1 disabled:opacity-40"
+              >
+                上一页
+              </button>
+              <button
+                type="button"
+                disabled={ledgerPage >= totalLedgerPages}
+                onClick={() => setLedgerPage((p) => Math.min(totalLedgerPages, p + 1))}
+                className="provider-btn-secondary text-xs px-3 py-1 disabled:opacity-40"
+              >
+                下一页
+              </button>
+            </div>
+          </div>
+        )}
       </section>
+      )}
 
       {showWithdraw && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -515,5 +591,6 @@ export default function ProviderEarningView({ providerId }: Props) {
         </div>
       )}
     </div>
+    </ProviderAccountShell>
   );
 }

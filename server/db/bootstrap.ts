@@ -102,12 +102,33 @@ const DEFAULT_CONFIGS: Array<{ key: string; value: string }> = [
   { key: 'skill_routes', value: DEFAULT_SKILL_ROUTES },
 ];
 
+/** Idempotent column patches for provider onboarding fields. */
+export async function ensureProviderSchemaPatches() {
+  try {
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "Provider" ADD COLUMN IF NOT EXISTS "pricingNote" TEXT'
+    );
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "Provider" ADD COLUMN IF NOT EXISTS "profileReviewStatus" TEXT NOT NULL DEFAULT \'none\''
+    );
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "Provider" ADD COLUMN IF NOT EXISTS "pendingProfileJson" TEXT'
+    );
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "TaskOrderQuote" ADD COLUMN IF NOT EXISTS "mediaAccountLink" TEXT'
+    );
+  } catch {
+    // non-fatal: migration may be handled externally
+  }
+}
+
 /** Production-safe idempotent initialization: system config, skill routes, platform bindings. */
 export async function ensureRuntimeDefaults() {
   const { cleanupLegacyHermesDeviceBinding } = await import(
     '../services/hermes-binding.service.js'
   );
   await cleanupLegacyHermesDeviceBinding();
+  await ensureProviderSchemaPatches();
 
   for (const { key, value } of DEFAULT_CONFIGS) {
     const existing = await prisma.systemConfig.findUnique({ where: { key } });

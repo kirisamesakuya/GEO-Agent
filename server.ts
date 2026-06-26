@@ -3,7 +3,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import { prisma } from './server/db/client.js';
 import { seedDatabase } from './server/db/seed.js';
-import { ensureRuntimeDefaults } from './server/db/bootstrap.js';
+import { ensureRuntimeDefaults, ensureProviderSchemaPatches } from './server/db/bootstrap.js';
 import { registerAgentTaskRoutes } from './server/routes/agent-tasks.js';
 import { registerContentRoutes } from './server/routes/content.js';
 import { registerBrandRoutes } from './server/routes/brand.js';
@@ -50,6 +50,7 @@ app.use('/api', attachRequestContext);
 
 async function bootstrap() {
   await prisma.$connect();
+  await ensureProviderSchemaPatches();
 
   if (process.env.SEED_DEMO_DATA === 'true') {
     await seedDatabase();

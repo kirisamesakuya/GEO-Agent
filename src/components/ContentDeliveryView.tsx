@@ -1,11 +1,8 @@
-import { useEffect, useState } from 'react';
-import type { ViewType } from '../types';
-import BrandSwitcher from './common/BrandSwitcher';
+import type { ViewType } from '../types';import BrandIdentityRow from './common/BrandIdentityRow';
 import ArticleDeliveryUnifiedView from './delivery/ArticleDeliveryUnifiedView';
 import OrderDispatchManageView from './delivery/OrderDispatchManageView';
 import OrderDeliveryView from './OrderDeliveryView';
 import {
-  CONTENT_DELIVERY_TABS,
   parseContentDeliveryTabFromUrl,
   type ContentDeliveryTab,
 } from '../lib/content-delivery-nav';
@@ -31,9 +28,7 @@ export default function ContentDeliveryView({
   initialTab,
   viewHint,
 }: Props) {
-  const pageTab = initialTab ?? parseContentDeliveryTabFromUrl();
-  const activeMeta = CONTENT_DELIVERY_TABS.find((t) => t.id === pageTab);
-  const articleStage = parseArticleDeliveryStatusFromUrl();
+  const pageTab = initialTab ?? parseContentDeliveryTabFromUrl();  const articleStage = parseArticleDeliveryStatusFromUrl();
   const orderDispatchStage = parsePaidSourceDispatchStageFromUrl();
   const quoteOrderId = parseTaskOrderIdFromHint(viewHint);
   const execOrderId = parseArticleDeliveryOrderHint(viewHint);
@@ -46,17 +41,8 @@ export default function ContentDeliveryView({
         className="geo-page-tab-sticky shrink-0 px-6 pt-4 pb-3 border-b"
         style={{ borderColor: 'var(--neutral-divider-02)' }}
       >
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <h2 className="text-sm font-bold text-[var(--color-title)]">
-            {activeMeta?.label ?? '内容交付'}
-          </h2>
-          <BrandSwitcher variant="scope" brandName={brandName} onBrandChange={onBrandChange} allowAll />
-        </div>
-        {activeMeta && (
-          <p className="text-[11px] mt-1 text-[var(--neutral-text-03)]">{activeMeta.desc}</p>
-        )}
+        <BrandIdentityRow brandName={brandName} onBrandChange={onBrandChange} allowAll />
       </div>
-
       <div className="flex flex-col min-w-0">
         {pageTab === 'order_manage' && showQuoteCompare && quoteOrderId && onNavigate && (
           <QuoteCompareView
